@@ -1,8 +1,8 @@
 # Project Plan: @mikesaintsg/adapters
 
-> **Status:** Phase 4 of 5 — Providers ✅ Complete
+> **Status:** Phase 5 of 5 — Integration 🔄 Active
 > **Last Updated:** 2026-01-17
-> **Next Milestone:** Persistence adapters (Phase 5)
+> **Next Milestone:** Showcase Demo and Integration Tests
 
 ---
 
@@ -20,11 +20,11 @@
 ### Current Session State
 
 ```
-Phase: 4 of 5 (Providers) ✅ Complete
-Active Deliverable: None - Phase 4 complete
-Checklist Progress: 30/30 items complete
-Last Action: Phase 4 Providers complete (262 tests passing)
-Next Action: Proceed to Phase 5 (Persistence)
+Phase: 5 of 5 (Integration) 🔄 Active
+Active Deliverable: 5.7 Showcase Demo
+Checklist Progress: 6/8 deliverables complete
+Last Action: Implemented Session Persistence, Tool Call Bridge, Retrieval Tool (305 tests passing)
+Next Action: Implement Showcase Demo (5.7) and Integration Tests (5.8)
 ```
 
 > **Instructions:** Update this section at the END of each session with the model.
@@ -159,8 +159,8 @@ How we know the project is complete:
 | 1 | Foundation   | ✅ Complete | Types, project structure, helpers     | `phases/01-foundation.md`   |
 | 2 | Core Helpers | ✅ Complete | SSE parser, rate limiter, error maps  | `phases/02-core-helpers.md` |
 | 3 | Embeddings   | ✅ Complete | Embedding adapters and wrappers       | `phases/03-embeddings.md`   |
-| 4 | Providers    | 🔄 Active   | Provider adapters (OpenAI, Anthropic) | `phases/04-providers.md`    |
-| 5 | Integration  | ⏳ Pending  | Bridges, persistence, showcase        | `phases/05-integration.md`  |
+| 4 | Providers    | ✅ Complete | Provider adapters (OpenAI, Anthropic) | `phases/04-providers.md`    |
+| 5 | Integration  | 🔄 Active   | Bridges, persistence, showcase        | `phases/05-integration.md`  |
 
 **Status Legend:**
 - ✅ Complete
@@ -306,6 +306,38 @@ How we know the project is complete:
 ## Session Log
 
 > **Purpose:** Track work across multiple sessions. Append new entries at the top.
+
+### 2026-01-17 Session 5
+
+**Started:** Phase 5, Deliverable 5.1 (Session Persistence)
+**Completed:**
+- Implemented IndexedDB session persistence in `src/persistence/sessions/indexeddb.ts`
+  - TTL-based session expiration
+  - Session summary with title extraction from first user message
+  - Methods: save(), load(), remove(), all(), clear()
+- Implemented Tool Call Bridge in `src/bridges/tool-call.ts`
+  - Connects inference tool calls to contextprotocol execution
+  - Timeout handling with configurable duration
+  - Lifecycle hooks: onBeforeExecute, onAfterExecute, onError
+  - Parallel execution via executeAll()
+- Implemented Retrieval Tool Factory in `src/bridges/retrieval.ts`
+  - Creates tools for querying VectorStore
+  - Configurable topK and minScore
+  - Optional result formatting
+- Created comprehensive tests:
+  - `tests/persistence/sessions/indexeddb.test.ts` (20 tests)
+  - `tests/bridges/tool-call.test.ts` (14 tests)
+  - `tests/bridges/retrieval.test.ts` (9 tests)
+- Updated barrel exports for persistence and bridges
+- All quality gates passing (305 tests)
+- CodeQL security check passed
+
+**Blockers Discovered:**
+- None
+
+**Ended:** Phase 5 deliverables 5.1-5.6 ✅ Complete, ready for 5.7 Showcase Demo
+
+---
 
 ### 2026-01-17 Session 4
 

@@ -29,6 +29,12 @@ export * from './providers/index.js'
 // Tool format adapters
 export * from './formatters/index.js'
 
+// Persistence adapters
+export * from './persistence/index.js'
+
+// Bridge functions
+export * from './bridges/index.js'
+
 // Constants
 export * from './constants.js'
 
