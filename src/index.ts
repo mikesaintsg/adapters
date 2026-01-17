@@ -23,6 +23,12 @@ export * from './wrappers/index.js'
 // Embedding adapters
 export * from './embeddings/index.js'
 
+// Provider adapters
+export * from './providers/index.js'
+
+// Tool format adapters
+export * from './formatters/index.js'
+
 // Constants
 export * from './constants.js'
 

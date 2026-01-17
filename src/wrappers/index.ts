@@ -5,3 +5,4 @@
  */
 
 export * from './retryable.js'
+export * from './retryable-provider.js'

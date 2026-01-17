@@ -88,3 +88,24 @@ export function deserializeStoredDocument(data: Record<string, unknown>): Stored
 export function estimateEmbeddingBytes(embedding: Embedding): number {
 	return embedding.byteLength
 }
+
+// ============================================================================
+// Iterator Helpers
+// ============================================================================
+
+/**
+ * Create a done iterator result for async iterators.
+ * This helper provides a type-safe way to signal iteration completion.
+ *
+ * @returns An IteratorResult indicating completion
+ *
+ * @example
+ * ```ts
+ * if (iteratorDone) {
+ *   return Promise.resolve(createDoneIteratorResult<string>())
+ * }
+ * ```
+ */
+export function createDoneIteratorResult<T>(): IteratorResult<T> {
+	return { value: undefined as unknown as T, done: true }
+}

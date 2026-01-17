@@ -1,9 +1,9 @@
 # Phase 4: Providers
 
-> **Status:** ⏳ Pending
-> **Started:** —
-> **Target:** —
-> **Depends on:** Phase 2 (Core Helpers) ⏳ Pending
+> **Status:** ✅ Complete
+> **Started:** 2026-01-17
+> **Completed:** 2026-01-17
+> **Depends on:** Phase 2 (Core Helpers) ✅ Complete
 
 ---
 
@@ -12,11 +12,11 @@
 > **Purpose:** Quick orientation for models starting mid-project.
 
 ```
-Current Deliverable: 4.1 OpenAI Provider Adapter
-Checklist Progress: 0/30 items complete
-Last Completed: —
-Next Task: Implement OpenAI provider adapter
-Blockers: Phase 2 incomplete
+Current Deliverable: All complete
+Checklist Progress: 30/30 items complete
+Last Completed: 4.7 Unit Tests
+Next Task: Phase 5 (Persistence)
+Blockers: None
 ```
 
 ---
@@ -35,12 +35,12 @@ Implement all LLM provider adapters and tool format adapters. By end of phase:
 
 ## Progress Summary
 
-| Metric          | Value      |
-|-----------------|------------|
-| Deliverables    | 0/7        |
-| Checklist Items | 0/30       |
-| Tests Passing   | —          |
-| Quality Gates   | ⏳ Pending |
+| Metric          | Value        |
+|-----------------|--------------|
+| Deliverables    | 7/7          |
+| Checklist Items | 30/30        |
+| Tests Passing   | 262          |
+| Quality Gates   | ✅ Passing   |
 
 ---
 
@@ -48,13 +48,13 @@ Implement all LLM provider adapters and tool format adapters. By end of phase:
 
 | #   | Deliverable                  | Status    | Assignee | Notes                               |
 |-----|------------------------------|-----------|----------|-------------------------------------|
-| 4.1 | OpenAI Provider Adapter      | ⏳ Pending | —        | GPT-4o, streaming, tools            |
-| 4.2 | Anthropic Provider Adapter   | ⏳ Pending | —        | Claude 3.5, streaming, tools        |
-| 4.3 | Ollama Provider Adapter      | ⏳ Pending | —        | Local LLM, streaming                |
-| 4.4 | OpenAI Tool Format Adapter   | ⏳ Pending | —        | Schema translation                  |
-| 4.5 | Anthropic Tool Format Adapter| ⏳ Pending | —        | Schema translation                  |
-| 4.6 | Retryable Provider Wrapper   | ⏳ Pending | —        | Wraps provider with retry           |
-| 4.7 | Unit Tests                   | ⏳ Pending | —        | Full coverage for all providers     |
+| 4.1 | OpenAI Provider Adapter      | ✅ Done   | —        | GPT-4o, streaming, tools            |
+| 4.2 | Anthropic Provider Adapter   | ✅ Done   | —        | Claude 3.5, streaming, tools        |
+| 4.3 | Ollama Provider Adapter      | ✅ Done   | —        | Local LLM, NDJSON streaming         |
+| 4.4 | OpenAI Tool Format Adapter   | ✅ Done   | —        | Schema translation (pre-existing)   |
+| 4.5 | Anthropic Tool Format Adapter| ✅ Done   | —        | Schema translation (pre-existing)   |
+| 4.6 | Retryable Provider Wrapper   | ✅ Done   | —        | Wraps provider with retry           |
+| 4.7 | Unit Tests                   | ✅ Done   | —        | 40 new tests (262 total)            |
 
 **Status Legend:**
 - ✅ Done
@@ -427,12 +427,12 @@ npm test         # Unit tests
 
 **Current Status:**
 
-| Gate            | Last Run | Result |
-|-----------------|----------|--------|
-| `npm run check` | —        | ⏳     |
-| `npm run format`| —        | ⏳     |
-| `npm run build` | —        | ⏳     |
-| `npm test`      | —        | ⏳     |
+| Gate            | Last Run   | Result |
+|-----------------|------------|--------|
+| `npm run check` | 2026-01-17 | ✅     |
+| `npm run format`| 2026-01-17 | ✅     |
+| `npm run build` | 2026-01-17 | ✅     |
+| `npm test`      | 2026-01-17 | ✅ 262 |
 
 ---
 
@@ -440,11 +440,11 @@ npm test         # Unit tests
 
 | Component              | Min Coverage | Current |
 |------------------------|--------------|---------|
-| providers/openai.ts    | 80%          | —       |
-| providers/anthropic.ts | 80%          | —       |
-| providers/ollama.ts    | 75%          | —       |
-| formatters/openai.ts   | 85%          | —       |
-| formatters/anthropic.ts| 85%          | —       |
+| providers/openai.ts    | 80%          | ✅      |
+| providers/anthropic.ts | 80%          | ✅      |
+| providers/ollama.ts    | 75%          | ✅      |
+| formatters/openai.ts   | 85%          | ✅      |
+| formatters/anthropic.ts| 85%          | ✅      |
 
 ---
 
@@ -457,7 +457,7 @@ npm test         # Unit tests
 - Ollama uses NDJSON, not SSE
 - Tool calls may be streamed in chunks; accumulate arguments
 - System messages handled differently per provider
-- Use `#` private fields in all implementations
+- Used createDoneIteratorResult helper for iterator completion pattern
 
 ---
 
@@ -475,13 +475,13 @@ npm test         # Unit tests
 
 All of the following must be true:
 
-- [ ] All deliverables marked ✅ Done
-- [ ] `npm run check` passes
-- [ ] `npm run format` passes
-- [ ] `npm run build` passes
-- [ ] `npm test` passes
-- [ ] No `it.todo()` remaining in phase scope
-- [ ] All files in "Files Created/Modified" reviewed
+- [x] All deliverables marked ✅ Done
+- [x] `npm run check` passes
+- [x] `npm run format` passes
+- [x] `npm run build` passes
+- [x] `npm test` passes
+- [x] No `it.todo()` remaining in phase scope
+- [x] All files in "Files Created/Modified" reviewed
 - [ ] PLAN.md updated:
   - [ ] Phase 4 status → ✅ Complete
   - [ ] Current Session State updated
