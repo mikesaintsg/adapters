@@ -10,8 +10,8 @@
 
 ## Features
 
-- ✅ **Provider Adapters** — OpenAI, Anthropic, and Ollama for LLM chat completions
-- ✅ **Embedding Adapters** — OpenAI, Voyage, and Ollama for text embeddings
+- ✅ **Provider Adapters** — OpenAI, Anthropic, Ollama, and node-llama-cpp for LLM chat completions
+- ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, and node-llama-cpp for text embeddings
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
 - ✅ **Policy Adapters** — Retry and rate limiting strategies
@@ -95,16 +95,18 @@ const embeddings = await embedding.embed(['Hello, world!'])
 | `createOpenAIProviderAdapter`      | OpenAI chat completions            |
 | `createAnthropicProviderAdapter`   | Anthropic Claude models            |
 | `createOllamaProviderAdapter`      | Ollama local LLM server            |
+| `createNodeLlamaCppProviderAdapter`| node-llama-cpp local LLaMA models  |
 
 ### Source Adapters — Embeddings
 
-| Function                        | Description                           |
-|---------------------------------|---------------------------------------|
-| `createOpenAIEmbeddingAdapter`  | OpenAI text embeddings                |
-| `createVoyageEmbeddingAdapter`  | Voyage AI embeddings (Anthropic rec.) |
-| `createOllamaEmbeddingAdapter`  | Ollama local embeddings               |
-| `createBatchedEmbeddingAdapter` | Automatic request batching            |
-| `createCachedEmbeddingAdapter`  | In-memory embedding cache             |
+| Function                             | Description                           |
+|--------------------------------------|---------------------------------------|
+| `createOpenAIEmbeddingAdapter`       | OpenAI text embeddings                |
+| `createVoyageEmbeddingAdapter`       | Voyage AI embeddings (Anthropic rec.) |
+| `createOllamaEmbeddingAdapter`       | Ollama local embeddings               |
+| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp local embeddings       |
+| `createBatchedEmbeddingAdapter`      | Automatic request batching            |
+| `createCachedEmbeddingAdapter`       | In-memory embedding cache             |
 
 ### Policy Adapters
 
