@@ -32,6 +32,18 @@ export * from './formatters/index.js'
 // Persistence adapters
 export * from './persistence/index.js'
 
+// Policy adapters (Retry, Rate Limit)
+export * from './policy/index.js'
+
+// Enhancement adapters (Cache, Batch)
+export * from './enhancement/index.js'
+
+// Transform adapters (Similarity)
+export * from './transform/index.js'
+
+// Context builder adapters (Deduplication, Truncation, Priority)
+export * from './context/index.js'
+
 // Constants
 export * from './constants.js'
 

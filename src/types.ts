@@ -741,8 +741,6 @@ export type CreateEuclideanSimilarityAdapter = () => SimilarityAdapterInterface
 export interface DeduplicationAdapterOptions {
 	/** Strategy for selecting which frame to keep */
 	readonly strategy?: DeduplicationStrategy
-	/** Whether to preserve pinned frames */
-	readonly preservePinned?: boolean
 }
 
 /** Factory for deduplication adapter */
@@ -754,8 +752,6 @@ export type CreateDeduplicationAdapter = (
 export interface TruncationAdapterOptions {
 	/** Whether to preserve system frames */
 	readonly preserveSystem?: boolean
-	/** Whether to preserve pinned frames */
-	readonly preservePinned?: boolean
 }
 
 /** Factory for priority-based truncation adapter */
