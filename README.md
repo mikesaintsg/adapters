@@ -15,6 +15,9 @@
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
 - ✅ **Policy Adapters** — Retry and rate limiting strategies
+- ✅ **Enhancement Adapters** — Caching, batching for embeddings
+- ✅ **Transform Adapters** — Similarity scoring algorithms
+- ✅ **Context Builder Adapters** — Deduplication, truncation, priority
 - ✅ **Zero dependencies** — Built entirely on native fetch API
 - ✅ **TypeScript first** — Full type safety with strict mode
 - ✅ **Tree-shakeable** — ESM-only, import what you need
@@ -36,6 +39,8 @@ import { createEngine } from '@mikesaintsg/inference'
 import {
   createOpenAIProviderAdapter,
   createOpenAIEmbeddingAdapter,
+  createExponentialRetryAdapter,
+  createLRUCacheAdapter,
 } from '@mikesaintsg/adapters'
 
 // 1. Create provider adapter
@@ -50,10 +55,14 @@ const embedding = createOpenAIEmbeddingAdapter({
   model: 'text-embedding-3-small',
 })
 
-// 3. Create engine with provider
+// 3. Create engine with provider (required first parameter)
 const engine = createEngine(provider)
 
-// 4. Use the adapters
+// 4. Use policy adapters for resilience
+const retry = createExponentialRetryAdapter({ maxAttempts: 3 })
+const cache = createLRUCacheAdapter({ maxSize: 10000 })
+
+// 5. Use the adapters
 const embeddings = await embedding.embed(['Hello, world!'])
 ```
 
@@ -69,6 +78,8 @@ const embeddings = await embedding.embed(['Hello, world!'])
 - [Quick Start](./guides/adapters.md#quick-start) — Get started in minutes
 - [Source Adapters](./guides/adapters.md#source-adapters) — Provider and embedding adapters
 - [Policy Adapters](./guides/adapters.md#policy-adapters) — Retry and rate limiting
+- [Enhancement Adapters](./guides/adapters.md#enhancement-adapters) — Caching and batching
+- [Transform Adapters](./guides/adapters.md#transform-adapters) — Similarity scoring
 - [Persistence Adapters](./guides/adapters.md#persistence-adapters) — Storage solutions
 - [Error Handling](./guides/adapters.md#error-handling) — Error codes and recovery
 - [API Reference](./guides/adapters.md#api-reference) — Complete API documentation
@@ -77,7 +88,7 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ## API Overview
 
-### Provider Adapters
+### Source Adapters — Providers
 
 | Function                           | Description                        |
 |------------------------------------|------------------------------------|
@@ -85,7 +96,7 @@ const embeddings = await embedding.embed(['Hello, world!'])
 | `createAnthropicProviderAdapter`   | Anthropic Claude models            |
 | `createOllamaProviderAdapter`      | Ollama local LLM server            |
 
-### Embedding Adapters
+### Source Adapters — Embeddings
 
 | Function                        | Description                           |
 |---------------------------------|---------------------------------------|
@@ -95,21 +106,53 @@ const embeddings = await embedding.embed(['Hello, world!'])
 | `createBatchedEmbeddingAdapter` | Automatic request batching            |
 | `createCachedEmbeddingAdapter`  | In-memory embedding cache             |
 
-### Tool Format Adapters
+### Policy Adapters
+
+| Function                               | Description                       |
+|----------------------------------------|-----------------------------------|
+| `createExponentialRetryAdapter`        | Exponential backoff retry         |
+| `createLinearRetryAdapter`             | Fixed delay retry                 |
+| `createTokenBucketRateLimitAdapter`    | Token bucket rate limiting        |
+| `createSlidingWindowRateLimitAdapter`  | Sliding window rate limiting      |
+
+### Enhancement Adapters
+
+| Function                       | Description                       |
+|--------------------------------|-----------------------------------|
+| `createLRUCacheAdapter`        | LRU eviction cache                |
+| `createTTLCacheAdapter`        | TTL-only expiration cache         |
+| `createIndexedDBCacheAdapter`  | Persistent browser cache          |
+| `createBatchAdapter`           | Batching configuration            |
+
+### Transform Adapters
 
 | Function                            | Description                  |
 |-------------------------------------|------------------------------|
 | `createOpenAIToolFormatAdapter`     | Convert to OpenAI format     |
 | `createAnthropicToolFormatAdapter`  | Convert to Anthropic format  |
+| `createCosineSimilarityAdapter`     | Cosine similarity scoring    |
+| `createDotSimilarityAdapter`        | Dot product similarity       |
+| `createEuclideanSimilarityAdapter`  | Euclidean distance similarity|
+
+### Context Builder Adapters
+
+| Function                           | Description                       |
+|------------------------------------|-----------------------------------|
+| `createDeduplicationAdapter`       | Frame deduplication strategies    |
+| `createPriorityTruncationAdapter`  | Priority-based truncation         |
+| `createFIFOTruncationAdapter`      | Oldest-first truncation           |
+| `createLIFOTruncationAdapter`      | Newest-first truncation           |
+| `createScoreTruncationAdapter`     | Score-based truncation            |
+| `createPriorityAdapter`            | Priority weight management        |
 
 ### Persistence Adapters
 
-| Function                               | Description                  |
-|----------------------------------------|------------------------------|
-| `createIndexedDBSessionPersistence`    | Session storage in IndexedDB |
-| `createIndexedDBVectorStorePersistence`| Vector storage in IndexedDB  |
-| `createOPFSVectorStorePersistence`     | Vector storage in OPFS       |
-| `createHTTPVectorStorePersistence`     | Remote vector storage        |
+| Function                                  | Description                  |
+|-------------------------------------------|------------------------------|
+| `createIndexedDBSessionPersistenceAdapter`| Session storage in IndexedDB |
+| `createIndexedDBVectorPersistenceAdapter` | Vector storage in IndexedDB  |
+| `createOPFSVectorPersistenceAdapter`      | Vector storage in OPFS       |
+| `createHTTPVectorPersistenceAdapter`      | Remote vector storage        |
 
 ### Utilities
 
@@ -140,6 +183,98 @@ const provider = createOpenAIProviderAdapter({
 
 const engine = createEngine(provider)
 const session = engine.createSession({ system: 'You are helpful.' })
+```
+
+### Policy Adapters (Retry & Rate Limiting)
+
+```ts
+import {
+  createExponentialRetryAdapter,
+  createTokenBucketRateLimitAdapter,
+} from '@mikesaintsg/adapters'
+
+// Exponential backoff with jitter
+const retry = createExponentialRetryAdapter({
+  maxAttempts: 5,
+  initialDelayMs: 1000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 2,
+  jitter: true,
+  onRetry: (error, attempt, delayMs) => {
+    console.warn(`Retry ${attempt}, waiting ${delayMs}ms`)
+  },
+})
+
+// Token bucket rate limiting
+const rateLimit = createTokenBucketRateLimitAdapter({
+  requestsPerMinute: 60,
+  maxConcurrent: 10,
+})
+```
+
+### Enhancement Adapters (Cache & Batch)
+
+```ts
+import {
+  createLRUCacheAdapter,
+  createBatchAdapter,
+} from '@mikesaintsg/adapters'
+
+// LRU cache with TTL
+const cache = createLRUCacheAdapter({
+  maxSize: 10000,
+  ttlMs: 3600000, // 1 hour
+})
+
+// Batching configuration
+const batch = createBatchAdapter({
+  batchSize: 100,
+  delayMs: 50,
+  deduplicate: true,
+})
+```
+
+### Transform Adapters (Similarity)
+
+```ts
+import {
+  createCosineSimilarityAdapter,
+  createDotSimilarityAdapter,
+} from '@mikesaintsg/adapters'
+
+const cosine = createCosineSimilarityAdapter()
+const dot = createDotSimilarityAdapter()
+
+const a = new Float32Array([0.1, 0.2, 0.3])
+const b = new Float32Array([0.2, 0.3, 0.4])
+
+const cosineSim = cosine.compute(a, b) // 0.9925...
+const dotSim = dot.compute(a, b) // 0.2
+```
+
+### Context Builder Adapters
+
+```ts
+import {
+  createDeduplicationAdapter,
+  createPriorityTruncationAdapter,
+  createPriorityAdapter,
+} from '@mikesaintsg/adapters'
+
+// Deduplication with strategy
+const dedup = createDeduplicationAdapter({
+  strategy: 'keep_highest_priority',
+})
+
+// Priority-based truncation
+const truncation = createPriorityTruncationAdapter({
+  preserveSystem: true,
+})
+
+// Priority weights
+const priority = createPriorityAdapter({
+  weights: { critical: 5000, high: 500 },
+})
 ```
 
 ### Embedding with Caching
