@@ -56,8 +56,8 @@
 		"prepublishOnly": "npm run test && npm run check && npm run format && npm run build"
 	},
 	"devDependencies": {
-		"@mikesaintsg/core": "^0.0.2",
-		"@mikesaintsg/inference": "^0.0.2",
+		"@mikesaintsg/core": "^0.0.4",
+		"@mikesaintsg/inference": "^0.0.5",
 		"@types/node": "^25.0.9",
 		"@vitest/browser-playwright": "^4.0.17",
 		"eslint": "^9.39.2",

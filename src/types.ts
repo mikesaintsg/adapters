@@ -28,25 +28,32 @@
 import type {
 	Embedding,
 	EmbeddingAdapterInterface,
-	ToolCall,
-	ToolSchema,
-	ToolResult,
-	ProviderCapabilities,
 	ToolFormatAdapterInterface,
 	GenerationDefaults,
 	VectorStorePersistenceAdapterInterface,
-} from '@mikesaintsg/core'
-
-// ============================================================================
-// Imports from @mikesaintsg/inference
-// ============================================================================
-
-import type {
+	MinimalDatabaseAccess,
+	// Policy adapter interfaces
+	RetryAdapterInterface,
+	RateLimitAdapterInterface,
+	// Enhancement adapter interfaces
+	EmbeddingCacheAdapterInterface,
+	BatchAdapterInterface,
+	SimilarityAdapterInterface,
+	RerankerAdapterInterface,
+	// Context builder adapter interfaces
+	DeduplicationAdapterInterface,
+	TruncationAdapterInterface,
+	PriorityAdapterInterface,
+	DeduplicationStrategy,
+	// Bridge interfaces
+	ToolCallBridgeInterface,
+	ToolCallBridgeOptions,
+	RetrievalToolOptions,
+	RetrievalToolInterface,
+	SessionPersistenceInterface,
+	// Provider adapter interface
 	ProviderAdapterInterface,
-	StreamHandleInterface,
-	PersistedSession,
-	SessionSummary,
-} from '@mikesaintsg/inference'
+} from '@mikesaintsg/core'
 
 // ============================================================================
 // Provider Adapter Options
@@ -254,16 +261,16 @@ export interface AdapterRateLimiterOptions extends RateLimiterOptions {
 }
 
 // ============================================================================
-// Retry Logic Types
+// Policy Adapter Options
 // ============================================================================
 
 /**
- * Retry strategy for adapter operations.
- * Retry logic is placed in adapters via composition wrappers.
+ * Exponential retry adapter options.
+ * Creates a RetryAdapterInterface with exponential backoff.
  */
-export interface RetryOptions {
+export interface ExponentialRetryAdapterOptions {
 	/** Maximum number of retry attempts (default: 3) */
-	readonly maxRetries?: number
+	readonly maxAttempts?: number
 	/** Initial delay in ms (default: 1000) */
 	readonly initialDelayMs?: number
 	/** Maximum delay in ms (default: 30000) */
@@ -274,26 +281,144 @@ export interface RetryOptions {
 	readonly jitter?: boolean
 	/** Error codes that should trigger retry */
 	readonly retryableCodes?: readonly AdapterErrorCode[]
-	/** Custom retry condition */
-	readonly shouldRetry?: (error: unknown, attempt: number) => boolean
 	/** Called before each retry attempt */
 	readonly onRetry?: (error: unknown, attempt: number, delayMs: number) => void
 }
 
-/** Retry wrapper for provider adapters */
-export interface RetryableProviderAdapterOptions {
-	/** Base provider adapter to wrap */
-	readonly adapter: ProviderAdapterInterface
-	/** Retry options */
-	readonly retry: RetryOptions
+/**
+ * Linear retry adapter options.
+ * Creates a RetryAdapterInterface with fixed delays.
+ */
+export interface LinearRetryAdapterOptions {
+	/** Maximum number of retry attempts (default: 3) */
+	readonly maxAttempts?: number
+	/** Fixed delay in ms (default: 1000) */
+	readonly delayMs?: number
+	/** Error codes that should trigger retry */
+	readonly retryableCodes?: readonly AdapterErrorCode[]
+	/** Called before each retry attempt */
+	readonly onRetry?: (error: unknown, attempt: number, delayMs: number) => void
 }
 
-/** Retry wrapper for embedding adapters */
-export interface RetryableEmbeddingAdapterOptions {
-	/** Base embedding adapter to wrap */
-	readonly adapter: EmbeddingAdapterInterface
-	/** Retry options */
-	readonly retry: RetryOptions
+/** Default retryable error codes */
+export const DEFAULT_RETRYABLE_CODES: readonly AdapterErrorCode[] = [
+	'RATE_LIMIT_ERROR',
+	'NETWORK_ERROR',
+	'TIMEOUT_ERROR',
+	'SERVICE_ERROR',
+]
+
+/**
+ * Token bucket rate limit adapter options.
+ * Creates a RateLimitAdapterInterface using token bucket algorithm.
+ */
+export interface TokenBucketRateLimitAdapterOptions {
+	/** Maximum requests per minute (default: 60) */
+	readonly requestsPerMinute?: number
+	/** Maximum concurrent requests (default: 10) */
+	readonly maxConcurrent?: number
+	/** Burst size - tokens added per refill (default: 10) */
+	readonly burstSize?: number
+}
+
+/**
+ * Sliding window rate limit adapter options.
+ * Creates a RateLimitAdapterInterface using sliding window algorithm.
+ */
+export interface SlidingWindowRateLimitAdapterOptions {
+	/** Maximum requests per minute (default: 60) */
+	readonly requestsPerMinute?: number
+	/** Window size in ms (default: 60000) */
+	readonly windowMs?: number
+}
+
+// ============================================================================
+// Enhancement Adapter Options
+// ============================================================================
+
+/**
+ * LRU cache adapter options.
+ * Creates an EmbeddingCacheAdapterInterface with LRU eviction.
+ */
+export interface LRUCacheAdapterOptions {
+	/** Maximum number of entries (default: 1000) */
+	readonly maxSize?: number
+	/** Time-to-live in ms (default: 3600000 = 1 hour) */
+	readonly ttlMs?: number
+	/** Callback when entry is evicted */
+	readonly onEvict?: (text: string, embedding: Embedding) => void
+}
+
+/**
+ * TTL cache adapter options.
+ * Creates an EmbeddingCacheAdapterInterface with TTL-only expiration.
+ */
+export interface TTLCacheAdapterOptions {
+	/** Time-to-live in ms (default: 3600000 = 1 hour) */
+	readonly ttlMs?: number
+}
+
+/**
+ * IndexedDB cache adapter options.
+ * Creates a persistent EmbeddingCacheAdapterInterface using IndexedDB.
+ */
+export interface IndexedDBCacheAdapterOptions {
+	/** Database access interface */
+	readonly database: MinimalDatabaseAccess
+	/** Store name for cache entries (default: 'embedding_cache') */
+	readonly storeName?: string
+	/** Time-to-live in ms (default: 604800000 = 7 days) */
+	readonly ttlMs?: number
+}
+
+/**
+ * Batch adapter options.
+ * Creates a BatchAdapterInterface with standard settings.
+ */
+export interface BatchAdapterOptions {
+	/** Maximum batch size (default: 100) */
+	readonly batchSize?: number
+	/** Delay between batches in ms (default: 50) */
+	readonly delayMs?: number
+	/** Deduplicate identical texts (default: true) */
+	readonly deduplicate?: boolean
+}
+
+/**
+ * Aggressive batch adapter options.
+ * Creates a BatchAdapterInterface with larger batches and longer delays.
+ */
+export interface AggressiveBatchAdapterOptions {
+	/** Maximum batch size (default: 500) */
+	readonly batchSize?: number
+	/** Delay between batches in ms (default: 200) */
+	readonly delayMs?: number
+	/** Deduplicate identical texts (default: true) */
+	readonly deduplicate?: boolean
+}
+
+/**
+ * Cohere reranker adapter options.
+ * Creates a RerankerAdapterInterface using Cohere API.
+ */
+export interface CohereRerankerAdapterOptions {
+	/** Cohere API key */
+	readonly apiKey: string
+	/** Model to use (default: 'rerank-english-v3.0') */
+	readonly model?: string
+	/** Base URL for API (default: 'https://api.cohere.ai/v1') */
+	readonly baseURL?: string
+}
+
+/**
+ * Cross-encoder reranker adapter options.
+ * Creates a RerankerAdapterInterface using a local cross-encoder model.
+ */
+export interface CrossEncoderRerankerAdapterOptions {
+	/** Model identifier */
+	readonly model: string
+	/** Model path or URL */
+	readonly modelPath?: string
 }
 
 // ============================================================================
@@ -306,8 +431,6 @@ export interface RetryableEmbeddingAdapterOptions {
  * Token counting logic is owned by `@mikesaintsg/inference`.
  * This package provides model-specific multipliers as constants
  * that can be passed to inference's token counter for improved accuracy.
- *
- * @see DEFAULT_MODEL_MULTIPLIERS in constants.ts
  */
 export interface ModelTokenMultipliers {
 	/** OpenAI models typically use ~4 chars/token */
@@ -327,40 +450,18 @@ export interface ModelTokenMultipliers {
 	readonly [model: string]: number
 }
 
-/** Batched embedding adapter options */
-export interface BatchedEmbeddingAdapterOptions {
-	/** Base embedding adapter to wrap */
-	readonly adapter: EmbeddingAdapterInterface
-	/** Maximum batch size (default: 100) */
-	readonly batchSize?: number
-	/** Delay between batches in ms (default: 50) */
-	readonly delayMs?: number
-	/** Deduplicate identical texts */
-	readonly deduplicate?: boolean
-}
-
-/** Cached embedding entry */
-export interface CachedEmbedding {
-	readonly embedding: Embedding
-	readonly cachedAt: number
-}
-
-/** Generic cache interface */
-export interface CacheInterface<T> {
-	get(key: string): T | undefined
-	set(key: string, value: T): void
-	delete(key: string): boolean
-	clear(): void
-}
-
-/** Cached embedding adapter options */
-export interface CachedEmbeddingAdapterOptions {
-	/** Base embedding adapter to wrap */
-	readonly adapter: EmbeddingAdapterInterface
-	/** Cache implementation (Map or custom) */
-	readonly cache: Map<string, CachedEmbedding> | CacheInterface<CachedEmbedding>
-	/** Time-to-live in ms (default: 3600000 = 1 hour) */
-	readonly ttlMs?: number
+/** Default model multipliers (chars per token) */
+export const DEFAULT_MODEL_MULTIPLIERS: Partial<ModelTokenMultipliers> = {
+	'gpt-4': 4,
+	'gpt-4o': 4,
+	'gpt-3.5-turbo': 4,
+	'claude-3-5-sonnet-20241022': 3.5,
+	'claude-3-opus-20240229': 3.5,
+	'claude-3-sonnet-20240229': 3.5,
+	'claude-3-haiku-20240307': 3.5,
+	'llama2': 4,
+	'llama3': 4,
+	'mistral': 4,
 }
 
 // ============================================================================
@@ -395,15 +496,6 @@ export interface AnthropicToolFormatAdapterOptions {
 // ============================================================================
 // Session Persistence Options
 // ============================================================================
-
-/** Session persistence adapter interface */
-export interface SessionPersistenceAdapterInterface {
-	save(session: PersistedSession): Promise<void>
-	load(id: string): Promise<PersistedSession | undefined>
-	remove(id: string): Promise<void>
-	all(): Promise<readonly SessionSummary[]>
-	clear(): Promise<void>
-}
 
 /** IndexedDB session persistence options */
 export interface IndexedDBSessionPersistenceOptions {
@@ -445,78 +537,6 @@ export interface HTTPVectorPersistenceOptions {
 	readonly headers?: Readonly<Record<string, string>>
 	/** Request timeout in ms (default: 30000) */
 	readonly timeout?: number
-}
-
-// ============================================================================
-// Bridge Types
-// ============================================================================
-
-/** Tool registry interface (from contextprotocol) */
-export interface ToolRegistryInterface {
-	getSchemas(): readonly ToolSchema[]
-	execute(name: string, args: unknown): Promise<unknown>
-	has(name: string): boolean
-}
-
-/** Tool call bridge interface */
-export interface ToolCallBridgeInterface {
-	execute(toolCall: ToolCall): Promise<ToolResult>
-	executeAll(toolCalls: readonly ToolCall[]): Promise<readonly ToolResult[]>
-	hasTool(name: string): boolean
-}
-
-/** Tool call bridge options */
-export interface ToolCallBridgeOptions {
-	/** Tool registry for execution */
-	readonly registry: ToolRegistryInterface
-	/** Timeout per tool execution in ms (default: 30000) */
-	readonly timeout?: number
-	/** Error handler */
-	readonly onError?: (error: unknown, toolCall: ToolCall) => void
-	/** Called before tool execution */
-	readonly onBeforeExecute?: (toolCall: ToolCall) => void
-	/** Called after successful tool execution */
-	readonly onAfterExecute?: (toolCall: ToolCall, result: unknown) => void
-}
-
-/** VectorStore interface (from vectorstore) */
-export interface VectorStoreInterface {
-	search(
-		query: string,
-		options?: { readonly topK?: number; readonly minScore?: number }
-	): Promise<readonly SearchResult[]>
-}
-
-/** Search result from vector store */
-export interface SearchResult {
-	readonly id: string
-	readonly content: string
-	readonly score: number
-	readonly metadata?: Readonly<Record<string, unknown>>
-}
-
-/** Retrieval tool options */
-export interface RetrievalToolOptions {
-	/** VectorStore to query */
-	readonly vectorStore: VectorStoreInterface
-	/** Tool name */
-	readonly name: string
-	/** Tool description */
-	readonly description: string
-	/** Number of results to return (default: 5) */
-	readonly topK?: number
-	/** Minimum similarity score (default: 0.7) */
-	readonly minScore?: number
-	/** Result formatter */
-	readonly formatResult?: (result: SearchResult) => unknown
-}
-
-/** Retrieval tool result */
-export interface RetrievalToolResult {
-	/** Tool schema for registration */
-	readonly schema: ToolSchema
-	/** Execute function for the tool */
-	readonly execute: (params: { readonly query: string }) => Promise<readonly SearchResult[]>
 }
 
 // ============================================================================
@@ -591,12 +611,12 @@ export type CreateToolCallBridge = (
 /** Factory function for retrieval tool */
 export type CreateRetrievalTool = (
 	options: RetrievalToolOptions
-) => RetrievalToolResult
+) => RetrievalToolInterface
 
 /** Factory function for session persistence */
 export type CreateIndexedDBSessionPersistence = (
 	options?: IndexedDBSessionPersistenceOptions
-) => SessionPersistenceAdapterInterface
+) => SessionPersistenceInterface
 
 /** Factory function for IndexedDB vector persistence */
 export type CreateIndexedDBVectorPersistence = (
@@ -623,37 +643,152 @@ export type CreateRateLimiter = (
 	options?: RateLimiterOptions
 ) => RateLimiterInterface
 
-/**
- * Factory function for retryable provider adapter wrapper.
- * Wraps a base provider adapter with retry logic.
- */
-export type CreateRetryableProviderAdapter = (
-	options: RetryableProviderAdapterOptions
-) => ProviderAdapterInterface
+// ============================================================================
+// Policy Adapter Factory Types
+// ============================================================================
 
-/**
- * Factory function for retryable embedding adapter wrapper.
- * Wraps a base embedding adapter with retry logic.
- */
-export type CreateRetryableEmbeddingAdapter = (
-	options: RetryableEmbeddingAdapterOptions
-) => EmbeddingAdapterInterface
+/** Factory for exponential retry adapter */
+export type CreateExponentialRetryAdapter = (
+	options?: ExponentialRetryAdapterOptions
+) => RetryAdapterInterface
 
-/**
- * Factory function for batched embedding adapter wrapper.
- * Wraps a base embedding adapter with batching support.
- */
-export type CreateBatchedEmbeddingAdapter = (
-	options: BatchedEmbeddingAdapterOptions
-) => EmbeddingAdapterInterface
+/** Factory for linear retry adapter */
+export type CreateLinearRetryAdapter = (
+	options?: LinearRetryAdapterOptions
+) => RetryAdapterInterface
 
-/**
- * Factory function for cached embedding adapter wrapper.
- * Wraps a base embedding adapter with caching support.
- */
-export type CreateCachedEmbeddingAdapter = (
-	options: CachedEmbeddingAdapterOptions
-) => EmbeddingAdapterInterface
+/** Factory for no-retry adapter (explicit opt-out) */
+export type CreateNoRetryAdapter = () => RetryAdapterInterface
+
+/** Factory for token bucket rate limit adapter */
+export type CreateTokenBucketRateLimitAdapter = (
+	options?: TokenBucketRateLimitAdapterOptions
+) => RateLimitAdapterInterface
+
+/** Factory for sliding window rate limit adapter */
+export type CreateSlidingWindowRateLimitAdapter = (
+	options?: SlidingWindowRateLimitAdapterOptions
+) => RateLimitAdapterInterface
+
+/** Factory for no rate limit adapter (explicit opt-out) */
+export type CreateNoRateLimitAdapter = () => RateLimitAdapterInterface
+
+// ============================================================================
+// Enhancement Adapter Factory Types
+// ============================================================================
+
+/** Factory for LRU cache adapter */
+export type CreateLRUCacheAdapter = (
+	options?: LRUCacheAdapterOptions
+) => EmbeddingCacheAdapterInterface
+
+/** Factory for TTL cache adapter */
+export type CreateTTLCacheAdapter = (
+	options?: TTLCacheAdapterOptions
+) => EmbeddingCacheAdapterInterface
+
+/** Factory for IndexedDB cache adapter */
+export type CreateIndexedDBCacheAdapter = (
+	options: IndexedDBCacheAdapterOptions
+) => EmbeddingCacheAdapterInterface
+
+/** Factory for no cache adapter (explicit opt-out) */
+export type CreateNoCacheAdapter = () => EmbeddingCacheAdapterInterface
+
+/** Factory for batch adapter */
+export type CreateBatchAdapter = (
+	options?: BatchAdapterOptions
+) => BatchAdapterInterface
+
+/** Factory for aggressive batch adapter */
+export type CreateAggressiveBatchAdapter = (
+	options?: AggressiveBatchAdapterOptions
+) => BatchAdapterInterface
+
+/** Factory for Cohere reranker adapter */
+export type CreateCohereRerankerAdapter = (
+	options: CohereRerankerAdapterOptions
+) => RerankerAdapterInterface
+
+/** Factory for cross-encoder reranker adapter */
+export type CreateCrossEncoderRerankerAdapter = (
+	options: CrossEncoderRerankerAdapterOptions
+) => RerankerAdapterInterface
+
+/** Factory for no reranker adapter (explicit opt-out) */
+export type CreateNoRerankerAdapter = () => RerankerAdapterInterface
+
+// ============================================================================
+// Transform Adapter Factory Types
+// ============================================================================
+
+/** Factory for cosine similarity adapter */
+export type CreateCosineSimilarityAdapter = () => SimilarityAdapterInterface
+
+/** Factory for dot product similarity adapter */
+export type CreateDotSimilarityAdapter = () => SimilarityAdapterInterface
+
+/** Factory for euclidean similarity adapter */
+export type CreateEuclideanSimilarityAdapter = () => SimilarityAdapterInterface
+
+// ============================================================================
+// Context Builder Adapter Factory Types
+// ============================================================================
+
+/** Deduplication adapter options */
+export interface DeduplicationAdapterOptions {
+	/** Strategy for selecting which frame to keep */
+	readonly strategy?: DeduplicationStrategy
+	/** Whether to preserve pinned frames */
+	readonly preservePinned?: boolean
+}
+
+/** Factory for deduplication adapter */
+export type CreateDeduplicationAdapter = (
+	options?: DeduplicationAdapterOptions
+) => DeduplicationAdapterInterface
+
+/** Truncation adapter options */
+export interface TruncationAdapterOptions {
+	/** Whether to preserve system frames */
+	readonly preserveSystem?: boolean
+	/** Whether to preserve pinned frames */
+	readonly preservePinned?: boolean
+}
+
+/** Factory for priority-based truncation adapter */
+export type CreatePriorityTruncationAdapter = (
+	options?: TruncationAdapterOptions
+) => TruncationAdapterInterface
+
+/** Factory for FIFO truncation adapter (oldest first) */
+export type CreateFIFOTruncationAdapter = (
+	options?: TruncationAdapterOptions
+) => TruncationAdapterInterface
+
+/** Factory for LIFO truncation adapter (newest first) */
+export type CreateLIFOTruncationAdapter = (
+	options?: TruncationAdapterOptions
+) => TruncationAdapterInterface
+
+/** Factory for score-based truncation adapter */
+export type CreateScoreTruncationAdapter = (
+	options?: TruncationAdapterOptions
+) => TruncationAdapterInterface
+
+/** Priority weights configuration */
+export type PriorityWeights = Readonly<Record<string, number>>
+
+/** Priority adapter options */
+export interface PriorityAdapterOptions {
+	/** Custom weights for each priority level */
+	readonly weights?: PriorityWeights
+}
+
+/** Factory for priority adapter */
+export type CreatePriorityAdapter = (
+	options?: PriorityAdapterOptions
+) => PriorityAdapterInterface
 
 // ============================================================================
 // API Response Types (Internal to Adapters)
@@ -715,55 +850,6 @@ export interface AnthropicDelta {
 	readonly type: string
 	readonly text?: string
 	readonly partial_json?: string
-}
-
-// ============================================================================
-// OpenAI Embedding API Response Types
-// ============================================================================
-
-/** OpenAI embedding response */
-export interface OpenAIEmbeddingResponse {
-	readonly object: 'list'
-	readonly data: readonly OpenAIEmbeddingData[]
-	readonly model: string
-	readonly usage: OpenAIEmbeddingUsage
-}
-
-/** OpenAI embedding data item */
-export interface OpenAIEmbeddingData {
-	readonly object: 'embedding'
-	readonly index: number
-	readonly embedding: readonly number[]
-}
-
-/** OpenAI embedding usage */
-export interface OpenAIEmbeddingUsage {
-	readonly prompt_tokens: number
-	readonly total_tokens: number
-}
-
-// ============================================================================
-// Voyage AI Embedding API Response Types
-// ============================================================================
-
-/** Voyage AI embedding response */
-export interface VoyageEmbeddingResponse {
-	readonly object: 'list'
-	readonly data: readonly VoyageEmbeddingData[]
-	readonly model: string
-	readonly usage: VoyageEmbeddingUsage
-}
-
-/** Voyage AI embedding data item */
-export interface VoyageEmbeddingData {
-	readonly object: 'embedding'
-	readonly index: number
-	readonly embedding: readonly number[]
-}
-
-/** Voyage AI embedding usage */
-export interface VoyageEmbeddingUsage {
-	readonly total_tokens: number
 }
 
 // ============================================================================

@@ -64,19 +64,19 @@ const [instance] = create[Main]({
 
 ### Factory Functions
 
-| Function | Description |
-|----------|-------------|
-| `create[Main](options)` | Create a [main] instance |
+| Function                 | Description                     |
+|--------------------------|---------------------------------|
+| `create[Main](options)`  | Create a [main] instance        |
 | `is[Feature]Supported()` | Check if [feature] is supported |
 
 ### Main Interface
 
-| Method | Description |
-|--------|-------------|
-| `[method1]()` | [Description] |
-| `[method2](param)` | [Description] |
+| Method                | Description          |
+|-----------------------|----------------------|
+| `[method1]()`         | [Description]        |
+| `[method2](param)`    | [Description]        |
 | `on[Event](callback)` | Subscribe to [event] |
-| `destroy()` | Cleanup resources |
+| `destroy()`           | Cleanup resources    |
 
 ---
 
@@ -131,10 +131,10 @@ try {
 
 ## Ecosystem Integration
 
-| Package | Integration |
-|---------|-------------|
-| `@mikesaintsg/core` | Shared types and utilities |
-| `@mikesaintsg/[related-package]` | [Integration description] |
+| Package                          | Integration                |
+|----------------------------------|----------------------------|
+| `@mikesaintsg/core`              | Shared types and utilities |
+| `@mikesaintsg/[related-package]` | [Integration description]  |
 
 See [Integration with Ecosystem](./guides/[package-name].md#integration-with-ecosystem) for details.
 
@@ -144,10 +144,10 @@ See [Integration with Ecosystem](./guides/[package-name].md#integration-with-eco
 
 | Browser | Minimum Version |
 |---------|-----------------|
-| Chrome | [version]+ |
-| Firefox | [version]+ |
-| Safari | [version]+ |
-| Edge | [version]+ |
+| Chrome  | [version]+      |
+| Firefox | [version]+      |
+| Safari  | [version]+      |
+| Edge    | [version]+      |
 
 ---
 

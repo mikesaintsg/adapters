@@ -6,6 +6,8 @@
 
 ## Implementation Status
 
+### Source Adapters
+
 | Component                   | Status    | Notes                                 |
 |-----------------------------|-----------|---------------------------------------|
 | OpenAI Provider Adapter     | ⏳ Pending | Chat completions, streaming, tools    |
@@ -14,14 +16,53 @@
 | OpenAI Embedding Adapter    | ⏳ Pending | text-embedding-3-small/large, ada-002 |
 | Voyage Embedding Adapter    | ⏳ Pending | Recommended for Anthropic users       |
 | Ollama Embedding Adapter    | ⏳ Pending | Local development/testing             |
-| Batched Embedding Wrapper   | ⏳ Pending | Wraps base adapters                   |
-| Cached Embedding Wrapper    | ⏳ Pending | Wraps base adapters                   |
-| Retryable Adapter Wrappers  | ⏳ Pending | withRetry() for providers/embeddings  |
-| Rate Limiter                | ⏳ Pending | Per-adapter, optional shared          |
-| Tool Format Adapters        | ⏳ Pending | OpenAI/Anthropic/Ollama tool formats  |
-| Session Persistence         | ⏳ Pending | IndexedDB session storage             |
-| VectorStore Persistence     | ⏳ Pending | IndexedDB, OPFS, HTTP                 |
-| SSE Parser                  | ⏳ Pending | Shared across providers               |
+
+### Policy Adapters
+
+| Component                         | Status    | Notes                           |
+|-----------------------------------|-----------|---------------------------------|
+| Exponential Retry Adapter         | ⏳ Pending | Exponential backoff with jitter |
+| Linear Retry Adapter              | ⏳ Pending | Fixed delay between retries     |
+| Token Bucket Rate Limit Adapter   | ⏳ Pending | Token bucket algorithm          |
+| Sliding Window Rate Limit Adapter | ⏳ Pending | Sliding window algorithm        |
+
+### Enhancement Adapters
+
+| Component                | Status    | Notes                         |
+|--------------------------|-----------|-------------------------------|
+| LRU Cache Adapter        | ⏳ Pending | LRU eviction for embeddings   |
+| TTL Cache Adapter        | ⏳ Pending | Time-based expiration         |
+| IndexedDB Cache Adapter  | ⏳ Pending | Persistent embedding cache    |
+| Default Batch Adapter    | ⏳ Pending | Sensible batch defaults       |
+| Aggressive Batch Adapter | ⏳ Pending | Larger batches, longer delays |
+| Cohere Reranker Adapter  | ⏳ Pending | Cohere rerank API             |
+
+### Transform Adapters
+
+| Component                     | Status    | Notes                          |
+|-------------------------------|-----------|--------------------------------|
+| OpenAI Tool Format Adapter    | ⏳ Pending | OpenAI function calling format |
+| Anthropic Tool Format Adapter | ⏳ Pending | Anthropic tool use format      |
+| Cosine Similarity Adapter     | ⏳ Pending | Cosine similarity scoring      |
+| Dot Similarity Adapter        | ⏳ Pending | Dot product scoring            |
+| Euclidean Similarity Adapter  | ⏳ Pending | Euclidean distance scoring     |
+
+### Persistence Adapters
+
+| Component                 | Status    | Notes                          |
+|---------------------------|-----------|--------------------------------|
+| IndexedDB Session Adapter | ⏳ Pending | Browser session persistence    |
+| IndexedDB Vector Adapter  | ⏳ Pending | Browser vector persistence     |
+| OPFS Vector Adapter       | ⏳ Pending | File system vector persistence |
+| HTTP Vector Adapter       | ⏳ Pending | Remote vector persistence      |
+
+### Utilities
+
+| Component              | Status    | Notes                          |
+|------------------------|-----------|--------------------------------|
+| SSE Parser             | ⏳ Pending | Shared across providers        |
+| Tool Call Bridge       | ⏳ Pending | Provider-agnostic tool calls   |
+| Retrieval Tool Factory | ⏳ Pending | VectorStore → Tool integration |
 
 ---
 
@@ -62,37 +103,57 @@ Without centralization, every package reimplements these integrations.
 
 `@mikesaintsg/adapters` centralizes all third-party integrations:
 
-| Category             | Adapters                                     |
-|----------------------|----------------------------------------------|
-| **LLM Providers**    | OpenAI, Anthropic, Ollama (Chat Completions) |
-| **Embeddings**       | OpenAI, Voyage, Ollama                       |
-| **Wrapper Adapters** | Batched, Cached, Retryable                   |
-| **Rate Limiting**    | Per-adapter with optional shared limiter     |
-| **Tool Formats**     | OpenAI, Anthropic, Ollama tool call formats  |
-| **Persistence**      | IndexedDB, OPFS, HTTP for sessions/vectors   |
-| **Bridges**          | Tool call bridge, retrieval tool factory     |
-| **SSE Parsing**      | Shared parser for streaming responses        |
+| Category              | Adapters                                     |
+|-----------------------|----------------------------------------------|
+| **Source**            | OpenAI, Anthropic, Ollama (LLM + Embedding)  |
+| **Persistence**       | IndexedDB, OPFS, HTTP for sessions/vectors   |
+| **Transform**         | Tool Format, Similarity, Token               |
+| **Policy**            | Retry, Rate Limit                            |
+| **Enhancement**       | Cache, Batch, Reranker                       |
+| **Bridges**           | Tool call bridge, retrieval tool factory     |
+| **SSE Parsing**       | Shared parser for streaming responses        |
 
 ### Design Principles
 
 1. **Adapters, not magic strings** — Explicit adapter instantiation, not `provider: 'openai'`
 2. **Interface-first** — All adapters implement interfaces from `@mikesaintsg/core`
 3. **Zero dependencies** — Built on native `fetch`, no axios/node-fetch
-4. **Lazy loading** — Import only what you need
-5. **Consistent errors** — All adapters use ecosystem error patterns
-6. **Composition over inheritance** — Wrapper adapters (batched, cached, retryable) wrap base adapters
+4. **Self-contained adapters** — Each adapter works independently, not as wrappers
+5. **Required adapter first** — Systems take required adapters as first parameter
+6. **Opt-in optional adapters** — Optional adapters are in the options object, nothing enabled by default
+7. **Consistent errors** — All adapters use ecosystem error patterns
+
+### Opt-In Pattern
+
+All optional adapters are **opt-in**. Nothing is enabled by default:
+
+```ts
+// MINIMAL: Just the required adapter
+const store = await createVectorStore(embeddingAdapter)
+
+// WITH PERSISTENCE: Opt-in to persistence
+const store = await createVectorStore(embeddingAdapter, {
+  persistence: createIndexedDBVectorPersistenceAdapter({ database }),
+})
+
+// PRODUCTION: Opt-in to multiple capabilities
+const store = await createVectorStore(embeddingAdapter, {
+  persistence: createIndexedDBVectorPersistenceAdapter({ database }),
+  retry: createExponentialRetryAdapter(),
+  cache: createLRUCacheAdapter({ maxSize: 10000 }),
+})
+```
 
 ### Package Boundaries
 
 ```
 adapters owns:
-├── LLM provider implementations (OpenAI, Anthropic, Ollama)
-├── Embedding provider implementations (OpenAI, Voyage, Ollama)
-├── Embedding wrapper adapters (batched, cached, retryable)
-├── Tool format translators (per provider)
-├── SSE parsing (shared helpers/sse.ts)
-├── Rate limiting utilities
+├── Source adapters (OpenAI, Anthropic, Ollama - LLM + Embedding)
 ├── Persistence adapters (IndexedDB, OPFS, HTTP)
+├── Transform adapters (Tool format, Similarity)
+├── Policy adapters (Retry, Rate limit)
+├── Enhancement adapters (Cache, Batch, Reranker)
+├── SSE parsing (shared helpers/sse.ts)
 ├── Cross-package bridges (tool-call, retrieval)
 └── Provider-specific error mapping
 
@@ -106,19 +167,18 @@ adapters does NOT own:
 
 ### Ownership Clarification
 
-| Component                       | Owner     | Notes                    |
-|---------------------------------|-----------|--------------------------|
-| `EmbeddingAdapterInterface`     | core      | Interface definition     |
-| `createOpenAIEmbeddingAdapter`  | adapters  | Implementation           |
-| `ProviderAdapterInterface`      | inference | Depends on Message types |
-| `createOpenAIProviderAdapter`   | adapters  | Implementation           |
-| `ToolFormatAdapterInterface`    | core      | Interface definition     |
-| `createOpenAIToolFormatAdapter` | adapters  | Implementation           |
-| Token counting                  | inference | `Engine.countTokens()`   |
-| Model multipliers               | adapters  | Helper constants         |
-| SSE parsing                     | adapters  | Shared across providers  |
-| Rate limiting                   | adapters  | Per-adapter + shared     |
-| Retry logic                     | adapters  | Wrapper adapters         |
+| Component                        | Owner     | Notes                         |
+|----------------------------------|-----------|-------------------------------|
+| `EmbeddingAdapterInterface`      | core      | Interface definition          |
+| `RetryAdapterInterface`          | core      | Policy adapter interface      |
+| `RateLimitAdapterInterface`      | core      | Policy adapter interface      |
+| `EmbeddingCacheAdapterInterface` | core      | Enhancement adapter interface |
+| `BatchAdapterInterface`          | core      | Enhancement adapter interface |
+| `createOpenAIEmbeddingAdapter`   | adapters  | Source adapter                |
+| `createExponentialRetryAdapter`  | adapters  | Policy adapter                |
+| `createLRUCacheAdapter`          | adapters  | Enhancement adapter           |
+| Token counting                   | inference | `Engine.countTokens()`        |
+| SSE parsing                      | adapters  | Shared across providers       |
 
 ### Architecture Overview
 
@@ -136,30 +196,25 @@ adapters does NOT own:
 │          │     @mikesaintsg/adapters       │                             │
 │          ▼                ▼                ▼                             │
 │   ┌─────────────────────────────────────────────────────────────────┐   │
-│   │                    Provider Adapters                             │   │
+│   │                    Source Adapters                               │   │
 │   │   ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐   │   │
-│   │   │ OpenAI Provider │ │Anthropic Provider│ │ Ollama Provider │   │   │
+│   │   │ OpenAI Provider │ │OpenAI Embedding │ │ Voyage Embedding│   │   │
 │   │   └─────────────────┘ └─────────────────┘ └─────────────────┘   │   │
 │   ├─────────────────────────────────────────────────────────────────┤   │
-│   │                   Embedding Adapters                             │   │
-│   │   ┌──────────┐  ┌──────────┐  ┌──────────┐                      │   │
-│   │   │  OpenAI  │  │  Voyage  │  │  Ollama  │                      │   │
-│   │   └──────────┘  └──────────┘  └──────────┘                      │   │
+│   │                   Policy Adapters                                │   │
+│   │   ┌──────────────────┐  ┌──────────────────────────────────┐    │   │
+│   │   │ExponentialRetry  │  │ TokenBucketRateLimit             │    │   │
+│   │   └──────────────────┘  └──────────────────────────────────┘    │   │
 │   ├─────────────────────────────────────────────────────────────────┤   │
-│   │                   Wrapper Adapters                               │   │
-│   │   ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────────────┐   │   │
-│   │   │ Batched  │  │  Cached  │  │ Retryable │  │ Rate Limited │   │   │
-│   │   └──────────┘  └──────────┘  └───────────┘  └──────────────┘   │   │
+│   │                  Enhancement Adapters                            │   │
+│   │   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐    │   │
+│   │   │ LRUCache │  │  Batch   │  │ Reranker │  │   Similarity │    │   │
+│   │   └──────────┘  └──────────┘  └──────────┘  └──────────────┘    │   │
 │   ├─────────────────────────────────────────────────────────────────┤   │
 │   │                  Persistence Adapters                            │   │
 │   │   ┌───────────┐   ┌──────────┐   ┌──────────┐                   │   │
 │   │   │ IndexedDB │   │   OPFS   │   │   HTTP   │                   │   │
 │   │   └───────────┘   └──────────┘   └──────────┘                   │   │
-│   ├─────────────────────────────────────────────────────────────────┤   │
-│   │                      Shared Helpers                              │   │
-│   │   ┌────────────────┐   ┌───────────────────┐                    │   │
-│   │   │   SSE Parser   │   │   Token Counter   │                    │   │
-│   │   └────────────────┘   └───────────────────┘                    │   │
 │   ├─────────────────────────────────────────────────────────────────┤   │
 │   │                      Bridge Functions                            │   │
 │   │   ┌────────────────┐   ┌───────────────────┐                    │   │
@@ -197,28 +252,56 @@ An adapter stays in its domain package if ALL of these are true:
 
 ### Adapter Inventory
 
-#### Moves to @mikesaintsg/adapters
+#### Source Adapters (in @mikesaintsg/adapters)
 
-| Adapter                             | From Package    | Reason                |
-|-------------------------------------|-----------------|-----------------------|
-| `createOpenAIProviderAdapter`       | inference       | Third-party API       |
-| `createAnthropicProviderAdapter`    | inference       | Third-party API       |
-| `createOllamaProviderAdapter`       | inference       | Local API for testing |
-| `createOpenAIEmbeddingAdapter`      | inference       | Third-party API       |
-| `createVoyageEmbeddingAdapter`      | inference       | Third-party API       |
-| `createOllamaEmbeddingAdapter`      | inference       | Local API for testing |
-| `createBatchedEmbeddingAdapter`     | inference       | Wrapper adapter       |
-| `createCachedEmbeddingAdapter`      | inference       | Wrapper adapter       |
-| `createRetryableProviderAdapter`    | inference       | Wrapper adapter       |
-| `createRetryableEmbeddingAdapter`   | inference       | Wrapper adapter       |
-| `createRateLimiter`                 | inference       | Cross-adapter utility |
-| `createOpenAIToolFormatAdapter`     | contextprotocol | Third-party format    |
-| `createAnthropicToolFormatAdapter`  | contextprotocol | Third-party format    |
-| `createOllamaToolFormatAdapter`     | contextprotocol | Local API format      |
-| `createIndexedDBSessionPersistence` | inference       | Cross-package         |
-| `createIndexedDBVectorPersistence`  | vectorstore     | Cross-package         |
-| `createOPFSVectorPersistence`       | vectorstore     | Cross-package         |
-| `createHTTPVectorPersistence`       | vectorstore     | External service      |
+| Adapter                             | Category    | Notes                 |
+|-------------------------------------|-------------|-----------------------|
+| `createOpenAIProviderAdapter`       | Provider    | Chat completions      |
+| `createAnthropicProviderAdapter`    | Provider    | Chat completions      |
+| `createOllamaProviderAdapter`       | Provider    | Local development     |
+| `createOpenAIEmbeddingAdapter`      | Embedding   | text-embedding-3      |
+| `createVoyageEmbeddingAdapter`      | Embedding   | Anthropic partner     |
+| `createOllamaEmbeddingAdapter`      | Embedding   | Local development     |
+
+#### Policy Adapters (in @mikesaintsg/adapters)
+
+| Adapter                               | Interface                   | Notes                    |
+|---------------------------------------|-----------------------------|--------------------------|
+| `createExponentialRetryAdapter`       | `RetryAdapterInterface`     | Exponential backoff      |
+| `createLinearRetryAdapter`            | `RetryAdapterInterface`     | Fixed delays             |
+| `createTokenBucketRateLimitAdapter`   | `RateLimitAdapterInterface` | Token bucket algorithm   |
+| `createSlidingWindowRateLimitAdapter` | `RateLimitAdapterInterface` | Sliding window algorithm |
+
+#### Enhancement Adapters (in @mikesaintsg/adapters)
+
+| Adapter                             | Interface                        | Notes               |
+|-------------------------------------|----------------------------------|---------------------|
+| `createLRUCacheAdapter`             | `EmbeddingCacheAdapterInterface` | LRU eviction        |
+| `createTTLCacheAdapter`             | `EmbeddingCacheAdapterInterface` | TTL-only expiration |
+| `createIndexedDBCacheAdapter`       | `EmbeddingCacheAdapterInterface` | Persistent cache    |
+| `createBatchAdapter`                | `BatchAdapterInterface`          | Sensible defaults   |
+| `createAggressiveBatchAdapter`      | `BatchAdapterInterface`          | Larger batches      |
+| `createCohereRerankerAdapter`       | `RerankerAdapterInterface`       | Cohere API          |
+| `createCrossEncoderRerankerAdapter` | `RerankerAdapterInterface`       | Local model         |
+
+#### Persistence Adapters (in @mikesaintsg/adapters)
+
+| Adapter                             | Type    | Notes                 |
+|-------------------------------------|---------|-----------------------|
+| `createIndexedDBSessionAdapter`     | Session | Browser persistence   |
+| `createIndexedDBVectorPersistence`  | Vector  | Browser persistence   |
+| `createOPFSVectorPersistence`       | Vector  | File system access    |
+| `createHTTPVectorPersistence`       | Vector  | Remote storage        |
+
+#### Transform Adapters (in @mikesaintsg/adapters)
+
+| Adapter                             | Interface                    | Notes              |
+|-------------------------------------|------------------------------|--------------------|
+| `createOpenAIToolFormatAdapter`     | `ToolFormatAdapterInterface` | OpenAI format      |
+| `createAnthropicToolFormatAdapter`  | `ToolFormatAdapterInterface` | Anthropic format   |
+| `createCosineSimilarityAdapter`     | `SimilarityAdapterInterface` | Cosine similarity  |
+| `createDotSimilarityAdapter`        | `SimilarityAdapterInterface` | Dot product        |
+| `createEuclideanSimilarityAdapter`  | `SimilarityAdapterInterface` | Euclidean distance |
 
 #### Stays in Domain Packages
 
@@ -349,7 +432,8 @@ const provider = createOpenAIProviderAdapter({
   },
 })
 
-const engine = createEngine({ provider })
+// Required adapter is first parameter
+const engine = createEngine(provider)
 ```
 
 ### Anthropic Provider
@@ -368,7 +452,8 @@ const provider = createAnthropicProviderAdapter({
   },
 })
 
-const engine = createEngine({ provider })
+// Required adapter is first parameter
+const engine = createEngine(provider)
 ```
 
 ### Ollama Provider (Local Development)
@@ -388,7 +473,8 @@ const provider = createOllamaProviderAdapter({
   keepAlive: true, // Keep model loaded in memory
 })
 
-const engine = createEngine({ provider })
+// Required adapter is first parameter
+const engine = createEngine(provider)
 ```
 
 **Setup Ollama:**
@@ -477,132 +563,233 @@ const embedding = await embedder.embed('Hello, world!')
 - `all-minilm` — Lightweight, 384 dimensions
 - `snowflake-arctic-embed` — High performance, 1024 dimensions
 
-### Wrapper Adapters (Composition Pattern)
+### Policy Adapters
 
-Batched and cached adapters wrap base adapters, allowing mixing and matching features:
+Policy adapters control **how** operations are executed. They are opt-in and provided to systems through the options object.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Your Application                         │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│               CachedEmbeddingAdapter                        │
-│   (Checks cache before calling wrapped adapter)             │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│              BatchedEmbeddingAdapter                         │
-│   (Batches requests for efficiency)                         │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│             RetryableEmbeddingAdapter                        │
-│   (Retries on transient failures)                           │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│               OpenAIEmbeddingAdapter                         │
-│   (Actual API calls)                                        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Batched Embeddings
-
-Wrap any embedding adapter with batching:
+#### Retry Adapters
 
 ```typescript
 import { 
-  createOpenAIEmbeddingAdapter,
-  createBatchedEmbeddingAdapter 
+  createExponentialRetryAdapter,
+  createLinearRetryAdapter,
 } from '@mikesaintsg/adapters'
+import { createVectorStore } from '@mikesaintsg/vectorstore'
 
-const baseEmbedder = createOpenAIEmbeddingAdapter({ apiKey })
-
-const batchedEmbedder = createBatchedEmbeddingAdapter({
-  adapter: baseEmbedder,
-  batchSize: 100,
-  delayMs: 50,
-  deduplicate: true, // Skip identical texts
-})
-
-// Automatically batches multiple embed calls
-const embeddings = await Promise.all(
-  texts.map(text => batchedEmbedder.embed(text))
-)
-```
-
-### Cached Embeddings
-
-Wrap any embedding adapter with caching:
-
-```typescript
-import {
-  createOpenAIEmbeddingAdapter,
-  createCachedEmbeddingAdapter
-} from '@mikesaintsg/adapters'
-
-const baseEmbedder = createOpenAIEmbeddingAdapter({ apiKey })
-
-const cachedEmbedder = createCachedEmbeddingAdapter({
-  adapter: baseEmbedder,
-  cache: new Map(), // Or IndexedDB cache
-  ttlMs: 3600_000, // 1 hour
-})
-```
-
-### Retryable Embeddings
-
-Wrap any embedding adapter with retry logic:
-
-```typescript
-import {
-  createOpenAIEmbeddingAdapter,
-  createRetryableEmbeddingAdapter
-} from '@mikesaintsg/adapters'
-
-const baseEmbedder = createOpenAIEmbeddingAdapter({ apiKey })
-
-const retryableEmbedder = createRetryableEmbeddingAdapter({
-  adapter: baseEmbedder,
-  retry: {
-    maxRetries: 3,
-    initialDelayMs: 1000,
-    maxDelayMs: 30000,
-    backoffMultiplier: 2,
-    jitter: true,
-    retryableCodes: ['RATE_LIMIT_ERROR', 'NETWORK_ERROR', 'SERVICE_ERROR'],
-    onRetry: (error, attempt, delayMs) => {
-      console.log(`Retry attempt ${attempt} after ${delayMs}ms`)
-    },
+// Exponential backoff with jitter (recommended)
+const retry = createExponentialRetryAdapter({
+  maxAttempts: 5,
+  initialDelayMs: 1000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 2,
+  jitter: true,
+  retryableCodes: ['RATE_LIMIT_ERROR', 'NETWORK_ERROR', 'TIMEOUT_ERROR'],
+  onRetry: (error, attempt, delayMs) => {
+    console.warn(`Retry ${attempt}, waiting ${delayMs}ms:`, error)
   },
 })
+
+// Linear retry with fixed delays
+const linearRetry = createLinearRetryAdapter({
+  maxAttempts: 3,
+  delayMs: 2000,
+})
+
+// Provide to system through options
+const store = await createVectorStore(embeddingAdapter, {
+  retry, // Opt-in to retry
+})
 ```
 
-### Composing Wrappers
-
-Combine multiple wrappers for production use:
+#### Rate Limit Adapters
 
 ```typescript
 import {
-  createOpenAIEmbeddingAdapter,
-  createCachedEmbeddingAdapter,
-  createBatchedEmbeddingAdapter,
-  createRetryableEmbeddingAdapter,
+  createTokenBucketRateLimitAdapter,
+  createSlidingWindowRateLimitAdapter,
 } from '@mikesaintsg/adapters'
 
-// Build from inside out: base -> retry -> batch -> cache
-const base = createOpenAIEmbeddingAdapter({ apiKey })
-const retryable = createRetryableEmbeddingAdapter({ adapter: base, retry: {} })
-const batched = createBatchedEmbeddingAdapter({ adapter: retryable, batchSize: 100 })
-const cached = createCachedEmbeddingAdapter({ adapter: batched, cache: new Map() })
+// Token bucket algorithm (recommended)
+const rateLimit = createTokenBucketRateLimitAdapter({
+  requestsPerMinute: 60,
+  maxConcurrent: 10,
+  onThrottle: (waitMs) => {
+    console.log(`Throttled, waiting ${waitMs}ms`)
+  },
+})
 
-// Use the fully wrapped adapter
-const embeddings = await cached.embedBatch(texts)
+// Sliding window algorithm
+const slidingRateLimit = createSlidingWindowRateLimitAdapter({
+  requestsPerMinute: 100,
+  windowSizeMs: 60000,
+})
+
+// Provide to system through options
+const store = await createVectorStore(embeddingAdapter, {
+  rateLimit, // Opt-in to rate limiting
+})
+```
+
+### Enhancement Adapters
+
+Enhancement adapters add **capabilities** to systems. They are opt-in and provided through the options object.
+
+#### Cache Adapters
+
+```typescript
+import {
+  createLRUCacheAdapter,
+  createTTLCacheAdapter,
+  createIndexedDBCacheAdapter,
+} from '@mikesaintsg/adapters'
+
+// LRU cache with TTL (recommended for most use cases)
+const cache = createLRUCacheAdapter({
+  maxSize: 10000,
+  ttlMs: 3600000, // 1 hour
+})
+
+// TTL-only cache (no size limit)
+const ttlCache = createTTLCacheAdapter({
+  ttlMs: 86400000, // 24 hours
+})
+
+// Persistent cache using IndexedDB
+const persistentCache = createIndexedDBCacheAdapter({
+  database: db,
+  storeName: 'embedding_cache',
+  ttlMs: 604800000, // 7 days
+})
+
+// Provide to system through options
+const store = await createVectorStore(embeddingAdapter, {
+  cache, // Opt-in to caching
+})
+```
+
+#### Batch Adapters
+
+```typescript
+import {
+  createBatchAdapter,
+  createAggressiveBatchAdapter,
+} from '@mikesaintsg/adapters'
+
+// Standard batch adapter (recommended)
+const batch = createBatchAdapter({
+  batchSize: 100,
+  delayMs: 50,
+  deduplicate: true,
+})
+
+// Aggressive batching for large workloads
+const aggressiveBatch = createAggressiveBatchAdapter({
+  batchSize: 500,
+  delayMs: 100,
+  deduplicate: true,
+})
+
+// Provide to system through options
+const store = await createVectorStore(embeddingAdapter, {
+  batch, // Opt-in to batching
+})
+```
+
+#### Reranker Adapters
+
+```typescript
+import {
+  createCohereRerankerAdapter,
+  createCrossEncoderRerankerAdapter,
+} from '@mikesaintsg/adapters'
+
+// Cohere reranker (recommended for production)
+const reranker = createCohereRerankerAdapter({
+  apiKey: process.env.COHERE_API_KEY,
+  model: 'rerank-english-v3.0',
+  topK: 10,
+})
+
+// Local cross-encoder model
+const localReranker = createCrossEncoderRerankerAdapter({
+  modelPath: '/models/cross-encoder',
+})
+
+// Provide to system through options
+const store = await createVectorStore(embeddingAdapter, {
+  reranker, // Opt-in to reranking
+})
+```
+
+### Transform Adapters
+
+Transform adapters convert between data formats.
+
+#### Similarity Adapters
+
+```typescript
+import {
+  createCosineSimilarityAdapter,
+  createDotSimilarityAdapter,
+  createEuclideanSimilarityAdapter,
+} from '@mikesaintsg/adapters'
+
+// Cosine similarity (recommended, default behavior)
+const cosineSimilarity = createCosineSimilarityAdapter()
+
+// Dot product similarity
+const dotSimilarity = createDotSimilarityAdapter()
+
+// Euclidean distance
+const euclideanSimilarity = createEuclideanSimilarityAdapter()
+
+// Provide to system through options
+const store = await createVectorStore(embeddingAdapter, {
+  similarity: cosineSimilarity, // Opt-in to specific similarity
+})
+```
+
+### Complete Example with All Adapter Types
+
+```typescript
+import { createVectorStore } from '@mikesaintsg/vectorstore'
+import {
+  // Source adapter
+  createOpenAIEmbeddingAdapter,
+  // Persistence adapter
+  createIndexedDBVectorPersistenceAdapter,
+  // Transform adapter
+  createCosineSimilarityAdapter,
+  // Policy adapters
+  createExponentialRetryAdapter,
+  createTokenBucketRateLimitAdapter,
+  // Enhancement adapters
+  createLRUCacheAdapter,
+  createBatchAdapter,
+  createCohereRerankerAdapter,
+} from '@mikesaintsg/adapters'
+
+// Create the vector store with all adapters
+const store = await createVectorStore(
+  // Required: Source adapter (first parameter)
+  createOpenAIEmbeddingAdapter({ apiKey, model: 'text-embedding-3-small' }),
+  {
+    // Persistence (opt-in)
+    persistence: createIndexedDBVectorPersistenceAdapter({ database: db }),
+    
+    // Transform (opt-in)
+    similarity: createCosineSimilarityAdapter(),
+    
+    // Policy (opt-in)
+    retry: createExponentialRetryAdapter({ maxAttempts: 5 }),
+    rateLimit: createTokenBucketRateLimitAdapter({ requestsPerMinute: 60 }),
+    
+    // Enhancement (opt-in)
+    cache: createLRUCacheAdapter({ maxSize: 10000 }),
+    batch: createBatchAdapter({ batchSize: 100 }),
+    reranker: createCohereRerankerAdapter({ apiKey: cohereApiKey }),
+  }
+)
 ```
 
 ### Embedding Interface
@@ -1031,7 +1218,7 @@ try {
 
 Each provider adapter maps provider-specific errors:
 
-```typescript
+```markdown
 // OpenAI error codes → AdapterErrorCode
 'invalid_api_key' → 'AUTHENTICATION_ERROR'
 'rate_limit_exceeded' → 'RATE_LIMIT_ERROR'
@@ -1243,13 +1430,13 @@ const retrievalTool = createRetrievalTool({
   description: 'Search documentation',
 })
 
-// Setup engine
+// Setup engine - required adapter is first parameter
 const provider = createOpenAIProviderAdapter({
   apiKey: process.env.OPENAI_API_KEY,
   model: 'gpt-4o',
 })
 
-const engine = createEngine({ provider })
+const engine = createEngine(provider)
 const session = engine.createSession({
   system: 'Answer questions using the provided context.',
 })
