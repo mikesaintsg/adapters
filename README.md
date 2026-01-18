@@ -187,6 +187,53 @@ const engine = createEngine(provider)
 const session = engine.createSession({ system: 'You are helpful.' })
 ```
 
+### node-llama-cpp Provider (Local LLaMA)
+
+```ts
+import { getLlama } from 'node-llama-cpp'
+import { createNodeLlamaCppProviderAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+// Consumer initializes node-llama-cpp
+const llama = await getLlama()
+const model = await llama.loadModel({ modelPath: './llama-3-8b.gguf' })
+const context = await model.createContext()
+
+// Pass to adapter - no node-llama-cpp runtime dependency in @mikesaintsg/adapters
+const provider = createNodeLlamaCppProviderAdapter({
+  context,
+  modelName: 'llama3',
+  defaultOptions: {
+    temperature: 0.7,
+    maxTokens: 4096,
+  },
+})
+
+const engine = createEngine(provider)
+```
+
+### node-llama-cpp Embedding (Local)
+
+```ts
+import { getLlama } from 'node-llama-cpp'
+import { createNodeLlamaCppEmbeddingAdapter } from '@mikesaintsg/adapters'
+
+// Consumer initializes node-llama-cpp
+const llama = await getLlama()
+const model = await llama.loadModel({ modelPath: './nomic-embed-text.gguf' })
+const embeddingContext = await model.createEmbeddingContext()
+
+// Pass to adapter
+const embedding = createNodeLlamaCppEmbeddingAdapter({
+  embeddingContext,
+  modelName: 'nomic-embed-text',
+})
+
+const embeddings = await embedding.embed(['Hello, world!'])
+```
+
+**Note:** node-llama-cpp is **not** a runtime dependency of @mikesaintsg/adapters. Consumers must install node-llama-cpp themselves and pass initialized context objects. This allows consumers who don't use node-llama-cpp to avoid installing it.
+
 ### Policy Adapters (Retry & Rate Limiting)
 
 ```ts

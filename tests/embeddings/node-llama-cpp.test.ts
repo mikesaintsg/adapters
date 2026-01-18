@@ -208,5 +208,153 @@ describe('node-llama-cpp Embedding Adapter', () => {
 
 			expect(callOrder).toEqual(['First', 'Second', 'Third'])
 		})
+
+		it('preserves specified dimensions over detected', async() => {
+			const mockContext = createMockEmbeddingContext({ dimensions: 768 })
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+				dimensions: 512, // Explicitly specified
+			})
+
+			// Even after embedding, should use specified dimensions
+			await adapter.embed(['Hello'])
+
+			const metadata = adapter.getModelMetadata()
+			expect(metadata.dimensions).toBe(512)
+		})
+
+		it('handles abort signal during processing', async() => {
+			let resolveSecond: (() => void) | undefined
+			const secondEmbedPromise = new Promise<void>(resolve => {
+				resolveSecond = resolve
+			})
+
+			const mockContext: NodeLlamaCppEmbeddingContext = {
+				getEmbeddingFor: vi.fn()
+					.mockImplementationOnce(() => Promise.resolve({ vector: [0.1, 0.2, 0.3] }))
+					.mockImplementationOnce(() => secondEmbedPromise.then(() => ({ vector: [0.1, 0.2, 0.3] })))
+					.mockImplementation(() => Promise.resolve({ vector: [0.1, 0.2, 0.3] })),
+			}
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			const abortController = new AbortController()
+
+			// Start embedding
+			const promise = adapter.embed(['First', 'Second', 'Third'], { signal: abortController.signal })
+
+			// Wait for first embedding to complete
+			await new Promise(resolve => setTimeout(resolve, 10))
+
+			// Abort while waiting for second
+			abortController.abort()
+
+			// Resolve second to allow it to proceed
+			resolveSecond?.()
+
+			// Should throw due to abort
+			await expect(promise).rejects.toThrow()
+		})
+
+		it('maintains consistent behavior across multiple calls', async() => {
+			const mockContext = createMockEmbeddingContext({ dimensions: 384 })
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			// First call
+			const result1 = await adapter.embed(['Hello'])
+			// Second call
+			const result2 = await adapter.embed(['World'])
+			// Third call with multiple texts
+			const result3 = await adapter.embed(['Foo', 'Bar'])
+
+			expect(result1[0]).toBeInstanceOf(Float32Array)
+			expect(result2[0]).toBeInstanceOf(Float32Array)
+			expect(result3.length).toBe(2)
+		})
+
+		it('handles very long text input', async() => {
+			const mockContext = createMockEmbeddingContext({ dimensions: 384 })
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			const longText = 'A'.repeat(10000) // 10K characters
+			const result = await adapter.embed([longText])
+
+			expect(result[0]).toBeInstanceOf(Float32Array)
+			expect(mockContext.getEmbeddingFor).toHaveBeenCalledWith(longText)
+		})
+
+		it('handles unicode text properly', async() => {
+			const mockContext = createMockEmbeddingContext({ dimensions: 384 })
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			const unicodeText = '你好世界 🌍 مرحبا'
+			const result = await adapter.embed([unicodeText])
+
+			expect(result[0]).toBeInstanceOf(Float32Array)
+			expect(mockContext.getEmbeddingFor).toHaveBeenCalledWith(unicodeText)
+		})
+
+		it('handles empty string input', async() => {
+			const mockContext = createMockEmbeddingContext({ dimensions: 384 })
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			const result = await adapter.embed([''])
+
+			expect(result.length).toBe(1)
+			expect(result[0]).toBeInstanceOf(Float32Array)
+			expect(mockContext.getEmbeddingFor).toHaveBeenCalledWith('')
+		})
+
+		it('handles mixed empty and non-empty strings', async() => {
+			const mockContext = createMockEmbeddingContext({ dimensions: 384 })
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			const result = await adapter.embed(['Hello', '', 'World'])
+
+			expect(result.length).toBe(3)
+			expect(mockContext.getEmbeddingFor).toHaveBeenCalledTimes(3)
+		})
+
+		it('throws AdapterError for non-AdapterError exceptions', async() => {
+			const mockContext: NodeLlamaCppEmbeddingContext = {
+				getEmbeddingFor: vi.fn().mockRejectedValue(new TypeError('Type error')),
+			}
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			await expect(adapter.embed(['Hello'])).rejects.toThrow('Type error')
+		})
+
+		it('re-throws AdapterError without wrapping', async() => {
+			// Import AdapterError to create one for testing
+			const { AdapterError } = await import('@mikesaintsg/adapters')
+			const originalError = new AdapterError('RATE_LIMIT_ERROR', 'Rate limited')
+
+			const mockContext: NodeLlamaCppEmbeddingContext = {
+				getEmbeddingFor: vi.fn().mockRejectedValue(originalError),
+			}
+			const adapter = createNodeLlamaCppEmbeddingAdapter({
+				embeddingContext: mockContext,
+			})
+
+			try {
+				await adapter.embed(['Hello'])
+				expect.fail('Should have thrown')
+			} catch (error) {
+				expect(error).toBe(originalError)
+			}
+		})
 	})
 })

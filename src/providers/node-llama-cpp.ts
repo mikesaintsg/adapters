@@ -22,13 +22,13 @@ import type {
 } from '@mikesaintsg/core'
 import type {
 	NodeLlamaCppProviderAdapterOptions,
-	NodeLlamaCppChatHistoryItem,
+	NodeLlamaCppEvaluateOptions,
 } from '../types.js'
 import {
 	NODE_LLAMA_CPP_DEFAULT_TIMEOUT,
 	NODE_LLAMA_CPP_DEFAULT_MODEL_NAME,
 } from '../constants.js'
-import { createDoneIteratorResult } from '../helpers.js'
+import { createDoneIteratorResult, convertMessagesToChatHistory } from '../helpers.js'
 import { AdapterError } from '../errors.js'
 
 /**
@@ -178,25 +178,12 @@ export function createNodeLlamaCppProviderAdapter(
 					const maxTokens = generationOptions.maxTokens ?? defaultOptions?.maxTokens
 
 					// Build evaluate options, only including defined values
-					const evaluateOptions: {
-						readonly stopOnEos: true
-						readonly signal: AbortSignal
-						readonly temperature?: number
-						readonly topP?: number
-						readonly maxTokens?: number
-					} = {
+					const evaluateOptions: NodeLlamaCppEvaluateOptions = {
 						stopOnEos: true,
 						signal: abortController.signal,
-					}
-
-					if (temperature !== undefined) {
-						(evaluateOptions as { temperature?: number }).temperature = temperature
-					}
-					if (topP !== undefined) {
-						(evaluateOptions as { topP?: number }).topP = topP
-					}
-					if (maxTokens !== undefined) {
-						(evaluateOptions as { maxTokens?: number }).maxTokens = maxTokens
+						...(temperature !== undefined ? { temperature } : {}),
+						...(topP !== undefined ? { topP } : {}),
+						...(maxTokens !== undefined ? { maxTokens } : {}),
 					}
 
 					// Generate response
@@ -309,9 +296,10 @@ export function createNodeLlamaCppProviderAdapter(
 							if (iteratorError) {
 								return Promise.reject(iteratorError)
 							}
-							if (tokenQueue.length > 0) {
+							const nextToken = tokenQueue.shift()
+							if (nextToken !== undefined) {
 								return Promise.resolve({
-									value: tokenQueue.shift()!,
+									value: nextToken,
 									done: false,
 								})
 							}
@@ -350,32 +338,4 @@ export function createNodeLlamaCppProviderAdapter(
 			}
 		},
 	}
-}
-
-/**
- * Convert Message array to node-llama-cpp chat history format.
- */
-function convertMessagesToChatHistory(
-	messages: readonly Message[],
-): NodeLlamaCppChatHistoryItem[] {
-	const history: NodeLlamaCppChatHistoryItem[] = []
-
-	for (const msg of messages) {
-		const content = typeof msg.content === 'string' ? msg.content : ''
-
-		switch (msg.role) {
-			case 'system':
-				history.push({ type: 'system', text: content })
-				break
-			case 'user':
-				history.push({ type: 'user', text: content })
-				break
-			case 'assistant':
-				history.push({ type: 'model', response: [content] })
-				break
-			// Tool messages are handled differently - skip for now
-		}
-	}
-
-	return history
 }

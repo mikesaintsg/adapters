@@ -393,5 +393,197 @@ describe('node-llama-cpp Provider Adapter', () => {
 			// Should have received tokens
 			expect(tokens.length).toBeGreaterThan(0)
 		})
+
+		it('calls onComplete callback when generation finishes', async() => {
+			const mockContext = createMockContext({ tokens: [0, 1, 2] })
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+			})
+
+			const messages: Message[] = [{
+				id: '1',
+				role: 'user',
+				content: 'Hello',
+				createdAt: Date.now(),
+			}]
+
+			let completedResult: unknown = null
+			const handle = adapter.generate(messages, {})
+
+			handle.onComplete((result) => {
+				completedResult = result
+			})
+
+			await handle.result()
+
+			expect(completedResult).not.toBeNull()
+			expect((completedResult as { finishReason: string }).finishReason).toBe('stop')
+		})
+
+		it('returns finishReason length when max tokens exceeded', async() => {
+			const mockContext = createMockContext({ tokens: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] })
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+			})
+
+			const messages: Message[] = [{
+				id: '1',
+				role: 'user',
+				content: 'Hello',
+				createdAt: Date.now(),
+			}]
+
+			const handle = adapter.generate(messages, {
+				maxTokens: 2, // Only allow 2 tokens
+			})
+
+			const result = await handle.result()
+
+			expect(result.finishReason).toBe('length')
+		})
+
+		it('handles async iterator consumption', async() => {
+			const mockContext = createMockContext({ tokens: [0, 1, 2] })
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+			})
+
+			const messages: Message[] = [{
+				id: '1',
+				role: 'user',
+				content: 'Hello',
+				createdAt: Date.now(),
+			}]
+
+			const handle = adapter.generate(messages, {})
+			const chunks: string[] = []
+
+			for await (const chunk of handle) {
+				chunks.push(chunk)
+			}
+
+			expect(chunks.length).toBeGreaterThan(0)
+		})
+
+		it('returns unsubscribe functions from callbacks', () => {
+			const mockContext = createMockContext()
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+			})
+
+			const messages: Message[] = [{
+				id: '1',
+				role: 'user',
+				content: 'Hello',
+				createdAt: Date.now(),
+			}]
+
+			const handle = adapter.generate(messages, {})
+
+			const unsubToken = handle.onToken(() => { /* noop */ })
+			const unsubComplete = handle.onComplete(() => { /* noop */ })
+			const unsubError = handle.onError(() => { /* noop */ })
+
+			expect(typeof unsubToken).toBe('function')
+			expect(typeof unsubComplete).toBe('function')
+			expect(typeof unsubError).toBe('function')
+
+			// Should not throw
+			unsubToken()
+			unsubComplete()
+			unsubError()
+
+			handle.abort()
+		})
+
+		it('uses default options when provided', async() => {
+			const mockContext = createMockContext({ tokens: [0] })
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+				defaultOptions: {
+					temperature: 0.5,
+					maxTokens: 1000,
+				},
+			})
+
+			const messages: Message[] = [{
+				id: '1',
+				role: 'user',
+				content: 'Hello',
+				createdAt: Date.now(),
+			}]
+
+			const handle = adapter.generate(messages, {})
+			await handle.result()
+
+			// The adapter should have used defaultOptions
+			expect(mockContext.getSequence).toHaveBeenCalled()
+		})
+
+		it('generation options override default options', async() => {
+			const mockContext = createMockContext({ tokens: [0] })
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+				defaultOptions: {
+					temperature: 0.5,
+				},
+			})
+
+			const messages: Message[] = [{
+				id: '1',
+				role: 'user',
+				content: 'Hello',
+				createdAt: Date.now(),
+			}]
+
+			const handle = adapter.generate(messages, {
+				temperature: 0.9, // Override default
+			})
+
+			await handle.result()
+
+			// Just verify it completed successfully
+			expect(mockContext.getSequence).toHaveBeenCalled()
+		})
+
+		it('handles empty messages array', async() => {
+			const mockContext = createMockContext({ tokens: [0] })
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+			})
+
+			const handle = adapter.generate([], {})
+			const result = await handle.result()
+
+			expect(result.finishReason).toBe('stop')
+		})
+
+		it('handles non-string content in messages', async() => {
+			const mockContext = createMockContext({ tokens: [0] })
+			const adapter = createNodeLlamaCppProviderAdapter({
+				context: mockContext,
+			})
+
+			// Create message with non-string content (edge case)
+			const messages: Message[] = [{
+				id: '1',
+				role: 'user',
+				content: { parts: ['Hello'] } as unknown as string,
+				createdAt: Date.now(),
+			}]
+
+			const handle = adapter.generate(messages, {})
+			const result = await handle.result()
+
+			// Should handle gracefully (empty content for non-string)
+			expect(result.finishReason).toBe('stop')
+		})
+	})
+
+	describe('convertMessagesToChatHistory helper', () => {
+		it('is exported from helpers', async() => {
+			const { convertMessagesToChatHistory } = await import('@mikesaintsg/adapters')
+			expect(typeof convertMessagesToChatHistory).toBe('function')
+		})
 	})
 })

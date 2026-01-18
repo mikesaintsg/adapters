@@ -8,7 +8,8 @@
 // Content Hashing Helpers
 // ============================================================================
 
-import { ContentHash, Embedding, StoredDocument } from '@mikesaintsg/core'
+import type { ContentHash, Embedding, Message, StoredDocument } from '@mikesaintsg/core'
+import type { NodeLlamaCppChatHistoryItem } from './types.js'
 
 /**
  * Compute a SHA-256 content hash for text.
@@ -108,4 +109,46 @@ export function estimateEmbeddingBytes(embedding: Embedding): number {
  */
 export function createDoneIteratorResult<T>(): IteratorResult<T> {
 	return { value: undefined as unknown as T, done: true }
+}
+
+// ============================================================================
+// node-llama-cpp Message Conversion Helpers
+// ============================================================================
+
+/**
+ * Convert Message array to node-llama-cpp chat history format.
+ *
+ * @param messages - The messages to convert
+ * @returns Array of NodeLlamaCppChatHistoryItem
+ *
+ * @example
+ * ```ts
+ * const chatHistory = convertMessagesToChatHistory([
+ *   { id: '1', role: 'user', content: 'Hello', createdAt: Date.now() }
+ * ])
+ * ```
+ */
+export function convertMessagesToChatHistory(
+	messages: readonly Message[],
+): NodeLlamaCppChatHistoryItem[] {
+	const history: NodeLlamaCppChatHistoryItem[] = []
+
+	for (const msg of messages) {
+		const content = typeof msg.content === 'string' ? msg.content : ''
+
+		switch (msg.role) {
+			case 'system':
+				history.push({ type: 'system', text: content })
+				break
+			case 'user':
+				history.push({ type: 'user', text: content })
+				break
+			case 'assistant':
+				history.push({ type: 'model', response: [content] })
+				break
+			// Tool messages are handled differently - skip for now
+		}
+	}
+
+	return history
 }
