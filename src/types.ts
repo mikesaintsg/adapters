@@ -488,8 +488,6 @@ export interface ModelTokenMultipliers {
 	readonly [model: string]: number
 }
 
-
-
 // ============================================================================
 // Tool Format Adapter Options
 // ============================================================================
