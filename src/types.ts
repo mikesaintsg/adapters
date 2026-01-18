@@ -248,6 +248,157 @@ export type OllamaChatModel =
 	| (string & {})
 
 // ============================================================================
+// node-llama-cpp Adapter Options (Local Development / Testing)
+// ============================================================================
+
+/**
+ * node-llama-cpp provider adapter options.
+ *
+ * node-llama-cpp runs LLaMA models locally using llama.cpp bindings.
+ * This adapter requires the consumer to pass initialized node-llama-cpp
+ * objects (Llama, LlamaModel, LlamaContext) at runtime.
+ *
+ * IMPORTANT: node-llama-cpp is a devDependency only. Types are imported
+ * using `import type` to avoid runtime dependencies. Consumers must have
+ * node-llama-cpp installed and pass the required instances.
+ *
+ * @see https://github.com/withcatai/node-llama-cpp
+ */
+export interface NodeLlamaCppProviderAdapterOptions {
+	/**
+	 * Initialized LlamaContext from node-llama-cpp.
+	 * The consumer is responsible for creating and managing this context.
+	 */
+	readonly context: NodeLlamaCppContext
+	/**
+	 * Chat wrapper instance for formatting messages.
+	 * Optional - if not provided, will use messages as-is.
+	 */
+	readonly chatWrapper?: NodeLlamaCppChatWrapper
+	/** Default generation options */
+	readonly defaultOptions?: GenerationDefaults
+	/** Request timeout in ms (default: 120000) */
+	readonly timeout?: number
+	/** Model name for identification (default: 'node-llama-cpp') */
+	readonly modelName?: string
+}
+
+/**
+ * node-llama-cpp embedding adapter options.
+ *
+ * Uses LlamaEmbeddingContext for generating embeddings locally.
+ *
+ * IMPORTANT: node-llama-cpp is a devDependency only. Types are imported
+ * using `import type` to avoid runtime dependencies. Consumers must have
+ * node-llama-cpp installed and pass the required instances.
+ */
+export interface NodeLlamaCppEmbeddingAdapterOptions {
+	/**
+	 * Initialized LlamaEmbeddingContext from node-llama-cpp.
+	 * The consumer is responsible for creating and managing this context.
+	 */
+	readonly embeddingContext: NodeLlamaCppEmbeddingContext
+	/** Model name for identification (default: 'node-llama-cpp-embedding') */
+	readonly modelName?: string
+	/** Embedding dimensions (will be auto-detected if not provided) */
+	readonly dimensions?: number
+}
+
+/**
+ * Minimal interface for node-llama-cpp LlamaContext.
+ * This allows consumers to pass their own context without importing node-llama-cpp at runtime.
+ */
+export interface NodeLlamaCppContext {
+	/** Get a sequence for evaluation */
+	getSequence(): NodeLlamaCppContextSequence
+	/** The model associated with this context */
+	readonly model: NodeLlamaCppModel
+}
+
+/**
+ * Minimal interface for node-llama-cpp LlamaContextSequence.
+ */
+export interface NodeLlamaCppContextSequence {
+	/** Evaluate tokens and generate a response */
+	evaluate(tokens: readonly number[], options?: NodeLlamaCppEvaluateOptions): AsyncGenerator<number, void, unknown>
+}
+
+/**
+ * Minimal interface for node-llama-cpp LlamaModel.
+ */
+export interface NodeLlamaCppModel {
+	/** Tokenize text into tokens */
+	tokenize(text: string, options?: { readonly special?: boolean }): readonly number[]
+	/** Detokenize tokens back to text */
+	detokenize(tokens: readonly number[]): string
+	/** Model tokens (BOS, EOS, etc.) */
+	readonly tokens: {
+		readonly bos?: number
+		readonly eos?: number
+	}
+}
+
+/**
+ * Minimal interface for node-llama-cpp LlamaEmbeddingContext.
+ */
+export interface NodeLlamaCppEmbeddingContext {
+	/** Get embedding for text */
+	getEmbeddingFor(text: string): Promise<NodeLlamaCppEmbedding>
+}
+
+/**
+ * Minimal interface for node-llama-cpp LlamaEmbedding.
+ */
+export interface NodeLlamaCppEmbedding {
+	/** The embedding vector */
+	readonly vector: readonly number[]
+}
+
+/**
+ * Minimal interface for node-llama-cpp ChatWrapper.
+ */
+export interface NodeLlamaCppChatWrapper {
+	/** Generate context state from chat history */
+	generateContextState(options: {
+		readonly chatHistory: readonly NodeLlamaCppChatHistoryItem[]
+		readonly availableFunctions?: Record<string, unknown>
+		readonly documentFunctionParams?: boolean
+	}): {
+		readonly contextText: NodeLlamaCppLlamaText
+		readonly stopGenerationTriggers: readonly (readonly number[])[]
+	}
+}
+
+/**
+ * Minimal interface for node-llama-cpp LlamaText.
+ */
+export interface NodeLlamaCppLlamaText {
+	/** Convert to tokenized form */
+	tokenize(tokenizer: { tokenize(text: string, options?: { special?: boolean }): readonly number[] }): readonly number[]
+}
+
+/**
+ * Minimal interface for node-llama-cpp ChatHistoryItem.
+ */
+export type NodeLlamaCppChatHistoryItem =
+	| { readonly type: 'system'; readonly text: string }
+	| { readonly type: 'user'; readonly text: string }
+	| { readonly type: 'model'; readonly response: readonly string[] }
+
+/**
+ * Minimal interface for node-llama-cpp evaluate options.
+ */
+export interface NodeLlamaCppEvaluateOptions {
+	readonly temperature?: number
+	readonly topP?: number
+	readonly topK?: number
+	readonly maxTokens?: number
+	readonly stopOnBos?: boolean
+	readonly stopOnEos?: boolean
+	readonly signal?: AbortSignal
+}
+
+// ============================================================================
 // Wrapper Adapter Options
 // ============================================================================
 
@@ -661,6 +812,16 @@ export type CreateOllamaProviderAdapter = (
 /** Factory function for Ollama embedding adapter */
 export type CreateOllamaEmbeddingAdapter = (
 	options: OllamaEmbeddingAdapterOptions
+) => EmbeddingAdapterInterface
+
+/** Factory function for node-llama-cpp provider adapter */
+export type CreateNodeLlamaCppProviderAdapter = (
+	options: NodeLlamaCppProviderAdapterOptions
+) => ProviderAdapterInterface
+
+/** Factory function for node-llama-cpp embedding adapter */
+export type CreateNodeLlamaCppEmbeddingAdapter = (
+	options: NodeLlamaCppEmbeddingAdapterOptions
 ) => EmbeddingAdapterInterface
 
 // ============================================================================

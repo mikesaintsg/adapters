@@ -68,6 +68,19 @@ export const OLLAMA_DEFAULT_TIMEOUT = 120000
 export const OLLAMA_DEFAULT_EMBEDDING_DIMENSIONS = 768
 
 // ============================================================================
+// node-llama-cpp Constants (Local Development)
+// ============================================================================
+
+/** Default timeout for node-llama-cpp requests in milliseconds */
+export const NODE_LLAMA_CPP_DEFAULT_TIMEOUT = 120000
+
+/** Default model name for node-llama-cpp provider */
+export const NODE_LLAMA_CPP_DEFAULT_MODEL_NAME = 'node-llama-cpp'
+
+/** Default model name for node-llama-cpp embedding */
+export const NODE_LLAMA_CPP_DEFAULT_EMBEDDING_MODEL_NAME = 'node-llama-cpp-embedding'
+
+// ============================================================================
 // Rate Limiting Constants
 // ============================================================================
 

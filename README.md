@@ -10,8 +10,8 @@
 
 ## Features
 
-- ✅ **Provider Adapters** — OpenAI, Anthropic, and Ollama for LLM chat completions
-- ✅ **Embedding Adapters** — OpenAI, Voyage, and Ollama for text embeddings
+- ✅ **Provider Adapters** — OpenAI, Anthropic, Ollama, and node-llama-cpp for LLM chat completions
+- ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, and node-llama-cpp for text embeddings
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
 - ✅ **Policy Adapters** — Retry and rate limiting strategies
@@ -95,16 +95,18 @@ const embeddings = await embedding.embed(['Hello, world!'])
 | `createOpenAIProviderAdapter`      | OpenAI chat completions            |
 | `createAnthropicProviderAdapter`   | Anthropic Claude models            |
 | `createOllamaProviderAdapter`      | Ollama local LLM server            |
+| `createNodeLlamaCppProviderAdapter`| node-llama-cpp local LLaMA models  |
 
 ### Source Adapters — Embeddings
 
-| Function                        | Description                           |
-|---------------------------------|---------------------------------------|
-| `createOpenAIEmbeddingAdapter`  | OpenAI text embeddings                |
-| `createVoyageEmbeddingAdapter`  | Voyage AI embeddings (Anthropic rec.) |
-| `createOllamaEmbeddingAdapter`  | Ollama local embeddings               |
-| `createBatchedEmbeddingAdapter` | Automatic request batching            |
-| `createCachedEmbeddingAdapter`  | In-memory embedding cache             |
+| Function                             | Description                           |
+|--------------------------------------|---------------------------------------|
+| `createOpenAIEmbeddingAdapter`       | OpenAI text embeddings                |
+| `createVoyageEmbeddingAdapter`       | Voyage AI embeddings (Anthropic rec.) |
+| `createOllamaEmbeddingAdapter`       | Ollama local embeddings               |
+| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp local embeddings       |
+| `createBatchedEmbeddingAdapter`      | Automatic request batching            |
+| `createCachedEmbeddingAdapter`       | In-memory embedding cache             |
 
 ### Policy Adapters
 
@@ -184,6 +186,53 @@ const provider = createOpenAIProviderAdapter({
 const engine = createEngine(provider)
 const session = engine.createSession({ system: 'You are helpful.' })
 ```
+
+### node-llama-cpp Provider (Local LLaMA)
+
+```ts
+import { getLlama } from 'node-llama-cpp'
+import { createNodeLlamaCppProviderAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+// Consumer initializes node-llama-cpp
+const llama = await getLlama()
+const model = await llama.loadModel({ modelPath: './llama-3-8b.gguf' })
+const context = await model.createContext()
+
+// Pass to adapter - no node-llama-cpp runtime dependency in @mikesaintsg/adapters
+const provider = createNodeLlamaCppProviderAdapter({
+  context,
+  modelName: 'llama3',
+  defaultOptions: {
+    temperature: 0.7,
+    maxTokens: 4096,
+  },
+})
+
+const engine = createEngine(provider)
+```
+
+### node-llama-cpp Embedding (Local)
+
+```ts
+import { getLlama } from 'node-llama-cpp'
+import { createNodeLlamaCppEmbeddingAdapter } from '@mikesaintsg/adapters'
+
+// Consumer initializes node-llama-cpp
+const llama = await getLlama()
+const model = await llama.loadModel({ modelPath: './nomic-embed-text.gguf' })
+const embeddingContext = await model.createEmbeddingContext()
+
+// Pass to adapter
+const embedding = createNodeLlamaCppEmbeddingAdapter({
+  embeddingContext,
+  modelName: 'nomic-embed-text',
+})
+
+const embeddings = await embedding.embed(['Hello, world!'])
+```
+
+**Note:** node-llama-cpp is **not** a runtime dependency of @mikesaintsg/adapters. Consumers must install node-llama-cpp themselves and pass initialized context objects. This allows consumers who don't use node-llama-cpp to avoid installing it.
 
 ### Policy Adapters (Retry & Rate Limiting)
 

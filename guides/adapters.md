@@ -31,7 +31,7 @@
 
 `@mikesaintsg/adapters` provides:
 
-- **Provider integrations** — OpenAI, Anthropic, Ollama for LLM and embedding generation
+- **Provider integrations** — OpenAI, Anthropic, Ollama, node-llama-cpp for LLM and embedding generation
 - **Policy adapters** — Retry and rate limiting strategies
 - **Enhancement adapters** — Caching, batching, and reranking
 - **Transform adapters** — Tool format conversion and similarity scoring
@@ -124,6 +124,7 @@ Adapters are **self-contained implementations** of interfaces defined in `@mikes
 │   │ OpenAI        │ Retry       │ Cache       │ ToolFmt   │ IndexedDB│ │
 │   │ Anthropic     │ RateLimit   │ Batch       │ Similarity│ OPFS     │ │
 │   │ Ollama        │             │ Reranker    │           │ HTTP     │ │
+│   │ node-llama-cpp│             │             │           │          │ │
 │   └───────────────────────────────────────────────────────────────────┘ │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                     External APIs / Local Services                       │
@@ -182,19 +183,21 @@ Source adapters generate or retrieve data from external services.
 
 ### Provider Adapters
 
-| Adapter                          | Provider  | Notes                     |
-|----------------------------------|-----------|---------------------------|
-| `createOpenAIProviderAdapter`    | OpenAI    | Chat completions, tools   |
-| `createAnthropicProviderAdapter` | Anthropic | Messages API, tools       |
-| `createOllamaProviderAdapter`    | Ollama    | Local development/testing |
+| Adapter                              | Provider       | Notes                     |
+|--------------------------------------|----------------|---------------------------|
+| `createOpenAIProviderAdapter`        | OpenAI         | Chat completions, tools   |
+| `createAnthropicProviderAdapter`     | Anthropic      | Messages API, tools       |
+| `createOllamaProviderAdapter`        | Ollama         | Local development/testing |
+| `createNodeLlamaCppProviderAdapter`  | node-llama-cpp | Local LLaMA models        |
 
 ### Embedding Adapters
 
-| Adapter                        | Provider | Notes                     |
-|--------------------------------|----------|---------------------------|
-| `createOpenAIEmbeddingAdapter` | OpenAI   | text-embedding-3-*        |
-| `createVoyageEmbeddingAdapter` | Voyage   | Anthropic partner         |
-| `createOllamaEmbeddingAdapter` | Ollama   | Local development/testing |
+| Adapter                              | Provider       | Notes                     |
+|--------------------------------------|----------------|---------------------------|
+| `createOpenAIEmbeddingAdapter`       | OpenAI         | text-embedding-3-*        |
+| `createVoyageEmbeddingAdapter`       | Voyage         | Anthropic partner         |
+| `createOllamaEmbeddingAdapter`       | Ollama         | Local development/testing |
+| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp | Local GGUF models         |
 
 ### OpenAI Provider
 
@@ -299,6 +302,58 @@ const embeddings = await embedding.embed(['Hello, world!'])
 - `nomic-embed-text` — General purpose, 768 dimensions
 - `mxbai-embed-large` — High quality, 1024 dimensions
 - `all-minilm` — Lightweight, 384 dimensions
+
+### node-llama-cpp Provider (Local Development)
+
+node-llama-cpp allows running LLaMA models locally using llama.cpp bindings. Unlike other adapters, **node-llama-cpp is NOT a runtime dependency**. Consumers must install it themselves and pass initialized context objects:
+
+```ts
+import { getLlama } from 'node-llama-cpp'
+import { createNodeLlamaCppProviderAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+// Consumer initializes node-llama-cpp
+const llama = await getLlama()
+const model = await llama.loadModel({ modelPath: './llama-3-8b.gguf' })
+const context = await model.createContext()
+
+// Pass to adapter
+const provider = createNodeLlamaCppProviderAdapter({
+	context,
+	modelName: 'llama3',
+	defaultOptions: {
+		temperature: 0.7,
+		maxTokens: 4096,
+	},
+})
+
+const engine = createEngine(provider)
+```
+
+**Key benefits:**
+- **No runtime dependency** — Consumers who don't use node-llama-cpp avoid installing it
+- **Full control** — Consumer manages model loading and context lifecycle
+- **GGUF support** — Use any GGUF-format model
+
+### node-llama-cpp Embedding (Local Development)
+
+```ts
+import { getLlama } from 'node-llama-cpp'
+import { createNodeLlamaCppEmbeddingAdapter } from '@mikesaintsg/adapters'
+
+// Consumer initializes node-llama-cpp
+const llama = await getLlama()
+const model = await llama.loadModel({ modelPath: './nomic-embed-text.gguf' })
+const embeddingContext = await model.createEmbeddingContext()
+
+// Pass to adapter
+const embedding = createNodeLlamaCppEmbeddingAdapter({
+	embeddingContext,
+	modelName: 'nomic-embed-text',
+})
+
+const embeddings = await embedding.embed(['Hello, world!'])
+```
 
 ---
 
@@ -741,6 +796,8 @@ import type {
 	OpenAIProviderAdapterOptions,
 	AnthropicProviderAdapterOptions,
 	OllamaProviderAdapterOptions,
+	NodeLlamaCppProviderAdapterOptions,
+	NodeLlamaCppEmbeddingAdapterOptions,
 	OpenAIEmbeddingAdapterOptions,
 	VoyageEmbeddingAdapterOptions,
 	ExponentialRetryAdapterOptions,
@@ -847,14 +904,16 @@ if (result.toolCalls.length > 0) {
 
 #### Source Adapters
 
-| Factory                            | Returns                     |
-|------------------------------------|-----------------------------|
-| `createOpenAIProviderAdapter`      | `ProviderAdapterInterface`  |
-| `createAnthropicProviderAdapter`   | `ProviderAdapterInterface`  |
-| `createOllamaProviderAdapter`      | `ProviderAdapterInterface`  |
-| `createOpenAIEmbeddingAdapter`     | `EmbeddingAdapterInterface` |
-| `createVoyageEmbeddingAdapter`     | `EmbeddingAdapterInterface` |
-| `createOllamaEmbeddingAdapter`     | `EmbeddingAdapterInterface` |
+| Factory                              | Returns                     |
+|--------------------------------------|-----------------------------|
+| `createOpenAIProviderAdapter`        | `ProviderAdapterInterface`  |
+| `createAnthropicProviderAdapter`     | `ProviderAdapterInterface`  |
+| `createOllamaProviderAdapter`        | `ProviderAdapterInterface`  |
+| `createNodeLlamaCppProviderAdapter`  | `ProviderAdapterInterface`  |
+| `createOpenAIEmbeddingAdapter`       | `EmbeddingAdapterInterface` |
+| `createVoyageEmbeddingAdapter`       | `EmbeddingAdapterInterface` |
+| `createOllamaEmbeddingAdapter`       | `EmbeddingAdapterInterface` |
+| `createNodeLlamaCppEmbeddingAdapter` | `EmbeddingAdapterInterface` |
 
 #### Policy Adapters
 
