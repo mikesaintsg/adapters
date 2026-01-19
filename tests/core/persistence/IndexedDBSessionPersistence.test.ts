@@ -5,7 +5,7 @@
  * Vitest with Playwright provides a real browser context.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { createIndexedDBSessionPersistenceAdapter } from '@mikesaintsg/adapters'
 import type { SerializableSession, SerializedSessionMetadata, SerializedMessage } from '@mikesaintsg/core'
 
@@ -21,20 +21,15 @@ function createMockSession(data: object): SerializableSession {
 	}
 }
 
+// Helper to generate unique database name per test
+function uniqueDbName(): string {
+	return `test-sessions-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
 describe('IndexedDBSessionPersistence', () => {
-	const testDbName = `test-sessions-${Date.now()}`
-
-	afterEach(() => {
-		// Clean up test database
-		try {
-			indexedDB.deleteDatabase(testDbName)
-		} catch {
-			// Ignore cleanup errors
-		}
-	})
-
 	describe('save and load', () => {
 		it('saves and loads session data', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 			})
@@ -47,9 +42,13 @@ describe('IndexedDBSessionPersistence', () => {
 
 			expect(loaded).toBeDefined()
 			expect(loaded?.metadata).toBeDefined()
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 
 		it('returns undefined for non-existent session', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 			})
@@ -57,9 +56,13 @@ describe('IndexedDBSessionPersistence', () => {
 			const loaded = await persistence.load('non-existent')
 
 			expect(loaded).toBeUndefined()
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 
 		it('overwrites existing session', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 			})
@@ -72,11 +75,15 @@ describe('IndexedDBSessionPersistence', () => {
 			const loaded = await persistence.load(sessionId)
 
 			expect(loaded?.metadata).toEqual({ version: 2 })
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 	})
 
 	describe('delete', () => {
 		it('deletes a session', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 			})
@@ -88,11 +95,15 @@ describe('IndexedDBSessionPersistence', () => {
 			const loaded = await persistence.load(sessionId)
 
 			expect(loaded).toBeUndefined()
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 	})
 
 	describe('list', () => {
 		it('lists all session IDs', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 			})
@@ -106,9 +117,13 @@ describe('IndexedDBSessionPersistence', () => {
 			expect(sessions).toContain('session-1')
 			expect(sessions).toContain('session-2')
 			expect(sessions).toContain('session-3')
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 
 		it('returns empty array when no sessions', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 			})
@@ -116,11 +131,15 @@ describe('IndexedDBSessionPersistence', () => {
 			const sessions = await persistence.list()
 
 			expect(sessions).toEqual([])
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 	})
 
 	describe('prune', () => {
 		it('removes old sessions', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 			})
@@ -136,11 +155,15 @@ describe('IndexedDBSessionPersistence', () => {
 
 			const sessions = await persistence.list()
 			expect(sessions).toEqual([])
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 	})
 
 	describe('TTL', () => {
 		it('expires sessions after TTL', async() => {
+			const testDbName = uniqueDbName()
 			const persistence = createIndexedDBSessionPersistenceAdapter({
 				databaseName: testDbName,
 				ttlMs: 1, // 1ms TTL
@@ -155,6 +178,9 @@ describe('IndexedDBSessionPersistence', () => {
 			const loaded = await persistence.load(sessionId)
 
 			expect(loaded).toBeUndefined()
+
+			// Cleanup
+			indexedDB.deleteDatabase(testDbName)
 		})
 	})
 })

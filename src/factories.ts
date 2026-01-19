@@ -4,25 +4,6 @@
  * Factory functions for creating adapter instances.
  */
 
-import type {
-	// Bridge interfaces
-	ToolCallBridgeInterface,
-	ToolCallBridgeOptions,
-	RetrievalToolInterface,
-	RetrievalToolOptions,
-	// Context builder adapter interfaces
-	DeduplicationAdapterInterface,
-	TruncationAdapterInterface,
-	PriorityAdapterInterface,
-} from '@mikesaintsg/core'
-
-import type {
-	// Context builder options
-	DeduplicationAdapterOptions,
-	TruncationAdapterOptions,
-	PriorityAdapterOptions,
-} from './types.js'
-
 // ============================================================================
 // Streamer Adapter Factory
 // ============================================================================
@@ -99,78 +80,18 @@ export { createIndexedDBSessionPersistenceAdapter } from './core/persistence/Ind
 // Bridge Factories
 // ============================================================================
 
-/**
- * Create a tool call bridge for connecting inference to contextprotocol.
- */
-export function createToolCallBridge(
-	_options: ToolCallBridgeOptions,
-): ToolCallBridgeInterface {
-	throw new Error('Not implemented: createToolCallBridge')
-}
-
-/**
- * Create a retrieval tool for vector store queries.
- */
-export function createRetrievalTool(
-	_options: RetrievalToolOptions,
-): RetrievalToolInterface {
-	throw new Error('Not implemented: createRetrievalTool')
-}
+// Re-export Phase 6 factories from their implementation files
+export { createToolCallBridge } from './core/bridge/ToolCallBridge.js'
+export { createRetrievalTool } from './core/bridge/RetrievalTool.js'
 
 // ============================================================================
 // Context Builder Adapter Factories
 // ============================================================================
 
-/**
- * Create a deduplication adapter for context building.
- */
-export function createDeduplicationAdapter(
-	_options?: DeduplicationAdapterOptions,
-): DeduplicationAdapterInterface {
-	throw new Error('Not implemented: createDeduplicationAdapter')
-}
-
-/**
- * Create a priority-based truncation adapter.
- */
-export function createPriorityTruncationAdapter(
-	_options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	throw new Error('Not implemented: createPriorityTruncationAdapter')
-}
-
-/**
- * Create a FIFO truncation adapter (oldest first).
- */
-export function createFIFOTruncationAdapter(
-	_options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	throw new Error('Not implemented: createFIFOTruncationAdapter')
-}
-
-/**
- * Create a LIFO truncation adapter (newest first).
- */
-export function createLIFOTruncationAdapter(
-	_options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	throw new Error('Not implemented: createLIFOTruncationAdapter')
-}
-
-/**
- * Create a score-based truncation adapter.
- */
-export function createScoreTruncationAdapter(
-	_options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	throw new Error('Not implemented: createScoreTruncationAdapter')
-}
-
-/**
- * Create a priority adapter for context building.
- */
-export function createPriorityAdapter(
-	_options?: PriorityAdapterOptions,
-): PriorityAdapterInterface {
-	throw new Error('Not implemented: createPriorityAdapter')
-}
+// Re-export from implementation files
+export { createDeduplicationAdapter } from './core/contextbuilder/Deduplication.js'
+export { createPriorityTruncationAdapter } from './core/contextbuilder/PriorityTruncation.js'
+export { createFIFOTruncationAdapter } from './core/contextbuilder/FIFOTruncation.js'
+export { createLIFOTruncationAdapter } from './core/contextbuilder/LIFOTruncation.js'
+export { createScoreTruncationAdapter } from './core/contextbuilder/ScoreTruncation.js'
+export { createPriorityAdapter } from './core/contextbuilder/Priority.js'
