@@ -35,7 +35,6 @@ import type {
 
 import type {
 	// Provider options
-	OpenAIProviderAdapterOptions,
 	AnthropicProviderAdapterOptions,
 	OllamaProviderAdapterOptions,
 	NodeLlamaCppProviderAdapterOptions,
@@ -83,15 +82,8 @@ export { createStreamerAdapter } from './core/streaming/Streamer.js'
 // Provider Adapter Factories
 // ============================================================================
 
-/**
- * Create an OpenAI provider adapter.
- * Streaming is native — no configuration needed.
- */
-export function createOpenAIProviderAdapter(
-	_options: OpenAIProviderAdapterOptions,
-): ProviderAdapterInterface {
-	throw new Error('Not implemented: createOpenAIProviderAdapter')
-}
+// Re-export from implementation
+export { createOpenAIProviderAdapter } from './core/providers/OpenAIProvider.js'
 
 /**
  * Create an Anthropic provider adapter.

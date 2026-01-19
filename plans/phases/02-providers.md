@@ -1,9 +1,9 @@
 # Phase 2: Provider Adapters
 
-> **Status:** ⏳ Pending
-> **Started:** —
+> **Status:** 🔄 In Progress
+> **Started:** 2026-01-19
 > **Target:** —
-> **Depends on:** Phase 1 (Streaming & SSE) ⏳ Pending
+> **Depends on:** Phase 1 (Streaming & SSE) ✅ Complete
 
 ---
 
@@ -12,11 +12,11 @@
 > **Purpose:** Quick orientation for models starting mid-project. 
 
 ```
-Current Deliverable: 2.1 OpenAI Provider
-Checklist Progress: 0/40 items complete
-Last Completed:  Phase 1 complete
-Next Task: Implement OpenAI provider adapter
-Blockers:  None
+Current Deliverable: 2.2 Anthropic Provider
+Checklist Progress: 29/40 items complete
+Last Completed: 2.1 OpenAI Provider with 11 tests
+Next Task: Implement Anthropic provider adapter
+Blockers: None
 ```
 
 ---
@@ -31,10 +31,10 @@ Implement all 5 provider adapters with native streaming.  By end of phase, all p
 
 | Metric          | Value     |
 |-----------------|-----------|
-| Deliverables    | 0/6       |
-| Checklist Items | 0/40      |
-| Tests Passing   | —         |
-| Quality Gates   | ⏳ Pending |
+| Deliverables    | 1/6       |
+| Checklist Items | 29/40     |
+| Tests Passing   | 34/34     |
+| Quality Gates   | ✅ Pass    |
 
 ---
 
@@ -42,12 +42,12 @@ Implement all 5 provider adapters with native streaming.  By end of phase, all p
 
 | #   | Deliverable              | Status    | Assignee | Notes                           |
 |-----|--------------------------|-----------|----------|---------------------------------|
-| 2.1 | OpenAI Provider          | ⏳ Pending | —        | SSE streaming, tools support    |
+| 2.1 | OpenAI Provider          | ✅ Done    | —        | SSE streaming, tools support    |
 | 2.2 | Anthropic Provider       | ⏳ Pending | —        | SSE streaming, tools support    |
 | 2.3 | Ollama Provider          | ⏳ Pending | —        | NDJSON streaming, tools support |
 | 2.4 | node-llama-cpp Provider  | ⏳ Pending | —        | Token-by-token streaming        |
 | 2.5 | HuggingFace Provider     | ⏳ Pending | —        | TextStreamer internal           |
-| 2.6 | Unit Tests               | ⏳ Pending | —        | Mock fetch, token emission      |
+| 2.6 | Unit Tests               | 🔄 Active  | —        | OpenAI tests complete           |
 
 **Status Legend:**
 - ✅ Done
@@ -144,41 +144,41 @@ interface ProviderAdapterInterface {
 ### Implementation Checklist
 
 **Implementation:**
-- [ ] Create `src/core/providers/OpenAIProvider.ts`
-- [ ] Implement constructor with options validation
-- [ ] Implement `getId()` — return UUID
-- [ ] Implement `generate()`:
-  - [ ] Build request body with messages, model, stream:  true
-  - [ ] Create fetch request with proper headers
-  - [ ] Create and return StreamHandle
-  - [ ] Parse SSE stream using internal parser
-  - [ ] Emit tokens via streamer
-  - [ ] Handle tool calls in response
-  - [ ] Handle `data:  [DONE]`
-  - [ ] Map errors to AdapterErrorCode
-- [ ] Implement `supportsTools()` — return true
-- [ ] Implement `getCapabilities()`
+- [x] Create `src/core/providers/OpenAIProvider.ts`
+- [x] Implement constructor with options validation
+- [x] Implement `getId()` — return UUID
+- [x] Implement `generate()`:
+  - [x] Build request body with messages, model, stream: true
+  - [x] Create fetch request with proper headers
+  - [x] Create and return StreamHandle
+  - [x] Parse SSE stream using internal parser
+  - [x] Emit tokens via streamer
+  - [x] Handle tool calls in response
+  - [x] Handle `data: [DONE]`
+  - [x] Map errors to AdapterErrorCode
+- [x] Implement `supportsTools()` — return true
+- [x] Implement `getCapabilities()`
 
 **Error Mapping:**
-- [ ] 401 → AUTHENTICATION_ERROR
-- [ ] 429 → RATE_LIMIT_ERROR (extract retry-after)
-- [ ] 400 → INVALID_REQUEST_ERROR
-- [ ] 404 → MODEL_NOT_FOUND_ERROR
-- [ ] 413 → CONTEXT_LENGTH_ERROR
-- [ ] 500+ → SERVICE_ERROR
-- [ ] Network errors → NETWORK_ERROR
-- [ ] Timeout → TIMEOUT_ERROR
+- [x] 401 → AUTHENTICATION_ERROR
+- [x] 429 → RATE_LIMIT_ERROR (extract retry-after)
+- [x] 400 → INVALID_REQUEST_ERROR
+- [x] 404 → MODEL_NOT_FOUND_ERROR
+- [x] 413 → CONTEXT_LENGTH_ERROR
+- [x] 500+ → SERVICE_ERROR
+- [x] Network errors → NETWORK_ERROR
+- [x] Timeout → TIMEOUT_ERROR
 
 **Exports:**
-- [ ] Add `createOpenAIProviderAdapter` to factories. ts
-- [ ] Update index.ts exports
+- [x] Add `createOpenAIProviderAdapter` to factories.ts
+- [x] Update index.ts exports
 
 **Tests:**
-- [ ] Test streaming token emission
-- [ ] Test tool call parsing
-- [ ] Test error mapping
-- [ ] Test custom streamer option
-- [ ] Test abort handling
+- [x] Test streaming token emission
+- [x] Test tool call parsing
+- [x] Test error mapping
+- [x] Test custom streamer option
+- [x] Test abort handling
 
 ### Acceptance Criteria
 
