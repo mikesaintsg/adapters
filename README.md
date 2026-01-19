@@ -90,12 +90,13 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Source Adapters — Providers
 
-| Function                           | Description                        |
-|------------------------------------|------------------------------------|
-| `createOpenAIProviderAdapter`      | OpenAI chat completions            |
-| `createAnthropicProviderAdapter`   | Anthropic Claude models            |
-| `createOllamaProviderAdapter`      | Ollama local LLM server            |
-| `createNodeLlamaCppProviderAdapter`| node-llama-cpp local LLaMA models  |
+| Function                            | Description                        |
+|-------------------------------------|------------------------------------|
+| `createOpenAIProviderAdapter`       | OpenAI chat completions            |
+| `createAnthropicProviderAdapter`    | Anthropic Claude models            |
+| `createOllamaProviderAdapter`       | Ollama local LLM server            |
+| `createNodeLlamaCppProviderAdapter` | node-llama-cpp local LLaMA models  |
+| `createHuggingFaceProviderAdapter`  | HuggingFace Transformers local LLM |
 
 ### Source Adapters — Embeddings
 
@@ -257,6 +258,30 @@ const embeddings = await embedding.embed(['Hello, world!'])
 ```
 
 **Note:** @huggingface/transformers is **not** a runtime dependency of @mikesaintsg/adapters. Consumers must install @huggingface/transformers themselves and pass an initialized pipeline. This allows consumers who don't use HuggingFace to avoid installing it.
+
+### HuggingFace Transformers Provider (Browser/Node.js)
+
+```ts
+import { pipeline } from '@huggingface/transformers'
+import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+// Consumer initializes the pipeline (downloads model on first use)
+const generator = await pipeline('text-generation', 'Xenova/gpt2')
+
+// Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+const provider = createHuggingFaceProviderAdapter({
+  pipeline: generator,
+  modelName: 'gpt2',
+  defaultOptions: {
+    maxTokens: 100,
+    temperature: 0.7,
+  },
+})
+
+const engine = createEngine(provider)
+const session = engine.createSession({ system: 'You are helpful.' })
+```
 
 ### Policy Adapters (Retry & Rate Limiting)
 

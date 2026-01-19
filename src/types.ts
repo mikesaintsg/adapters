@@ -529,6 +529,111 @@ export type HuggingFaceEmbeddingModel =
 	| 'sentence-transformers/all-MiniLM-L6-v2'
 	| (string & {})
 
+/**
+ * HuggingFace Transformers provider adapter options.
+ *
+ * Uses @huggingface/transformers TextGenerationPipeline for generating
+ * text completions locally in the browser or Node.js.
+ *
+ * IMPORTANT: @huggingface/transformers is a devDependency only. Types are imported
+ * using `import type` to avoid runtime dependencies. Consumers must have
+ * @huggingface/transformers installed and pass the required pipeline instance.
+ *
+ * @see https://huggingface.co/docs/transformers.js
+ *
+ * @example
+ * ```ts
+ * import { pipeline } from '@huggingface/transformers'
+ * import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+ *
+ * // Consumer initializes the pipeline
+ * const generator = await pipeline('text-generation', 'Xenova/gpt2')
+ *
+ * // Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+ * const provider = createHuggingFaceProviderAdapter({
+ *   pipeline: generator,
+ *   modelName: 'gpt2',
+ * })
+ *
+ * const handle = provider.generate([
+ *   { id: '1', role: 'user', content: 'Hello!', createdAt: Date.now() }
+ * ], {})
+ *
+ * for await (const chunk of handle) {
+ *   console.log(chunk)
+ * }
+ * ```
+ */
+export interface HuggingFaceProviderAdapterOptions {
+	/**
+	 * Initialized TextGenerationPipeline from @huggingface/transformers.
+	 * The consumer is responsible for creating and managing this pipeline.
+	 *
+	 * Create with: `await pipeline('text-generation', modelName)`
+	 */
+	readonly pipeline: HuggingFaceTextGenerationPipeline
+	/** Model name for identification (required for metadata) */
+	readonly modelName: string
+	/** Default generation options */
+	readonly defaultOptions?: GenerationDefaults
+}
+
+/**
+ * Minimal interface for HuggingFace TextGenerationPipeline.
+ * This allows consumers to pass their own pipeline without importing
+ * @huggingface/transformers at runtime.
+ */
+export interface HuggingFaceTextGenerationPipeline {
+	/**
+	 * Generate text from input prompt(s).
+	 * @param texts - One or more prompts to complete
+	 * @param options - Generation options
+	 * @returns Generated text output(s)
+	 */
+	(
+		texts: string | readonly string[],
+		options?: HuggingFaceTextGenerationOptions,
+	): Promise<HuggingFaceTextGenerationOutput | readonly HuggingFaceTextGenerationOutput[]>
+	/**
+	 * Dispose of the pipeline resources.
+	 */
+	dispose?(): Promise<void>
+}
+
+/** Options for HuggingFace text generation */
+export interface HuggingFaceTextGenerationOptions {
+	/** The maximum numbers of tokens to generate */
+	readonly max_new_tokens?: number
+	/** Temperature for sampling */
+	readonly temperature?: number
+	/** Top-p (nucleus) sampling */
+	readonly top_p?: number
+	/** Top-k sampling */
+	readonly top_k?: number
+	/** Whether to use sampling; use greedy decoding otherwise */
+	readonly do_sample?: boolean
+	/** Repetition penalty */
+	readonly repetition_penalty?: number
+	/** If false, only the new generated text is returned */
+	readonly return_full_text?: boolean
+}
+
+/** Output from HuggingFace text generation */
+export interface HuggingFaceTextGenerationOutput {
+	/** The generated text */
+	readonly generated_text: string
+}
+
+/** Common HuggingFace text generation models */
+export type HuggingFaceTextGenerationModel =
+	| 'Xenova/gpt2'
+	| 'Xenova/distilgpt2'
+	| 'Xenova/phi-1_5'
+	| 'Xenova/TinyLlama-1.1B-Chat-v1.0'
+	| 'Xenova/Qwen1.5-0.5B-Chat'
+	| 'Xenova/LaMini-Flan-T5-783M'
+	| (string & {})
+
 // ============================================================================
 // Wrapper Adapter Options
 // ============================================================================
@@ -959,6 +1064,11 @@ export type CreateNodeLlamaCppEmbeddingAdapter = (
 export type CreateHuggingFaceEmbeddingAdapter = (
 	options: HuggingFaceEmbeddingAdapterOptions
 ) => EmbeddingAdapterInterface
+
+/** Factory function for HuggingFace provider adapter */
+export type CreateHuggingFaceProviderAdapter = (
+	options: HuggingFaceProviderAdapterOptions
+) => ProviderAdapterInterface
 
 // ============================================================================
 // Policy Adapter Factory Types

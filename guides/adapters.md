@@ -355,6 +355,47 @@ const embedding = createNodeLlamaCppEmbeddingAdapter({
 const embeddings = await embedding.embed(['Hello, world!'])
 ```
 
+### HuggingFace Transformers Provider (Browser/Node.js)
+
+Uses `@huggingface/transformers` to run text generation models locally in the browser or Node.js without API calls.
+
+**Note:** `@huggingface/transformers` is **not** a runtime dependency of `@mikesaintsg/adapters`. Consumers must install `@huggingface/transformers` themselves and pass an initialized pipeline. This allows consumers who don't use HuggingFace to avoid installing it.
+
+```ts
+import { pipeline } from '@huggingface/transformers'
+import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+// Consumer initializes the pipeline (downloads model on first use)
+const generator = await pipeline('text-generation', 'Xenova/gpt2')
+
+// Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+const provider = createHuggingFaceProviderAdapter({
+	pipeline: generator,
+	modelName: 'gpt2',
+	defaultOptions: {
+		maxTokens: 100,
+		temperature: 0.7,
+	},
+})
+
+const engine = createEngine(provider)
+const session = engine.createSession({ system: 'You are helpful.' })
+```
+
+**Key benefits:**
+- **No runtime dependency** — Consumers who don't use HuggingFace avoid installing it
+- **Browser support** — Run models directly in the browser using WebAssembly
+- **No API calls** — Models run locally, no internet required after download
+- **Wide model support** — Use any compatible HuggingFace model
+
+**Supported Models:**
+- `Xenova/gpt2` — GPT-2 small
+- `Xenova/distilgpt2` — DistilGPT-2
+- `Xenova/phi-1_5` — Microsoft Phi 1.5
+- `Xenova/TinyLlama-1.1B-Chat-v1.0` — TinyLlama 1.1B
+- And many more from the [HuggingFace Hub](https://huggingface.co/models?library=transformers.js&pipeline_tag=text-generation&sort=trending)
+
 ### HuggingFace Transformers Embedding (Browser/Node.js)
 
 Uses `@huggingface/transformers` to run embedding models locally in the browser or Node.js without API calls.
