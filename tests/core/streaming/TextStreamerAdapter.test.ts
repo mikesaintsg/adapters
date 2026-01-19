@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
 	createTextStreamerAdapter,
 	TextStreamerAdapter,
@@ -181,6 +181,3 @@ describe('TextStreamerAdapter', () => {
 		})
 	})
 })
-
-// Add beforeEach to module scope for inherited behavior tests
-import { beforeEach } from 'vitest'
