@@ -2,16 +2,9 @@
  * @mikesaintsg/adapters
  *
  * Factory functions for creating adapter instances.
- * All factories throw "Not implemented" until implementations are added.
  */
 
 import type {
-	// Transform adapter interfaces
-	ToolFormatAdapterInterface,
-	SimilarityAdapterInterface,
-	// Persistence adapter interfaces
-	VectorStorePersistenceAdapterInterface,
-	SessionPersistenceInterface,
 	// Bridge interfaces
 	ToolCallBridgeInterface,
 	ToolCallBridgeOptions,
@@ -24,14 +17,6 @@ import type {
 } from '@mikesaintsg/core'
 
 import type {
-	// Transform options
-	OpenAIToolFormatAdapterOptions,
-	AnthropicToolFormatAdapterOptions,
-	// Persistence options
-	IndexedDBVectorPersistenceOptions,
-	OPFSVectorPersistenceOptions,
-	HTTPVectorPersistenceOptions,
-	IndexedDBSessionPersistenceOptions,
 	// Context builder options
 	DeduplicationAdapterOptions,
 	TruncationAdapterOptions,
@@ -93,84 +78,22 @@ export { createCrossEncoderRerankerAdapter } from './core/enhancement/CrossEncod
 // Transform Adapter Factories
 // ============================================================================
 
-/**
- * Create an OpenAI tool format adapter.
- */
-export function createOpenAIToolFormatAdapter(
-	_options?: OpenAIToolFormatAdapterOptions,
-): ToolFormatAdapterInterface {
-	throw new Error('Not implemented: createOpenAIToolFormatAdapter')
-}
-
-/**
- * Create an Anthropic tool format adapter.
- */
-export function createAnthropicToolFormatAdapter(
-	_options?: AnthropicToolFormatAdapterOptions,
-): ToolFormatAdapterInterface {
-	throw new Error('Not implemented: createAnthropicToolFormatAdapter')
-}
-
-/**
- * Create a cosine similarity adapter.
- */
-export function createCosineSimilarityAdapter(): SimilarityAdapterInterface {
-	throw new Error('Not implemented: createCosineSimilarityAdapter')
-}
-
-/**
- * Create a dot product similarity adapter.
- */
-export function createDotSimilarityAdapter(): SimilarityAdapterInterface {
-	throw new Error('Not implemented: createDotSimilarityAdapter')
-}
-
-/**
- * Create a euclidean similarity adapter.
- */
-export function createEuclideanSimilarityAdapter(): SimilarityAdapterInterface {
-	throw new Error('Not implemented: createEuclideanSimilarityAdapter')
-}
+// Re-export from implementations
+export { createOpenAIToolFormatAdapter } from './core/transform/OpenAIToolFormat.js'
+export { createAnthropicToolFormatAdapter } from './core/transform/AnthropicToolFormat.js'
+export { createCosineSimilarityAdapter } from './core/transform/CosineSimilarity.js'
+export { createDotSimilarityAdapter } from './core/transform/DotSimilarity.js'
+export { createEuclideanSimilarityAdapter } from './core/transform/EuclideanSimilarity.js'
 
 // ============================================================================
 // Persistence Adapter Factories
 // ============================================================================
 
-/**
- * Create an IndexedDB vector persistence adapter.
- */
-export function createIndexedDBVectorPersistenceAdapter(
-	_options: IndexedDBVectorPersistenceOptions,
-): VectorStorePersistenceAdapterInterface {
-	throw new Error('Not implemented: createIndexedDBVectorPersistenceAdapter')
-}
-
-/**
- * Create an OPFS vector persistence adapter.
- */
-export function createOPFSVectorPersistenceAdapter(
-	_options: OPFSVectorPersistenceOptions,
-): VectorStorePersistenceAdapterInterface {
-	throw new Error('Not implemented: createOPFSVectorPersistenceAdapter')
-}
-
-/**
- * Create an HTTP vector persistence adapter.
- */
-export function createHTTPVectorPersistenceAdapter(
-	_options: HTTPVectorPersistenceOptions,
-): VectorStorePersistenceAdapterInterface {
-	throw new Error('Not implemented: createHTTPVectorPersistenceAdapter')
-}
-
-/**
- * Create an IndexedDB session persistence adapter.
- */
-export function createIndexedDBSessionPersistenceAdapter(
-	_options?: IndexedDBSessionPersistenceOptions,
-): SessionPersistenceInterface {
-	throw new Error('Not implemented: createIndexedDBSessionPersistenceAdapter')
-}
+// Re-export from implementations
+export { createIndexedDBVectorPersistenceAdapter } from './core/persistence/IndexedDBVectorPersistence.js'
+export { createOPFSVectorPersistenceAdapter } from './core/persistence/OPFSVectorPersistence.js'
+export { createHTTPVectorPersistenceAdapter } from './core/persistence/HTTPVectorPersistence.js'
+export { createIndexedDBSessionPersistenceAdapter } from './core/persistence/IndexedDBSessionPersistence.js'
 
 // ============================================================================
 // Bridge Factories
