@@ -34,8 +34,6 @@ import type {
 } from '@mikesaintsg/core'
 
 import type {
-	// Streamer interface (defined locally)
-	StreamerAdapterInterface,
 	// Provider options
 	OpenAIProviderAdapterOptions,
 	AnthropicProviderAdapterOptions,
@@ -78,12 +76,8 @@ import type {
 // Streamer Adapter Factory
 // ============================================================================
 
-/**
- * Create a default streamer adapter for token emission.
- */
-export function createStreamerAdapter(): StreamerAdapterInterface {
-	throw new Error('Not implemented: createStreamerAdapter')
-}
+// Re-export from implementation
+export { createStreamerAdapter } from './core/streaming/Streamer.js'
 
 // ============================================================================
 // Provider Adapter Factories

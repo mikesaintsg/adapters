@@ -1,8 +1,8 @@
 # Project Plan: @mikesaintsg/adapters Refactor
 
-> **Status:** Phase 1 of 6 — Streaming Infrastructure
+> **Status:** Phase 2 of 6 — Provider Adapters
 > **Last Updated:** 2026-01-19
-> **Next Milestone:** Implement SSE Parser and Streamer adapters
+> **Next Milestone:** Implement Provider Adapters (OpenAI, Anthropic, Ollama, etc.)
 
 ---
 
@@ -20,11 +20,11 @@
 ### Current Session State
 
 ```
-Phase: 1 of 6 (Streaming Infrastructure)
-Active Deliverable: 1.1 SSE Parser Adapter
-Checklist Progress: 0/16 items complete
-Last Action: Phase 0 completed - scaffold, types, helpers, constants, factories, index
-Next Action: Implement SSE Parser adapter
+Phase: 2 of 6 (Provider Adapters)
+Active Deliverable: 2.1 OpenAI Provider Adapter
+Checklist Progress: 0/? items complete
+Last Action: Phase 1 completed - SSE Parser and Streamer adapters with 23 tests passing
+Next Action: Implement OpenAI Provider adapter
 ```
 
 > **Instructions:** Update this section at the END of each session with the model. 
@@ -148,15 +148,15 @@ How we know the project is complete:
 
 ## Phases
 
-| # | Phase              | Status     | Description                           | File                            |
-|---|--------------------|------------|---------------------------------------|---------------------------------|
-| 0 | Pre-Flight         | ✅ Complete | Scaffold, types, helpers, constants   | `plans/phases/00-preflight.md`  |
-| 1 | Streaming          | 🔄 Active   | Streamer adapter, SSE parser          | `plans/phases/01-streaming.md`  |
-| 2 | Provider Adapters  | ⏳ Pending  | All 5 provider adapters               | `plans/phases/02-providers.md`  |
-| 3 | Embedding Adapters | ⏳ Pending  | All 5 embedding adapters              | `plans/phases/03-embeddings.md` |
-| 4 | Policy & Enhance   | ⏳ Pending  | Retry, rate limit, cache, batch       | `plans/phases/04-policy.md`     |
-| 5 | Transform & Persist| ⏳ Pending  | Tool format, similarity, persistence  | `plans/phases/05-transform.md`  |
-| 6 | Bridge & Finalize  | ⏳ Pending  | Bridges, context builder, docs        | `plans/phases/06-bridge.md`     |
+| # | Phase              | Status      | Description                           | File                            |
+|---|--------------------|-------------|---------------------------------------|---------------------------------|
+| 0 | Pre-Flight         | ✅ Complete  | Scaffold, types, helpers, constants   | `plans/phases/00-preflight.md`  |
+| 1 | Streaming          | ✅ Complete  | Streamer adapter, SSE parser          | `plans/phases/01-streaming.md`  |
+| 2 | Provider Adapters  | 🔄 Active    | All 5 provider adapters               | `plans/phases/02-providers.md`  |
+| 3 | Embedding Adapters | ⏳ Pending   | All 5 embedding adapters              | `plans/phases/03-embeddings.md` |
+| 4 | Policy & Enhance   | ⏳ Pending   | Retry, rate limit, cache, batch       | `plans/phases/04-policy.md`     |
+| 5 | Transform & Persist| ⏳ Pending   | Tool format, similarity, persistence  | `plans/phases/05-transform.md`  |
+| 6 | Bridge & Finalize  | ⏳ Pending   | Bridges, context builder, docs        | `plans/phases/06-bridge.md`     |
 
 **Status Legend:**
 - ✅ Complete
