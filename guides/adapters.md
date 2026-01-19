@@ -16,12 +16,13 @@
 8. [Transform Adapters](#transform-adapters)
 9. [Persistence Adapters](#persistence-adapters)
 10. [Bridge Functions](#bridge-functions)
-11. [Error Handling](#error-handling)
-12. [TypeScript Integration](#typescript-integration)
-13. [Browser Compatibility](#browser-compatibility)
-14. [Integration with Ecosystem](#integration-with-ecosystem)
-15. [API Reference](#api-reference)
-16. [License](#license)
+11. [Streaming Adapters](#streaming-adapters)
+12. [Error Handling](#error-handling)
+13. [TypeScript Integration](#typescript-integration)
+14. [Browser Compatibility](#browser-compatibility)
+15. [Integration with Ecosystem](#integration-with-ecosystem)
+16. [API Reference](#api-reference)
+17. [License](#license)
 
 ---
 
@@ -831,6 +832,87 @@ registry.register(retrievalTool.schema, retrievalTool.handler)
 
 ---
 
+## Streaming Adapters
+
+Streaming adapters provide a standardized way to handle token-by-token streaming during text generation.
+
+### StreamerAdapter
+
+The base streaming adapter for general-purpose token emission:
+
+```ts
+import { createStreamerAdapter } from '@mikesaintsg/adapters'
+
+// Create a streamer for token emission
+const streamer = createStreamerAdapter()
+
+// Subscribe to tokens
+const unsubscribe = streamer.onToken((token) => {
+	process.stdout.write(token)
+})
+
+// Emit tokens (typically called by provider adapters)
+streamer.emit('Hello')
+streamer.emit(' ')
+streamer.emit('world!')
+
+// Signal end of streaming
+streamer.end()
+
+// Unsubscribe when done
+unsubscribe()
+```
+
+### TextStreamerAdapter
+
+A HuggingFace-specific adapter that wraps the `TextStreamer` class:
+
+```ts
+import { pipeline, TextStreamer } from '@huggingface/transformers'
+import { createTextStreamerAdapter } from '@mikesaintsg/adapters'
+
+// Initialize HuggingFace pipeline
+const generator = await pipeline('text-generation', 'Xenova/gpt2')
+
+// Create adapter with HuggingFace TextStreamer
+const adapter = createTextStreamerAdapter({
+	streamerClass: TextStreamer,
+	tokenizer: generator.tokenizer,
+})
+
+// Subscribe to streamed tokens
+adapter.onToken((token) => console.log('Token:', token))
+
+// Get the underlying HuggingFace streamer for model.generate()
+const hfStreamer = adapter.getStreamer()
+
+// Use with HuggingFace model
+await generator.model.generate({
+	inputs: tokenizedInput,
+	streamer: hfStreamer,
+})
+```
+
+### Streaming Interface Summary
+
+```ts
+interface StreamerAdapterInterface {
+	onToken(callback: (token: string) => void): Unsubscribe
+	end(): void
+	supportsStreaming(): boolean
+}
+
+interface StreamerEmitterInterface extends StreamerAdapterInterface {
+	emit(token: string): void
+}
+
+interface TextStreamerAdapterInterface extends StreamerEmitterInterface {
+	getStreamer(): HuggingFaceBaseStreamer | undefined
+}
+```
+
+---
+
 ## Error Handling
 
 ### Error Codes
@@ -1086,6 +1168,13 @@ if (result.toolCalls.length > 0) {
 |------------------------|---------------------------|
 | `createToolCallBridge` | `ToolCallBridgeInterface` |
 | `createRetrievalTool`  | `RetrievalToolInterface`  |
+
+#### Streaming Adapters
+
+| Factory                      | Returns                         |
+|------------------------------|---------------------------------|
+| `createStreamerAdapter`      | `StreamerEmitterInterface`      |
+| `createTextStreamerAdapter`  | `TextStreamerAdapterInterface`  |
 
 ### Interface Summary
 

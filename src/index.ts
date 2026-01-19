@@ -17,9 +17,6 @@ export * from './helpers.js'
 // Helper modules
 export * from './helpers/index.js'
 
-// Wrapper adapters
-export * from './wrappers/index.js'
-
 // Embedding adapters
 export * from './embeddings/index.js'
 
@@ -43,6 +40,9 @@ export * from './transform/index.js'
 
 // Context builder adapters (Deduplication, Truncation, Priority)
 export * from './context/index.js'
+
+// Streaming adapters
+export * from './core/streaming/index.js'
 
 // Constants
 export * from './constants.js'
