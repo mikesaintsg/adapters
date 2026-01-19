@@ -429,4 +429,227 @@ describe('HuggingFace Provider Adapter', () => {
 			expect(result.toolCalls).toEqual([])
 		})
 	})
+
+	describe('streaming', () => {
+		/**
+		 * Create a mock pipeline with model and tokenizer for streaming tests.
+		 */
+		function createMockStreamingPipeline(options?: {
+			streamTokens?: string[]
+			shouldError?: boolean
+			errorMessage?: string
+		}) {
+			const streamTokens = options?.streamTokens ?? ['Hello', ' world', '!']
+			const shouldError = options?.shouldError ?? false
+			const errorMessage = options?.errorMessage ?? 'Streaming error'
+
+			let streamCallback: ((text: string) => void) | undefined
+
+			// Mock tokenizer
+			const mockTokenizer = vi.fn().mockImplementation(() => ({
+				input_ids: { data: [1n, 2n, 3n], dims: [1, 3] },
+			})) as unknown
+
+			// Mock model with generate that calls streamer callback
+			const mockModel = {
+				generate: vi.fn().mockImplementation(async(_opts: { streamer?: { put: () => void } }) => {
+					if (shouldError) {
+						throw new Error(errorMessage)
+					}
+					// Small delay before first token to allow callback registration
+					await new Promise(resolve => setTimeout(resolve, 10))
+					// Simulate streaming by calling callback for each token
+					for (const token of streamTokens) {
+						streamCallback?.(token)
+						await new Promise(resolve => setTimeout(resolve, 5))
+					}
+					return { data: [1n, 2n, 3n], dims: [1, 3] }
+				}),
+			}
+
+			// Create mock pipeline with model and tokenizer
+			const mockPipeline = vi.fn().mockResolvedValue([
+				{ generated_text: streamTokens.join('') },
+			]) as unknown as HuggingFaceTextGenerationPipeline
+
+			// Add model and tokenizer properties
+			Object.defineProperty(mockPipeline, 'model', { value: mockModel })
+			Object.defineProperty(mockPipeline, 'tokenizer', { value: mockTokenizer })
+
+			// Mock TextStreamer class - use a real class that can be constructed with new
+			const constructorSpy = vi.fn()
+			class MockTextStreamer {
+				constructor(_tokenizer: unknown, opts?: { callback_function?: (text: string) => void }) {
+					constructorSpy(_tokenizer, opts)
+					streamCallback = opts?.callback_function
+				}
+				put = vi.fn()
+				end = vi.fn()
+			}
+
+			return { mockPipeline, MockTextStreamerClass: MockTextStreamer, mockModel, constructorSpy }
+		}
+
+		it('supports streaming when TextStreamer class is provided', () => {
+			const { mockPipeline, MockTextStreamerClass } = createMockStreamingPipeline()
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				streamerClass: MockTextStreamerClass,
+			})
+
+			expect(adapter.supportsStreaming()).toBe(true)
+			expect(adapter.getCapabilities().supportsStreaming).toBe(true)
+		})
+
+		it('does not support streaming without TextStreamer class', () => {
+			const { mockPipeline } = createMockStreamingPipeline()
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				// No streamerClass provided
+			})
+
+			expect(adapter.supportsStreaming()).toBe(false)
+		})
+
+		it('streams tokens through onToken callback', async() => {
+			const { mockPipeline, MockTextStreamerClass } = createMockStreamingPipeline({
+				streamTokens: ['Hello', ' ', 'world', '!'],
+			})
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				streamerClass: MockTextStreamerClass,
+			})
+
+			const messages: Message[] = [
+				{ id: '1', role: 'user', content: 'Hi!', createdAt: Date.now() },
+			]
+
+			// Set up callback before generating
+			const tokens: string[] = []
+			const handle = adapter.generate(messages, {})
+			handle.onToken(token => tokens.push(token))
+
+			await handle.result()
+
+			expect(tokens).toEqual(['Hello', ' ', 'world', '!'])
+		})
+
+		it('streams tokens through async iteration', async() => {
+			const { mockPipeline, MockTextStreamerClass } = createMockStreamingPipeline({
+				streamTokens: ['one', 'two', 'three'],
+			})
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				streamerClass: MockTextStreamerClass,
+			})
+
+			const messages: Message[] = [
+				{ id: '1', role: 'user', content: 'Hi!', createdAt: Date.now() },
+			]
+
+			const handle = adapter.generate(messages, {})
+			const chunks: string[] = []
+
+			for await (const chunk of handle) {
+				chunks.push(chunk)
+			}
+
+			expect(chunks).toEqual(['one', 'two', 'three'])
+		})
+
+		it('accumulates text in final result', async() => {
+			const { mockPipeline, MockTextStreamerClass } = createMockStreamingPipeline({
+				streamTokens: ['Hello', ' ', 'world', '!'],
+			})
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				streamerClass: MockTextStreamerClass,
+			})
+
+			const messages: Message[] = [
+				{ id: '1', role: 'user', content: 'Hi!', createdAt: Date.now() },
+			]
+
+			const handle = adapter.generate(messages, {})
+			const result = await handle.result()
+
+			expect(result.text).toBe('Hello world!')
+		})
+
+		it('creates TextStreamer with correct options', async() => {
+			const { mockPipeline, MockTextStreamerClass, constructorSpy } = createMockStreamingPipeline()
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				streamerClass: MockTextStreamerClass,
+			})
+
+			const messages: Message[] = [
+				{ id: '1', role: 'user', content: 'Hi!', createdAt: Date.now() },
+			]
+
+			const handle = adapter.generate(messages, {})
+			await handle.result()
+
+			expect(constructorSpy).toHaveBeenCalledWith(
+				mockPipeline.tokenizer,
+				expect.objectContaining({
+					skip_prompt: true,
+					skip_special_tokens: true,
+					callback_function: expect.any(Function),
+				}),
+			)
+		})
+
+		it('calls model.generate with streamer', async() => {
+			const { mockPipeline, MockTextStreamerClass, mockModel } = createMockStreamingPipeline()
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				streamerClass: MockTextStreamerClass,
+			})
+
+			const messages: Message[] = [
+				{ id: '1', role: 'user', content: 'Hi!', createdAt: Date.now() },
+			]
+
+			const handle = adapter.generate(messages, { maxTokens: 50 })
+			await handle.result()
+
+			expect(mockModel.generate).toHaveBeenCalledWith(
+				expect.objectContaining({
+					inputs: expect.any(Object),
+					generation_config: expect.objectContaining({
+						max_new_tokens: 50,
+					}),
+					streamer: expect.any(Object),
+				}),
+			)
+		})
+
+		it('handles streaming errors gracefully', async() => {
+			const { mockPipeline, MockTextStreamerClass } = createMockStreamingPipeline({
+				shouldError: true,
+				errorMessage: 'Stream failed',
+			})
+			const adapter = createHuggingFaceProviderAdapter({
+				pipeline: mockPipeline,
+				modelName: 'gpt2',
+				streamerClass: MockTextStreamerClass,
+			})
+
+			const messages: Message[] = [
+				{ id: '1', role: 'user', content: 'Hi!', createdAt: Date.now() },
+			]
+
+			const handle = adapter.generate(messages, {})
+
+			await expect(handle.result()).rejects.toThrow('Stream failed')
+		})
+	})
 })

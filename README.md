@@ -262,17 +262,18 @@ const embeddings = await embedding.embed(['Hello, world!'])
 ### HuggingFace Transformers Provider (Browser/Node.js)
 
 ```ts
-import { pipeline } from '@huggingface/transformers'
+import { pipeline, TextStreamer } from '@huggingface/transformers'
 import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
 import { createEngine } from '@mikesaintsg/inference'
 
 // Consumer initializes the pipeline (downloads model on first use)
 const generator = await pipeline('text-generation', 'Xenova/gpt2')
 
-// Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+// Pass to adapter with streaming enabled
 const provider = createHuggingFaceProviderAdapter({
   pipeline: generator,
   modelName: 'gpt2',
+  streamerClass: TextStreamer, // Optional: enables streaming
   defaultOptions: {
     maxTokens: 100,
     temperature: 0.7,
@@ -281,6 +282,16 @@ const provider = createHuggingFaceProviderAdapter({
 
 const engine = createEngine(provider)
 const session = engine.createSession({ system: 'You are helpful.' })
+```
+
+**Streaming:** Pass `TextStreamer` class to enable token-by-token streaming:
+```ts
+import { pipeline, TextStreamer } from '@huggingface/transformers'
+const provider = createHuggingFaceProviderAdapter({
+  pipeline: generator,
+  modelName: 'gpt2',
+  streamerClass: TextStreamer, // Enables streaming
+})
 ```
 
 ### Policy Adapters (Retry & Rate Limiting)

@@ -20,7 +20,13 @@ import type {
 	ToolCall,
 	Unsubscribe,
 } from '@mikesaintsg/core'
-import type { HuggingFaceProviderAdapterOptions, HuggingFaceTextGenerationOutput } from '../types.js'
+import type {
+	HuggingFacePreTrainedModel,
+	HuggingFaceProviderAdapterOptions,
+	HuggingFaceTextGenerationOutput,
+	HuggingFaceTextStreamerClass,
+	HuggingFaceTokenizer,
+} from '../types.js'
 import { createDoneIteratorResult } from '../helpers.js'
 import { AdapterError } from '../errors.js'
 
@@ -31,6 +37,10 @@ import { AdapterError } from '../errors.js'
  * in the browser or Node.js. The consumer must provide an initialized
  * TextGenerationPipeline.
  *
+ * **Streaming Support:**
+ * To enable streaming, pass the `TextStreamer` class from @huggingface/transformers.
+ * When streaming is enabled, tokens are emitted as they are generated.
+ *
  * IMPORTANT: @huggingface/transformers is NOT a runtime dependency of this package.
  * Consumers must install @huggingface/transformers themselves and pass the required
  * pipeline. This design allows consumers who don't use HuggingFace to avoid installing it.
@@ -40,22 +50,24 @@ import { AdapterError } from '../errors.js'
  *
  * @example
  * ```ts
- * import { pipeline } from '@huggingface/transformers'
+ * import { pipeline, TextStreamer } from '@huggingface/transformers'
  * import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
  *
  * // Consumer initializes the pipeline
  * const generator = await pipeline('text-generation', 'Xenova/gpt2')
  *
- * // Pass to adapter
+ * // Pass to adapter with streaming enabled
  * const adapter = createHuggingFaceProviderAdapter({
  *   pipeline: generator,
  *   modelName: 'gpt2',
+ *   streamerClass: TextStreamer, // Enables streaming
  * })
  *
  * const handle = adapter.generate([
  *   { id: '1', role: 'user', content: 'Hello!', createdAt: Date.now() }
  * ], {})
  *
+ * // Tokens are streamed as they are generated
  * for await (const chunk of handle) {
  *   console.log(chunk)
  * }
@@ -67,6 +79,7 @@ export function createHuggingFaceProviderAdapter(
 	const pipeline = options.pipeline
 	const modelName = options.modelName
 	const defaultOptions = options.defaultOptions
+	const TextStreamerClass = options.streamerClass
 
 	if (!pipeline) {
 		throw new AdapterError(
@@ -82,6 +95,9 @@ export function createHuggingFaceProviderAdapter(
 		)
 	}
 
+	// Check if streaming is available
+	const canStream = Boolean(TextStreamerClass && pipeline.model && pipeline.tokenizer)
+
 	return {
 		getId(): string {
 			return `huggingface:${modelName}`
@@ -93,13 +109,12 @@ export function createHuggingFaceProviderAdapter(
 		},
 
 		supportsStreaming(): boolean {
-			// Text generation pipeline doesn't support streaming
-			return false
+			return canStream
 		},
 
 		getCapabilities(): ProviderCapabilities {
 			return {
-				supportsStreaming: false,
+				supportsStreaming: canStream,
 				supportsTools: false,
 				supportsVision: false,
 				supportsFunctions: false,
@@ -132,8 +147,112 @@ export function createHuggingFaceProviderAdapter(
 				rejectResult = reject
 			})
 
-			// Start generation
-			void runGeneration()
+			// Start generation - use streaming if available
+			if (canStream && TextStreamerClass && pipeline.model && pipeline.tokenizer) {
+				void runStreamingGeneration(TextStreamerClass, pipeline.model, pipeline.tokenizer)
+			} else {
+				void runGeneration()
+			}
+
+			async function runStreamingGeneration(
+				StreamerClass: HuggingFaceTextStreamerClass,
+				model: HuggingFacePreTrainedModel,
+				tokenizer: HuggingFaceTokenizer,
+			): Promise<void> {
+				let generatedText = ''
+				const toolCalls: ToolCall[] = []
+				const finishReason: GenerationResult['finishReason'] = 'stop'
+
+				try {
+					// Convert messages to a prompt string
+					const prompt = formatMessagesAsPrompt(messages)
+
+					// Check if aborted before starting
+					if (abortController.signal.aborted) {
+						const result: GenerationResult = {
+							text: '',
+							toolCalls: [],
+							finishReason: 'stop',
+							aborted: true,
+						}
+						handleComplete(result)
+						return
+					}
+
+					// Create streamer with callback
+					const streamer = new StreamerClass(tokenizer, {
+						skip_prompt: true,
+						skip_special_tokens: true,
+						callback_function: (text: string) => {
+							if (text && !abortController.signal.aborted) {
+								generatedText += text
+								emitToken(text)
+							}
+						},
+					})
+
+					// Tokenize the prompt
+					const encodedInput = tokenizer(prompt)
+
+					// Build generation config
+					const generationConfig = {
+						max_new_tokens: generationOptions.maxTokens ?? defaultOptions?.maxTokens ?? 100,
+						temperature: generationOptions.temperature ?? defaultOptions?.temperature ?? 1.0,
+						do_sample: (generationOptions.temperature ?? defaultOptions?.temperature ?? 1.0) > 0,
+						...(generationOptions.topP !== undefined ? { top_p: generationOptions.topP } : {}),
+					}
+
+					// Generate with streaming
+					await model.generate({
+						inputs: encodedInput.input_ids,
+						generation_config: generationConfig,
+						streamer,
+					})
+
+					// Handle aborted case
+					if (abortController.signal.aborted) {
+						const result: GenerationResult = {
+							text: generatedText,
+							toolCalls: [],
+							finishReason: 'stop',
+							aborted: true,
+						}
+						handleComplete(result)
+						return
+					}
+
+					const result: GenerationResult = {
+						text: generatedText,
+						toolCalls,
+						finishReason,
+						aborted: false,
+					}
+
+					handleComplete(result)
+				} catch (error) {
+					if (error instanceof Error && error.name === 'AbortError') {
+						const result: GenerationResult = {
+							text: generatedText,
+							toolCalls: [],
+							finishReason: 'stop',
+							aborted: true,
+						}
+						handleComplete(result)
+						return
+					}
+
+					handleError(
+						error instanceof AdapterError
+							? error
+							: new AdapterError(
+								'SERVICE_ERROR',
+								error instanceof Error ? error.message : 'HuggingFace streaming generation failed',
+								undefined,
+								error instanceof Error ? error : undefined,
+							),
+					)
+				}
+			}
 
 			async function runGeneration(): Promise<void> {
 				let generatedText = ''
