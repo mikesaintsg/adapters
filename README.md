@@ -11,7 +11,7 @@
 ## Features
 
 - ✅ **Provider Adapters** — OpenAI, Anthropic, Ollama, and node-llama-cpp for LLM chat completions
-- ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, and node-llama-cpp for text embeddings
+- ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, node-llama-cpp, and HuggingFace Transformers for text embeddings
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
 - ✅ **Policy Adapters** — Retry and rate limiting strategies
@@ -90,23 +90,25 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Source Adapters — Providers
 
-| Function                           | Description                        |
-|------------------------------------|------------------------------------|
-| `createOpenAIProviderAdapter`      | OpenAI chat completions            |
-| `createAnthropicProviderAdapter`   | Anthropic Claude models            |
-| `createOllamaProviderAdapter`      | Ollama local LLM server            |
-| `createNodeLlamaCppProviderAdapter`| node-llama-cpp local LLaMA models  |
+| Function                            | Description                        |
+|-------------------------------------|------------------------------------|
+| `createOpenAIProviderAdapter`       | OpenAI chat completions            |
+| `createAnthropicProviderAdapter`    | Anthropic Claude models            |
+| `createOllamaProviderAdapter`       | Ollama local LLM server            |
+| `createNodeLlamaCppProviderAdapter` | node-llama-cpp local LLaMA models  |
+| `createHuggingFaceProviderAdapter`  | HuggingFace Transformers local LLM |
 
 ### Source Adapters — Embeddings
 
-| Function                             | Description                           |
-|--------------------------------------|---------------------------------------|
-| `createOpenAIEmbeddingAdapter`       | OpenAI text embeddings                |
-| `createVoyageEmbeddingAdapter`       | Voyage AI embeddings (Anthropic rec.) |
-| `createOllamaEmbeddingAdapter`       | Ollama local embeddings               |
-| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp local embeddings       |
-| `createBatchedEmbeddingAdapter`      | Automatic request batching            |
-| `createCachedEmbeddingAdapter`       | In-memory embedding cache             |
+| Function                              | Description                              |
+|---------------------------------------|------------------------------------------|
+| `createOpenAIEmbeddingAdapter`        | OpenAI text embeddings                   |
+| `createVoyageEmbeddingAdapter`        | Voyage AI embeddings (Anthropic rec.)    |
+| `createOllamaEmbeddingAdapter`        | Ollama local embeddings                  |
+| `createNodeLlamaCppEmbeddingAdapter`  | node-llama-cpp local embeddings          |
+| `createHuggingFaceEmbeddingAdapter`   | HuggingFace Transformers local embeddings|
+| `createBatchedEmbeddingAdapter`       | Automatic request batching               |
+| `createCachedEmbeddingAdapter`        | In-memory embedding cache                |
 
 ### Policy Adapters
 
@@ -233,6 +235,64 @@ const embeddings = await embedding.embed(['Hello, world!'])
 ```
 
 **Note:** node-llama-cpp is **not** a runtime dependency of @mikesaintsg/adapters. Consumers must install node-llama-cpp themselves and pass initialized context objects. This allows consumers who don't use node-llama-cpp to avoid installing it.
+
+### HuggingFace Transformers Embedding (Browser/Node.js)
+
+```ts
+import { pipeline } from '@huggingface/transformers'
+import { createHuggingFaceEmbeddingAdapter } from '@mikesaintsg/adapters'
+
+// Consumer initializes the pipeline (downloads model on first use)
+const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
+
+// Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+const embedding = createHuggingFaceEmbeddingAdapter({
+  pipeline: extractor,
+  modelName: 'all-MiniLM-L6-v2',
+  dimensions: 384,
+  pooling: 'mean',      // Optional: 'mean' | 'cls' | 'none' (default: 'mean')
+  normalize: true,       // Optional: normalize to unit length (default: true)
+})
+
+const embeddings = await embedding.embed(['Hello, world!'])
+```
+
+**Note:** @huggingface/transformers is **not** a runtime dependency of @mikesaintsg/adapters. Consumers must install @huggingface/transformers themselves and pass an initialized pipeline. This allows consumers who don't use HuggingFace to avoid installing it.
+
+### HuggingFace Transformers Provider (Browser/Node.js)
+
+```ts
+import { pipeline, TextStreamer } from '@huggingface/transformers'
+import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+// Consumer initializes the pipeline (downloads model on first use)
+const generator = await pipeline('text-generation', 'Xenova/gpt2')
+
+// Pass to adapter with streaming enabled
+const provider = createHuggingFaceProviderAdapter({
+  pipeline: generator,
+  modelName: 'gpt2',
+  streamerClass: TextStreamer, // Optional: enables streaming
+  defaultOptions: {
+    maxTokens: 100,
+    temperature: 0.7,
+  },
+})
+
+const engine = createEngine(provider)
+const session = engine.createSession({ system: 'You are helpful.' })
+```
+
+**Streaming:** Pass `TextStreamer` class to enable token-by-token streaming:
+```ts
+import { pipeline, TextStreamer } from '@huggingface/transformers'
+const provider = createHuggingFaceProviderAdapter({
+  pipeline: generator,
+  modelName: 'gpt2',
+  streamerClass: TextStreamer, // Enables streaming
+})
+```
 
 ### Policy Adapters (Retry & Rate Limiting)
 

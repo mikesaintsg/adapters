@@ -355,6 +355,122 @@ const embedding = createNodeLlamaCppEmbeddingAdapter({
 const embeddings = await embedding.embed(['Hello, world!'])
 ```
 
+### HuggingFace Transformers Provider (Browser/Node.js)
+
+Uses `@huggingface/transformers` to run text generation models locally in the browser or Node.js without API calls.
+
+**Note:** `@huggingface/transformers` is **not** a runtime dependency of `@mikesaintsg/adapters`. Consumers must install `@huggingface/transformers` themselves and pass an initialized pipeline. This allows consumers who don't use HuggingFace to avoid installing it.
+
+```ts
+import { pipeline, TextStreamer } from '@huggingface/transformers'
+import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+// Consumer initializes the pipeline (downloads model on first use)
+const generator = await pipeline('text-generation', 'Xenova/gpt2')
+
+// Pass to adapter with streaming enabled
+const provider = createHuggingFaceProviderAdapter({
+	pipeline: generator,
+	modelName: 'gpt2',
+	streamerClass: TextStreamer, // Optional: enables streaming
+	defaultOptions: {
+		maxTokens: 100,
+		temperature: 0.7,
+	},
+})
+
+const engine = createEngine(provider)
+const session = engine.createSession({ system: 'You are helpful.' })
+```
+
+#### Streaming Support
+
+HuggingFace Transformers supports streaming through the `TextStreamer` class. To enable streaming, pass the `TextStreamer` class from `@huggingface/transformers`:
+
+```ts
+import { pipeline, TextStreamer } from '@huggingface/transformers'
+import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+
+const generator = await pipeline('text-generation', 'Xenova/gpt2')
+
+// Enable streaming by providing the TextStreamer class
+const provider = createHuggingFaceProviderAdapter({
+	pipeline: generator,
+	modelName: 'gpt2',
+	streamerClass: TextStreamer, // Enables streaming
+})
+
+// Tokens are now streamed as they are generated
+for await (const token of provider.generate(messages, {})) {
+	process.stdout.write(token)
+}
+```
+
+**Streaming Capabilities:**
+- `supportsStreaming()` returns `true` when `streamerClass` is provided
+- Tokens are emitted via `onToken` callback or async iteration
+- Uses the underlying model's `generate()` method with a `TextStreamer`
+
+**Key benefits:**
+- **No runtime dependency** — Consumers who don't use HuggingFace avoid installing it
+- **Browser support** — Run models directly in the browser using WebAssembly
+- **No API calls** — Models run locally, no internet required after download
+- **Wide model support** — Use any compatible HuggingFace model
+- **Optional streaming** — Enable streaming by providing the TextStreamer class
+
+**Supported Models:**
+- `Xenova/gpt2` — GPT-2 small
+- `Xenova/distilgpt2` — DistilGPT-2
+- `Xenova/phi-1_5` — Microsoft Phi 1.5
+- `Xenova/TinyLlama-1.1B-Chat-v1.0` — TinyLlama 1.1B
+- And many more from the [HuggingFace Hub](https://huggingface.co/models?library=transformers.js&pipeline_tag=text-generation&sort=trending)
+
+### HuggingFace Transformers Embedding (Browser/Node.js)
+
+Uses `@huggingface/transformers` to run embedding models locally in the browser or Node.js without API calls.
+
+**Note:** `@huggingface/transformers` is **not** a runtime dependency of `@mikesaintsg/adapters`. Consumers must install `@huggingface/transformers` themselves and pass an initialized pipeline. This allows consumers who don't use HuggingFace to avoid installing it.
+
+```ts
+import { pipeline } from '@huggingface/transformers'
+import { createHuggingFaceEmbeddingAdapter } from '@mikesaintsg/adapters'
+
+// Consumer initializes the pipeline (downloads model on first use)
+const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
+
+// Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+const embedding = createHuggingFaceEmbeddingAdapter({
+	pipeline: extractor,
+	modelName: 'all-MiniLM-L6-v2',
+	dimensions: 384,
+	pooling: 'mean',      // Optional: 'mean' | 'cls' | 'none' (default: 'mean')
+	normalize: true,       // Optional: normalize to unit length (default: true)
+})
+
+const embeddings = await embedding.embed(['Hello, world!'])
+// Returns Float32Array embeddings
+```
+
+#### Pooling Strategies
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| `mean`   | Mean pooling across all tokens | Best for most sentence embedding models |
+| `cls`    | Use CLS token embedding | BERT-style models |
+| `none`   | No pooling (returns full sequence) | Advanced use cases |
+
+#### Supported Models
+
+Any HuggingFace model compatible with the `feature-extraction` pipeline:
+
+- `Xenova/all-MiniLM-L6-v2` (384 dimensions)
+- `Xenova/all-mpnet-base-v2` (768 dimensions)
+- `Xenova/bge-small-en-v1.5` (384 dimensions)
+- `Xenova/gte-small` (384 dimensions)
+- `sentence-transformers/all-MiniLM-L6-v2`
+- And many more from the [HuggingFace Hub](https://huggingface.co/models?library=transformers.js&sort=trending)
+
 ---
 
 ## Policy Adapters

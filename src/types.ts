@@ -399,6 +399,391 @@ export interface NodeLlamaCppEvaluateOptions {
 }
 
 // ============================================================================
+// HuggingFace Transformers Adapter Options (Browser/Node.js)
+// ============================================================================
+
+/**
+ * HuggingFace Transformers embedding adapter options.
+ *
+ * Uses @huggingface/transformers FeatureExtractionPipeline for generating
+ * embeddings locally in the browser or Node.js.
+ *
+ * IMPORTANT: @huggingface/transformers is a devDependency only. Types are imported
+ * using `import type` to avoid runtime dependencies. Consumers must have
+ * @huggingface/transformers installed and pass the required pipeline instance.
+ *
+ * @see https://huggingface.co/docs/transformers.js
+ *
+ * @example
+ * ```ts
+ * import { pipeline } from '@huggingface/transformers'
+ * import { createHuggingFaceEmbeddingAdapter } from '@mikesaintsg/adapters'
+ *
+ * // Consumer initializes the pipeline
+ * const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
+ *
+ * // Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+ * const embedding = createHuggingFaceEmbeddingAdapter({
+ *   pipeline: extractor,
+ *   modelName: 'all-MiniLM-L6-v2',
+ *   dimensions: 384,
+ * })
+ *
+ * const embeddings = await embedding.embed(['Hello, world!'])
+ * ```
+ */
+export interface HuggingFaceEmbeddingAdapterOptions {
+	/**
+	 * Initialized FeatureExtractionPipeline from @huggingface/transformers.
+	 * The consumer is responsible for creating and managing this pipeline.
+	 *
+	 * Create with: `await pipeline('feature-extraction', modelName)`
+	 */
+	readonly pipeline: HuggingFaceFeatureExtractionPipeline
+	/** Model name for identification (required for metadata) */
+	readonly modelName: string
+	/** Embedding dimensions (required for metadata) */
+	readonly dimensions: number
+	/**
+	 * Pooling strategy for embeddings.
+	 * - 'mean': Mean pooling (recommended for most models)
+	 * - 'cls': Use CLS token embedding
+	 * - 'none': No pooling, returns full sequence
+	 * @default 'mean'
+	 */
+	readonly pooling?: HuggingFacePoolingStrategy
+	/**
+	 * Whether to normalize embeddings to unit length.
+	 * Recommended for similarity search.
+	 * @default true
+	 */
+	readonly normalize?: boolean
+}
+
+/** Pooling strategy for HuggingFace embeddings */
+export type HuggingFacePoolingStrategy = 'none' | 'mean' | 'cls'
+
+/**
+ * Minimal interface for HuggingFace FeatureExtractionPipeline.
+ * This allows consumers to pass their own pipeline without importing
+ * @huggingface/transformers at runtime.
+ */
+export interface HuggingFaceFeatureExtractionPipeline {
+	/**
+	 * Extract features from text(s).
+	 * @param texts - One or more texts to embed
+	 * @param options - Pipeline options for pooling and normalization
+	 * @returns A tensor containing the embeddings
+	 */
+	(
+		texts: string | readonly string[],
+		options?: HuggingFaceFeatureExtractionOptions,
+	): Promise<HuggingFaceTensor>
+	/**
+	 * Dispose of the pipeline resources.
+	 */
+	dispose?(): Promise<void>
+}
+
+/** Options for HuggingFace feature extraction */
+export interface HuggingFaceFeatureExtractionOptions {
+	/** Pooling strategy */
+	readonly pooling?: HuggingFacePoolingStrategy
+	/** Whether to normalize to unit length */
+	readonly normalize?: boolean
+}
+
+/**
+ * Minimal interface for HuggingFace Tensor.
+ * Represents the output from feature extraction.
+ */
+export interface HuggingFaceTensor {
+	/** The tensor data as a typed array */
+	readonly data: Float32Array | Float64Array | Int32Array | BigInt64Array | Uint8Array
+	/** The dimensions of the tensor [batch_size, sequence_length, hidden_size] or [batch_size, hidden_size] */
+	readonly dims: readonly number[]
+	/** The data type of the tensor */
+	readonly type: string
+	/** The number of elements in the tensor */
+	readonly size: number
+	/**
+	 * Convert tensor data to a n-dimensional JS list.
+	 * @returns Nested array representation of the tensor
+	 */
+	tolist(): unknown[]
+	/**
+	 * Dispose of tensor resources.
+	 */
+	dispose?(): void
+}
+
+/** Common HuggingFace embedding models */
+export type HuggingFaceEmbeddingModel =
+	| 'Xenova/all-MiniLM-L6-v2'
+	| 'Xenova/all-mpnet-base-v2'
+	| 'Xenova/paraphrase-MiniLM-L6-v2'
+	| 'Xenova/bert-base-uncased'
+	| 'Xenova/multilingual-e5-small'
+	| 'Xenova/bge-small-en-v1.5'
+	| 'Xenova/gte-small'
+	| 'sentence-transformers/all-MiniLM-L6-v2'
+	| (string & {})
+
+/**
+ * HuggingFace Transformers provider adapter options.
+ *
+ * Uses @huggingface/transformers TextGenerationPipeline for generating
+ * text completions locally in the browser or Node.js.
+ *
+ * IMPORTANT: @huggingface/transformers is a devDependency only. Types are imported
+ * using `import type` to avoid runtime dependencies. Consumers must have
+ * @huggingface/transformers installed and pass the required pipeline instance.
+ *
+ * @see https://huggingface.co/docs/transformers.js
+ *
+ * @example
+ * ```ts
+ * import { pipeline, TextStreamer } from '@huggingface/transformers'
+ * import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+ *
+ * // Consumer initializes the pipeline
+ * const generator = await pipeline('text-generation', 'Xenova/gpt2')
+ *
+ * // Pass to adapter with streaming support
+ * const provider = createHuggingFaceProviderAdapter({
+ *   pipeline: generator,
+ *   modelName: 'gpt2',
+ *   streamerClass: TextStreamer, // Optional: enables streaming
+ * })
+ *
+ * const handle = provider.generate([
+ *   { id: '1', role: 'user', content: 'Hello!', createdAt: Date.now() }
+ * ], {})
+ *
+ * // With streaming enabled, tokens are emitted as they are generated
+ * for await (const chunk of handle) {
+ *   console.log(chunk)
+ * }
+ * ```
+ */
+export interface HuggingFaceProviderAdapterOptions {
+	/**
+	 * Initialized TextGenerationPipeline from @huggingface/transformers.
+	 * The consumer is responsible for creating and managing this pipeline.
+	 *
+	 * Create with: `await pipeline('text-generation', modelName)`
+	 */
+	readonly pipeline: HuggingFaceTextGenerationPipeline
+	/** Model name for identification (required for metadata) */
+	readonly modelName: string
+	/** Default generation options */
+	readonly defaultOptions?: GenerationDefaults
+	/**
+	 * TextStreamer class from @huggingface/transformers.
+	 * When provided, enables true streaming of generated tokens.
+	 *
+	 * Import with: `import { TextStreamer } from '@huggingface/transformers'`
+	 *
+	 * @example
+	 * ```ts
+	 * import { pipeline, TextStreamer } from '@huggingface/transformers'
+	 *
+	 * const generator = await pipeline('text-generation', 'Xenova/gpt2')
+	 * const provider = createHuggingFaceProviderAdapter({
+	 *   pipeline: generator,
+	 *   modelName: 'gpt2',
+	 *   streamerClass: TextStreamer,
+	 * })
+	 * ```
+	 */
+	readonly streamerClass?: HuggingFaceTextStreamerClass
+}
+
+/**
+ * Minimal interface for HuggingFace TextGenerationPipeline.
+ * This allows consumers to pass their own pipeline without importing
+ * @huggingface/transformers at runtime.
+ */
+export interface HuggingFaceTextGenerationPipeline {
+	/**
+	 * Generate text from input prompt(s).
+	 * @param texts - One or more prompts to complete
+	 * @param options - Generation options
+	 * @returns Generated text output(s)
+	 */
+	(
+		texts: string | readonly string[],
+		options?: HuggingFaceTextGenerationOptions,
+	): Promise<HuggingFaceTextGenerationOutput | readonly HuggingFaceTextGenerationOutput[]>
+	/**
+	 * The underlying model for direct generation with streaming.
+	 * This is exposed by the Pipeline class.
+	 */
+	readonly model?: HuggingFacePreTrainedModel
+	/**
+	 * The tokenizer used by the pipeline.
+	 * Required for creating a TextStreamer.
+	 */
+	readonly tokenizer?: HuggingFaceTokenizer
+	/**
+	 * Dispose of the pipeline resources.
+	 */
+	dispose?(): Promise<void>
+}
+
+/** Options for HuggingFace text generation */
+export interface HuggingFaceTextGenerationOptions {
+	/** The maximum numbers of tokens to generate */
+	readonly max_new_tokens?: number
+	/** Temperature for sampling */
+	readonly temperature?: number
+	/** Top-p (nucleus) sampling */
+	readonly top_p?: number
+	/** Top-k sampling */
+	readonly top_k?: number
+	/** Whether to use sampling; use greedy decoding otherwise */
+	readonly do_sample?: boolean
+	/** Repetition penalty */
+	readonly repetition_penalty?: number
+	/** If false, only the new generated text is returned */
+	readonly return_full_text?: boolean
+}
+
+/** Output from HuggingFace text generation */
+export interface HuggingFaceTextGenerationOutput {
+	/** The generated text */
+	readonly generated_text: string
+}
+
+/** Common HuggingFace text generation models */
+export type HuggingFaceTextGenerationModel =
+	| 'Xenova/gpt2'
+	| 'Xenova/distilgpt2'
+	| 'Xenova/phi-1_5'
+	| 'Xenova/TinyLlama-1.1B-Chat-v1.0'
+	| 'Xenova/Qwen1.5-0.5B-Chat'
+	| 'Xenova/LaMini-Flan-T5-783M'
+	| (string & {})
+
+/**
+ * Minimal interface for HuggingFace PreTrainedModel.
+ * Used for accessing the model's generate method with streaming support.
+ */
+export interface HuggingFacePreTrainedModel {
+	/**
+	 * Generate method with full streaming support.
+	 * @param options - Generation parameters including streamer
+	 * @returns Generated output tensor
+	 */
+	generate(options: HuggingFaceGenerateOptions): Promise<HuggingFaceModelOutput>
+}
+
+/**
+ * Options for the model's generate method.
+ * Includes streamer for token-by-token output.
+ */
+export interface HuggingFaceGenerateOptions {
+	/** Input tokens as a tensor */
+	readonly inputs?: HuggingFaceTensor
+	/** Generation configuration */
+	readonly generation_config?: HuggingFaceGenerationConfig
+	/** Streamer for receiving tokens as they are generated */
+	readonly streamer?: HuggingFaceBaseStreamer
+}
+
+/**
+ * Generation configuration for HuggingFace models.
+ */
+export interface HuggingFaceGenerationConfig {
+	/** Maximum number of new tokens to generate */
+	readonly max_new_tokens?: number
+	/** Temperature for sampling */
+	readonly temperature?: number
+	/** Top-p (nucleus) sampling */
+	readonly top_p?: number
+	/** Top-k sampling */
+	readonly top_k?: number
+	/** Whether to use sampling */
+	readonly do_sample?: boolean
+}
+
+/**
+ * Minimal interface for HuggingFace model output.
+ */
+export interface HuggingFaceModelOutput {
+	/** Output tensor data */
+	readonly data?: readonly bigint[]
+	/** Dimensions of the output */
+	readonly dims?: readonly number[]
+}
+
+/**
+ * Minimal interface for HuggingFace tokenizer.
+ * Required for creating a TextStreamer.
+ */
+export interface HuggingFaceTokenizer {
+	/**
+	 * Encode text to token IDs.
+	 * @param text - Text to encode
+	 * @returns Encoded input with input_ids tensor
+	 */
+	(text: string): HuggingFaceEncodedInput
+	/**
+	 * Decode token IDs back to text.
+	 * @param tokenIds - Token IDs to decode
+	 * @param options - Decode options
+	 * @returns Decoded text
+	 */
+	decode(tokenIds: readonly bigint[] | readonly number[], options?: { skip_special_tokens?: boolean }): string
+}
+
+/**
+ * Encoded input from tokenizer.
+ */
+export interface HuggingFaceEncodedInput {
+	/** Input IDs tensor */
+	readonly input_ids: HuggingFaceTensor
+}
+
+/**
+ * Base interface for HuggingFace streamers.
+ */
+export interface HuggingFaceBaseStreamer {
+	/**
+	 * Called to push new tokens during generation.
+	 * @param value - Token IDs
+	 */
+	put(value: readonly (readonly bigint[])[]): void
+	/**
+	 * Called to signal end of generation.
+	 */
+	end(): void
+}
+
+/**
+ * Constructor for HuggingFace TextStreamer class.
+ * Consumers pass the actual TextStreamer class from @huggingface/transformers.
+ */
+export type HuggingFaceTextStreamerClass = new(
+		tokenizer: HuggingFaceTokenizer,
+		options?: HuggingFaceTextStreamerOptions,
+	) => HuggingFaceBaseStreamer
+
+/**
+ * Options for creating a TextStreamer.
+ */
+export interface HuggingFaceTextStreamerOptions {
+	/** Whether to skip the prompt tokens */
+	readonly skip_prompt?: boolean
+	/** Whether to skip special tokens when decoding */
+	readonly skip_special_tokens?: boolean
+	/** Callback function called when text is ready */
+	readonly callback_function?: (text: string) => void
+	/** Callback function called when a new token is generated */
+	readonly token_callback_function?: (tokens: readonly bigint[]) => void
+}
+
+// ============================================================================
 // Wrapper Adapter Options
 // ============================================================================
 
@@ -823,6 +1208,16 @@ export type CreateNodeLlamaCppProviderAdapter = (
 export type CreateNodeLlamaCppEmbeddingAdapter = (
 	options: NodeLlamaCppEmbeddingAdapterOptions
 ) => EmbeddingAdapterInterface
+
+/** Factory function for HuggingFace embedding adapter */
+export type CreateHuggingFaceEmbeddingAdapter = (
+	options: HuggingFaceEmbeddingAdapterOptions
+) => EmbeddingAdapterInterface
+
+/** Factory function for HuggingFace provider adapter */
+export type CreateHuggingFaceProviderAdapter = (
+	options: HuggingFaceProviderAdapterOptions
+) => ProviderAdapterInterface
 
 // ============================================================================
 // Policy Adapter Factory Types
