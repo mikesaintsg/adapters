@@ -158,6 +158,13 @@ const embeddings = await embedding.embed(['Hello, world!'])
 | `createOPFSVectorPersistenceAdapter`      | Vector storage in OPFS       |
 | `createHTTPVectorPersistenceAdapter`      | Remote vector storage        |
 
+### Streaming Adapters
+
+| Function                     | Description                           |
+|------------------------------|---------------------------------------|
+| `createStreamerAdapter`      | Base token streaming adapter          |
+| `createTextStreamerAdapter`  | HuggingFace TextStreamer integration  |
+
 ### Utilities
 
 | Function             | Description                    |
@@ -384,6 +391,32 @@ const truncation = createPriorityTruncationAdapter({
 const priority = createPriorityAdapter({
   weights: { critical: 5000, high: 500 },
 })
+```
+
+### Streaming Adapters
+
+```ts
+import {
+  createStreamerAdapter,
+  createTextStreamerAdapter,
+} from '@mikesaintsg/adapters'
+import { pipeline, TextStreamer } from '@huggingface/transformers'
+
+// Basic streaming adapter
+const streamer = createStreamerAdapter()
+streamer.onToken((token) => process.stdout.write(token))
+streamer.emit('Hello')
+streamer.emit(' world!')
+streamer.end()
+
+// HuggingFace TextStreamer integration
+const generator = await pipeline('text-generation', 'Xenova/gpt2')
+const textAdapter = createTextStreamerAdapter({
+  streamerClass: TextStreamer,
+  tokenizer: generator.tokenizer,
+})
+textAdapter.onToken((token) => console.log('Token:', token))
+// Pass textAdapter.getStreamer() to model.generate()
 ```
 
 ### Embedding with Caching
