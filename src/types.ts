@@ -1,7 +1,7 @@
 /**
  * @mikesaintsg/adapters
  *
- * Type definitions for the adapters package. 
+ * Type definitions for the adapters package.
  * This file contains adapter-specific options and configuration types.
  *
  * Architecture:
@@ -14,7 +14,7 @@
  * - All provider adapters MUST stream by default
  * - SSE parsing is internal to each provider adapter
  * - Default streamer is created via createStreamerAdapter()
- * - Error mapping should be comprehensive: 
+ * - Error mapping should be comprehensive:
  *   - Map ALL provider error codes to `AdapterErrorCode`
  *   - Include `providerCode` (original provider error code) in error data
  *   - Include `retryAfter` (milliseconds) for rate limit errors
@@ -33,7 +33,6 @@ import type {
 	VectorStorePersistenceAdapterInterface,
 	MinimalDatabaseAccess,
 	MinimalDirectoryAccess,
-	StreamerAdapterInterface,
 	// Policy adapter interfaces
 	RetryAdapterInterface,
 	RateLimitAdapterInterface,
@@ -56,7 +55,35 @@ import type {
 	SessionPersistenceInterface,
 	// Provider adapter interface
 	ProviderAdapterInterface,
+	// Tool types for bridge
+	ToolCall,
+	ToolResult,
+	ToolSchema,
 } from '@mikesaintsg/core'
+
+// ============================================================================
+// Unsubscribe Type
+// ============================================================================
+
+/** Cleanup function returned by event subscriptions */
+export type Unsubscribe = () => void
+
+// ============================================================================
+// Streamer Adapter Interface (internal to this package)
+// ============================================================================
+
+/**
+ * Streamer adapter interface for token emission.
+ * Used internally by provider adapters for streaming responses.
+ */
+export interface StreamerAdapterInterface {
+	/** Subscribe to token events */
+	onToken(callback: (token: string) => void): Unsubscribe
+	/** Emit a token to all subscribers */
+	emit(token: string): void
+	/** Signal end of streaming */
+	end(): void
+}
 
 // ============================================================================
 // Error Types
@@ -93,10 +120,10 @@ export interface AdapterErrorData {
 // ============================================================================
 
 /**
- * OpenAI provider adapter options. 
+ * OpenAI provider adapter options.
  *
  * Streaming is native — no configuration needed.
- * SSE parsing is handled internally. 
+ * SSE parsing is handled internally.
  */
 export interface OpenAIProviderAdapterOptions {
 	/** OpenAI API key */
@@ -111,13 +138,15 @@ export interface OpenAIProviderAdapterOptions {
 	readonly defaultOptions?: GenerationDefaults
 	/** Custom streamer adapter (optional, default streamer used if not provided) */
 	readonly streamer?:  StreamerAdapterInterface
+	/** Custom SSE parser adapter (optional, default parser used if not provided) */
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 /**
- * Anthropic provider adapter options. 
+ * Anthropic provider adapter options.
  *
- * Streaming is native — no configuration needed. 
- * SSE parsing is handled internally. 
+ * Streaming is native — no configuration needed.
+ * SSE parsing is handled internally.
  */
 export interface AnthropicProviderAdapterOptions {
 	/** Anthropic API key */
@@ -130,13 +159,15 @@ export interface AnthropicProviderAdapterOptions {
 	readonly defaultOptions?: GenerationDefaults
 	/** Custom streamer adapter (optional, default streamer used if not provided) */
 	readonly streamer?: StreamerAdapterInterface
+	/** Custom SSE parser adapter (optional, default parser used if not provided) */
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 /**
- * Ollama provider adapter options. 
+ * Ollama provider adapter options.
  *
  * Ollama is the recommended way to test adapters during development
- * without incurring API costs.  It runs models locally. 
+ * without incurring API costs.  It runs models locally.
  *
  * Streaming is native — no configuration needed.
  * SSE parsing is handled internally.
@@ -156,10 +187,12 @@ export interface OllamaProviderAdapterOptions {
 	readonly defaultOptions?: GenerationDefaults
 	/** Custom streamer adapter (optional, default streamer used if not provided) */
 	readonly streamer?: StreamerAdapterInterface
+	/** Custom SSE parser adapter (optional, default parser used if not provided) */
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 /**
- * node-llama-cpp provider adapter options. 
+ * node-llama-cpp provider adapter options.
  *
  * node-llama-cpp runs LLaMA models locally using llama. cpp bindings.
  * This adapter requires the consumer to pass initialized node-llama-cpp
@@ -190,7 +223,7 @@ export interface OllamaProviderAdapterOptions {
  */
 export interface NodeLlamaCppProviderAdapterOptions {
 	/**
-	 * Initialized LlamaContext from node-llama-cpp. 
+	 * Initialized LlamaContext from node-llama-cpp.
 	 * The consumer is responsible for creating and managing this context.
 	 */
 	readonly context:  NodeLlamaCppContext
@@ -210,14 +243,14 @@ export interface NodeLlamaCppProviderAdapterOptions {
 }
 
 /**
- * HuggingFace Transformers provider adapter options. 
+ * HuggingFace Transformers provider adapter options.
  *
  * Uses @huggingface/transformers TextGenerationPipeline for generating
- * text completions locally in the browser or Node.js. 
+ * text completions locally in the browser or Node.js.
  *
  * IMPORTANT: @huggingface/transformers is NOT a runtime dependency. Types are
  * imported using `import type` to avoid runtime dependencies.  Consumers must
- * have @huggingface/transformers installed and pass the required pipeline. 
+ * have @huggingface/transformers installed and pass the required pipeline.
  *
  * Streaming is native — TextStreamer is used internally.
  *
@@ -238,8 +271,8 @@ export interface NodeLlamaCppProviderAdapterOptions {
  */
 export interface HuggingFaceProviderAdapterOptions {
 	/**
-	 * Initialized TextGenerationPipeline from @huggingface/transformers. 
-	 * The consumer is responsible for creating and managing this pipeline. 
+	 * Initialized TextGenerationPipeline from @huggingface/transformers.
+	 * The consumer is responsible for creating and managing this pipeline.
 	 *
 	 * Create with: `await pipeline('text-generation', modelName)`
 	 */
@@ -321,7 +354,7 @@ export type VoyageEmbeddingModel =
 	| (string & {})
 
 /**
- * Ollama embedding adapter options. 
+ * Ollama embedding adapter options.
  *
  * Ollama supports local embedding generation for development/testing.
  */
@@ -345,11 +378,11 @@ export type OllamaEmbeddingModel =
 /**
  * node-llama-cpp embedding adapter options.
  *
- * Uses LlamaEmbeddingContext for generating embeddings locally. 
+ * Uses LlamaEmbeddingContext for generating embeddings locally.
  *
  * IMPORTANT: node-llama-cpp is NOT a runtime dependency. Types are imported
  * using `import type` to avoid runtime dependencies.  Consumers must have
- * node-llama-cpp installed and pass the required instances. 
+ * node-llama-cpp installed and pass the required instances.
  *
  * @example
  * ```ts
@@ -417,7 +450,7 @@ export interface HuggingFaceEmbeddingAdapterOptions {
 	/** Embedding dimensions (required for metadata) */
 	readonly dimensions: number
 	/**
-	 * Pooling strategy for embeddings. 
+	 * Pooling strategy for embeddings.
 	 * - 'mean': Mean pooling (recommended for most models)
 	 * - 'cls':  Use CLS token embedding
 	 * - 'none': No pooling, returns full sequence
@@ -473,7 +506,7 @@ export interface ExponentialRetryAdapterOptions {
 }
 
 /**
- * Linear retry adapter options. 
+ * Linear retry adapter options.
  * Creates a RetryAdapterInterface with fixed delays.
  */
 export interface LinearRetryAdapterOptions {
@@ -489,7 +522,7 @@ export interface LinearRetryAdapterOptions {
 
 /**
  * Token bucket rate limit adapter options.
- * Creates a RateLimitAdapterInterface using token bucket algorithm. 
+ * Creates a RateLimitAdapterInterface using token bucket algorithm.
  */
 export interface TokenBucketRateLimitAdapterOptions {
 	/** Maximum requests per minute (default: 60) */
@@ -502,7 +535,7 @@ export interface TokenBucketRateLimitAdapterOptions {
 
 /**
  * Sliding window rate limit adapter options.
- * Creates a RateLimitAdapterInterface using sliding window algorithm. 
+ * Creates a RateLimitAdapterInterface using sliding window algorithm.
  */
 export interface SlidingWindowRateLimitAdapterOptions {
 	/** Maximum requests per minute (default: 60) */
@@ -516,8 +549,8 @@ export interface SlidingWindowRateLimitAdapterOptions {
 // ============================================================================
 
 /**
- * LRU cache adapter options. 
- * Creates an EmbeddingCacheAdapterInterface with LRU eviction. 
+ * LRU cache adapter options.
+ * Creates an EmbeddingCacheAdapterInterface with LRU eviction.
  */
 export interface LRUCacheAdapterOptions {
 	/** Maximum number of entries (default: 1000) */
@@ -529,7 +562,7 @@ export interface LRUCacheAdapterOptions {
 }
 
 /**
- * TTL cache adapter options. 
+ * TTL cache adapter options.
  * Creates an EmbeddingCacheAdapterInterface with TTL-only expiration.
  */
 export interface TTLCacheAdapterOptions {
@@ -539,7 +572,7 @@ export interface TTLCacheAdapterOptions {
 
 /**
  * IndexedDB cache adapter options.
- * Creates a persistent EmbeddingCacheAdapterInterface using IndexedDB. 
+ * Creates a persistent EmbeddingCacheAdapterInterface using IndexedDB.
  */
 export interface IndexedDBCacheAdapterOptions {
 	/** Database access interface */
@@ -564,7 +597,7 @@ export interface BatchAdapterOptions {
 }
 
 /**
- * Cohere reranker adapter options. 
+ * Cohere reranker adapter options.
  * Creates a RerankerAdapterInterface using Cohere API.
  */
 export interface CohereRerankerAdapterOptions {
@@ -577,7 +610,7 @@ export interface CohereRerankerAdapterOptions {
 }
 
 /**
- * Cross-encoder reranker adapter options. 
+ * Cross-encoder reranker adapter options.
  * Creates a RerankerAdapterInterface using a local cross-encoder model.
  */
 export interface CrossEncoderRerankerAdapterOptions {
@@ -688,7 +721,7 @@ export interface PriorityAdapterOptions {
 // ============================================================================
 
 /**
- * Minimal interface for node-llama-cpp LlamaContext. 
+ * Minimal interface for node-llama-cpp LlamaContext.
  * This allows consumers to pass their own context without importing
  * node-llama-cpp at runtime.
  */
@@ -767,7 +800,7 @@ export interface NodeLlamaCppLlamaText {
 }
 
 /**
- * Minimal interface for node-llama-cpp ChatHistoryItem. 
+ * Minimal interface for node-llama-cpp ChatHistoryItem.
  */
 export type NodeLlamaCppChatHistoryItem =
 	| { readonly type: 'system'; readonly text: string }
@@ -788,7 +821,7 @@ export interface NodeLlamaCppEvaluateOptions {
 }
 
 /**
- * Minimal interface for HuggingFace FeatureExtractionPipeline. 
+ * Minimal interface for HuggingFace FeatureExtractionPipeline.
  * This allows consumers to pass their own pipeline without importing
  * @huggingface/transformers at runtime.
  */
@@ -818,7 +851,7 @@ export interface HuggingFaceFeatureExtractionOptions {
 }
 
 /**
- * Minimal interface for HuggingFace TextGenerationPipeline. 
+ * Minimal interface for HuggingFace TextGenerationPipeline.
  * This allows consumers to pass their own pipeline without importing
  * @huggingface/transformers at runtime.
  */
@@ -834,8 +867,8 @@ export interface HuggingFaceTextGenerationPipeline {
 		options?: HuggingFaceTextGenerationOptions
 	): Promise<HuggingFaceTextGenerationOutput | readonly HuggingFaceTextGenerationOutput[]>
 	/**
-	 * The underlying model for direct generation with streaming. 
-	 * This is exposed by the Pipeline class. 
+	 * The underlying model for direct generation with streaming.
+	 * This is exposed by the Pipeline class.
 	 */
 	readonly model?:  HuggingFacePreTrainedModel
 	/**
@@ -900,7 +933,7 @@ export interface HuggingFaceTensor {
 }
 
 /**
- * Minimal interface for HuggingFace PreTrainedModel. 
+ * Minimal interface for HuggingFace PreTrainedModel.
  * Used for accessing the model's generate method with streaming support.
  */
 export interface HuggingFacePreTrainedModel {
@@ -913,8 +946,8 @@ export interface HuggingFacePreTrainedModel {
 }
 
 /**
- * Options for the model's generate method. 
- * Includes streamer for token-by-token output. 
+ * Options for the model's generate method.
+ * Includes streamer for token-by-token output.
  */
 export interface HuggingFaceGenerateOptions {
 	/** Input tokens as a tensor */
@@ -926,7 +959,7 @@ export interface HuggingFaceGenerateOptions {
 }
 
 /**
- * Generation configuration for HuggingFace models. 
+ * Generation configuration for HuggingFace models.
  */
 export interface HuggingFaceGenerationConfig {
 	/** Maximum number of new tokens to generate */
@@ -1234,12 +1267,39 @@ export interface SSEParserInterface {
 	reset(): void
 }
 
+/**
+ * SSE parser adapter interface.
+ * Provides configurable SSE parsing for provider adapters.
+ * Follows the same pattern as StreamerAdapterInterface:
+ * - Default implementation provided internally
+ * - Optional custom adapter via options
+ * - Not exposed in public API (internal implementation detail)
+ */
+export interface SSEParserAdapterInterface {
+	/** Create a new parser instance with the given options */
+	createParser(options: SSEParserOptions): SSEParserInterface
+}
+
+/**
+ * SSE parser adapter options.
+ * Configuration for custom SSE parser behavior.
+ */
+export interface SSEParserAdapterOptions {
+	/** Custom line delimiter (default: '\n') */
+	readonly lineDelimiter?: string
+	/** Custom event delimiter (default: '\n\n') */
+	readonly eventDelimiter?: string
+}
+
 // ============================================================================
 // Factory Function Types
 // ============================================================================
 
 /** Factory function for streamer adapter */
 export type CreateStreamerAdapter = () => StreamerAdapterInterface
+
+/** Factory function for SSE parser adapter (internal, not exported from index.ts) */
+export type CreateSSEParser = (options?: SSEParserAdapterOptions) => SSEParserAdapterInterface
 
 /** Factory function for OpenAI provider adapter */
 export type CreateOpenAIProviderAdapter = (

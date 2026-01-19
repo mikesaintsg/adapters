@@ -168,7 +168,7 @@ const engine = createEngine(provider) // provider:  ProviderAdapterInterface
 |----------|---------|------------|----------|
 | **Provider** | LLM text generation (streaming) | `ProviderAdapterInterface` | OpenAI, Anthropic, Ollama |
 | **Embedding** | Vector generation | `EmbeddingAdapterInterface` | OpenAI, Voyage, HuggingFace |
-| **Streamer** | Token emission | `StreamerAdapterInterface` | Default streamer |
+| **Streaming** | Token emission and SSE parsing | `StreamerAdapterInterface`, `SSEParserAdapterInterface` | Default streamer, SSE parser |
 | **Policy** | Request behavior | `RetryAdapterInterface`, `RateLimitAdapterInterface` | Exponential retry, Token bucket |
 | **Enhancement** | Added capabilities | `EmbeddingCacheAdapterInterface`, `BatchAdapterInterface`, `RerankerAdapterInterface` | LRU cache, Cohere reranker |
 | **Transform** | Format conversion | `ToolFormatAdapterInterface`, `SimilarityAdapterInterface` | OpenAI tools, Cosine similarity |
@@ -215,16 +215,31 @@ All provider adapters stream by default.  Streaming is not opt-in — it is the 
 │  │  for await (const token of stream) { ... }                │ │
 │  │  stream. onToken((token) => { ... })                       │ │
 │  │  stream.result() → Promise<GenerationResult>              │ │
-│  └────────────────────────────────────────────────────────��──┘ │
+│  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Key principles:**
 
 1. **SSE parsing is internal** — Each provider adapter handles its own SSE format
-2. **Default streamer provided** — `createStreamerAdapter()` is used internally by all providers
-3. **Custom streamer optional** — Pass `streamer` option to use your own implementation
-4. **No streaming flags** — No `stream:  true`, no `supportsStreaming()` checks
+2. **Default SSE parser provided** — `createSSEParser()` is used internally by all providers
+3. **Custom SSE parser optional** — Pass `sseParser` option to use your own implementation
+4. **Default streamer provided** — `createStreamerAdapter()` is used internally by all providers
+5. **Custom streamer optional** — Pass `streamer` option to use your own implementation
+6. **No streaming flags** — No `stream:  true`, no `supportsStreaming()` checks
+
+### Internal Utilities
+
+The following utilities are used internally by provider adapters and are NOT part of the public API:
+
+| Utility | Purpose | Factory |
+|---------|---------|---------|
+| SSE Parser | Parse Server-Sent Events from streaming responses | `createSSEParser()` |
+
+Both SSE Parser and Streamer follow the same pattern:
+- Default implementation provided internally
+- Optional custom adapter via options (`sseParser`, `streamer`)
+- No boolean flags, no opt-in
 
 ### Opt-In Design
 
@@ -1748,6 +1763,7 @@ interface OpenAIProviderAdapterOptions {
 	readonly organization?: string
 	readonly defaultOptions?: GenerationDefaults
 	readonly streamer?: StreamerAdapterInterface
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 interface AnthropicProviderAdapterOptions {
@@ -1756,6 +1772,7 @@ interface AnthropicProviderAdapterOptions {
 	readonly baseURL?:  string
 	readonly defaultOptions?: GenerationDefaults
 	readonly streamer?: StreamerAdapterInterface
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 interface OllamaProviderAdapterOptions {
@@ -1765,6 +1782,7 @@ interface OllamaProviderAdapterOptions {
 	readonly timeout?: number
 	readonly defaultOptions?: GenerationDefaults
 	readonly streamer?: StreamerAdapterInterface
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 interface NodeLlamaCppProviderAdapterOptions {

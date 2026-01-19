@@ -1,0 +1,561 @@
+/**
+ * Ollama Provider Adapter
+ *
+ * Implements ProviderAdapterInterface for local Ollama models.
+ * Uses NDJSON streaming (newline-delimited JSON) instead of SSE.
+ */
+
+import type {
+	ProviderAdapterInterface,
+	StreamHandleInterface,
+	GenerationOptions,
+	GenerationResult,
+	Message,
+	ProviderCapabilities,
+	FinishReason,
+	UsageStats,
+	ToolCall,
+} from '@mikesaintsg/core'
+
+import type {
+	OllamaProviderAdapterOptions,
+	StreamerAdapterInterface,
+	OllamaChatStreamChunk,
+} from '../../types.js'
+
+import { createStreamerAdapter } from '../streaming/Streamer.js'
+import { createAdapterError } from '../../helpers.js'
+import {
+	DEFAULT_OLLAMA_BASE_URL,
+	DEFAULT_TIMEOUT_MS,
+} from '../../constants.js'
+
+/**
+ * Ollama provider implementation.
+ * Streams responses using NDJSON format.
+ */
+class OllamaProvider implements ProviderAdapterInterface {
+	readonly #id: string
+	readonly #model: string
+	readonly #baseURL: string
+	readonly #keepAlive: boolean | string
+	readonly #timeout: number
+	readonly #streamer: StreamerAdapterInterface
+
+	constructor(options: OllamaProviderAdapterOptions) {
+		this.#id = crypto.randomUUID()
+		this.#model = options.model
+		this.#baseURL = options.baseURL ?? DEFAULT_OLLAMA_BASE_URL
+		this.#keepAlive = options.keepAlive ?? true
+		this.#timeout = options.timeout ?? DEFAULT_TIMEOUT_MS
+		this.#streamer = options.streamer ?? createStreamerAdapter()
+	}
+
+	getId(): string {
+		return this.#id
+	}
+
+	generate(
+		messages: readonly Message[],
+		options: GenerationOptions,
+	): StreamHandleInterface {
+		const abortController = new AbortController()
+		const requestId = crypto.randomUUID()
+
+		// Create stream handle
+		const handle = new OllamaStreamHandle(
+			requestId,
+			abortController,
+			this.#streamer,
+		)
+
+		// Start async streaming
+		void this.#executeGeneration(messages, options, handle, abortController.signal)
+
+		return handle
+	}
+
+	supportsTools(): boolean {
+		return true
+	}
+
+	supportsStreaming(): boolean {
+		return true
+	}
+
+	getCapabilities(): ProviderCapabilities {
+		return {
+			supportsTools: true,
+			supportsStreaming: true,
+			supportsVision: this.#model.includes('llava') || this.#model.includes('vision'),
+			supportsFunctions: true,
+			models: [this.#model],
+		}
+	}
+
+	async #executeGeneration(
+		messages: readonly Message[],
+		options: GenerationOptions,
+		handle: OllamaStreamHandle,
+		signal: AbortSignal,
+	): Promise<void> {
+		try {
+			const response = await this.#fetchStream(messages, options, signal)
+
+			if (!response.ok) {
+				const error = await this.#handleErrorResponse(response)
+				handle.setError(error)
+				return
+			}
+
+			await this.#processStream(response, handle)
+		} catch (error) {
+			if (signal.aborted) {
+				handle.setAborted()
+			} else {
+				const mappedError = this.#mapNetworkError(error instanceof Error ? error : new Error(String(error)))
+				handle.setError(mappedError)
+			}
+		}
+	}
+
+	async #fetchStream(
+		messages: readonly Message[],
+		options: GenerationOptions,
+		signal: AbortSignal,
+	): Promise<Response> {
+		const timeout = options.timeout?.requestMs ?? this.#timeout
+		const timeoutId = setTimeout(() => signal.dispatchEvent(new Event('abort')), timeout)
+
+		try {
+			const body = this.#buildRequestBody(messages, options)
+
+			const response = await fetch(`${this.#baseURL}/api/chat`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(body),
+				signal,
+			})
+
+			clearTimeout(timeoutId)
+			return response
+		} catch (error) {
+			clearTimeout(timeoutId)
+			throw error
+		}
+	}
+
+	#buildRequestBody(
+		messages: readonly Message[],
+		options: GenerationOptions,
+	): Record<string, unknown> {
+		const body: Record<string, unknown> = {
+			model: this.#model,
+			messages: this.#formatMessages(messages),
+			stream: true,
+			keep_alive: this.#keepAlive,
+		}
+
+		const modelOptions: Record<string, unknown> = {}
+
+		if (options.temperature !== undefined) {
+			modelOptions.temperature = options.temperature
+		}
+
+		if (options.topP !== undefined) {
+			modelOptions.top_p = options.topP
+		}
+
+		if (options.maxTokens !== undefined) {
+			modelOptions.num_predict = options.maxTokens
+		}
+
+		if (options.stop !== undefined) {
+			modelOptions.stop = options.stop
+		}
+
+		if (Object.keys(modelOptions).length > 0) {
+			body.options = modelOptions
+		}
+
+		if (options.tools !== undefined && options.tools.length > 0) {
+			body.tools = this.#formatTools(options.tools)
+		}
+
+		return body
+	}
+
+	#formatMessages(messages: readonly Message[]): readonly Record<string, unknown>[] {
+		return messages.map((msg) => {
+			if (typeof msg.content === 'string') {
+				return { role: msg.role, content: msg.content }
+			}
+
+			// Handle tool results
+			if (typeof msg.content === 'object' && 'type' in msg.content && msg.content.type === 'tool_result') {
+				const toolResult = msg.content as { result: unknown }
+				return {
+					role: 'tool',
+					content: JSON.stringify(toolResult.result),
+				}
+			}
+
+			// Fallback for any other content type
+			return { role: msg.role, content: JSON.stringify(msg.content) }
+		})
+	}
+
+	#formatTools(tools: readonly import('@mikesaintsg/core').ToolSchema[]): readonly Record<string, unknown>[] {
+		return tools.map((tool) => ({
+			type: 'function',
+			function: {
+				name: tool.name,
+				description: tool.description,
+				parameters: tool.parameters,
+			},
+		}))
+	}
+
+	async #processStream(
+		response: Response,
+		handle: OllamaStreamHandle,
+	): Promise<void> {
+		const reader = response.body?.getReader()
+		if (reader === undefined) {
+			handle.setError(createAdapterError('NETWORK_ERROR', 'No response body'))
+			return
+		}
+
+		const decoder = new TextDecoder()
+		let buffer = ''
+
+		try {
+			while (true) {
+				const { done, value } = await reader.read()
+				if (done) break
+
+				buffer += decoder.decode(value, { stream: true })
+
+				// Process complete lines (NDJSON format)
+				const lines = buffer.split('\n')
+				buffer = lines.pop() ?? ''
+
+				for (const line of lines) {
+					if (line.trim() === '') continue
+					this.#processLine(line, handle)
+				}
+			}
+
+			// Process any remaining buffer
+			if (buffer.trim() !== '') {
+				this.#processLine(buffer, handle)
+			}
+
+			handle.complete()
+		} catch (error) {
+			if (error instanceof Error && error.name === 'AbortError') {
+				handle.setAborted()
+			} else {
+				handle.setError(error instanceof Error ? error : new Error(String(error)))
+			}
+		} finally {
+			reader.releaseLock()
+		}
+	}
+
+	#processLine(line: string, handle: OllamaStreamHandle): void {
+		try {
+			const chunk = JSON.parse(line) as OllamaChatStreamChunk
+
+			// Handle text content
+			if (chunk.message?.content !== undefined && chunk.message.content !== '') {
+				handle.appendText(chunk.message.content)
+				this.#streamer.emit(chunk.message.content)
+			}
+
+			// Handle tool calls
+			if (chunk.message?.tool_calls !== undefined) {
+				for (const toolCall of chunk.message.tool_calls) {
+					if (toolCall !== undefined) {
+						handle.addToolCall(
+							toolCall.id ?? crypto.randomUUID(),
+							toolCall.function.name,
+							toolCall.function.arguments,
+						)
+					}
+				}
+			}
+
+			// Handle completion
+			if (chunk.done) {
+				if (chunk.done_reason !== undefined) {
+					handle.setFinishReason(this.#mapFinishReason(chunk.done_reason))
+				}
+
+				// Extract usage stats
+				if (chunk.prompt_eval_count !== undefined || chunk.eval_count !== undefined) {
+					handle.setUsage({
+						promptTokens: chunk.prompt_eval_count ?? 0,
+						completionTokens: chunk.eval_count ?? 0,
+						totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
+					})
+				}
+			}
+		} catch {
+			// Skip malformed JSON lines
+		}
+	}
+
+	#mapFinishReason(reason: string): FinishReason {
+		switch (reason) {
+			case 'stop':
+				return 'stop'
+			case 'length':
+				return 'length'
+			case 'load':
+				return 'stop'
+			default:
+				return 'stop'
+		}
+	}
+
+	async #handleErrorResponse(response: Response): Promise<Error> {
+		let errorMessage = `Ollama API error: ${response.status}`
+
+		try {
+			const errorBody = await response.json() as { error?: string }
+			if (errorBody.error !== undefined) {
+				errorMessage = errorBody.error
+			}
+		} catch {
+			// Use status text if JSON parsing fails
+			errorMessage = response.statusText || errorMessage
+		}
+
+		switch (response.status) {
+			case 404:
+				return createAdapterError('MODEL_NOT_FOUND_ERROR', errorMessage)
+			case 400:
+				return createAdapterError('INVALID_REQUEST_ERROR', errorMessage)
+			default:
+				if (response.status >= 500) {
+					return createAdapterError('SERVICE_ERROR', errorMessage)
+				}
+				return createAdapterError('UNKNOWN_ERROR', errorMessage)
+		}
+	}
+
+	#mapNetworkError(error: Error): Error {
+		if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
+			return createAdapterError('TIMEOUT_ERROR', error.message)
+		}
+		if (error.name === 'AbortError') {
+			return createAdapterError('NETWORK_ERROR', 'Request aborted')
+		}
+		if (error.message.includes('ECONNREFUSED') || error.message.includes('Failed to fetch')) {
+			return createAdapterError('NETWORK_ERROR', 'Could not connect to Ollama. Is Ollama running?')
+		}
+		return createAdapterError('NETWORK_ERROR', error.message)
+	}
+}
+
+/**
+ * Stream handle for Ollama responses.
+ * Implements StreamHandleInterface for async iteration and result collection.
+ */
+class OllamaStreamHandle implements StreamHandleInterface {
+	readonly requestId: string
+	readonly #abortController: AbortController
+	readonly #streamer: StreamerAdapterInterface
+
+	#text = ''
+	#toolCalls: { id: string; name: string; arguments: Record<string, unknown> }[] = []
+	#finishReason: FinishReason = 'stop'
+	#usage: UsageStats | undefined
+	#aborted = false
+	#completed = false
+
+	#resultResolve: ((result: GenerationResult) => void) | undefined
+	#resultReject: ((error: Error) => void) | undefined
+	#resultPromise: Promise<GenerationResult>
+
+	#completeCallbacks = new Set<(result: GenerationResult) => void>()
+	#errorCallbacks = new Set<(error: Error) => void>()
+
+	constructor(
+		requestId: string,
+		abortController: AbortController,
+		streamer: StreamerAdapterInterface,
+	) {
+		this.requestId = requestId
+		this.#abortController = abortController
+		this.#streamer = streamer
+
+		this.#resultPromise = new Promise((resolve, reject) => {
+			this.#resultResolve = resolve
+			this.#resultReject = reject
+		})
+	}
+
+	// StreamHandleInterface implementation
+
+	abort(): void {
+		this.#abortController.abort()
+		this.setAborted()
+	}
+
+	onToken(callback: (token: string) => void): () => void {
+		return this.#streamer.onToken(callback)
+	}
+
+	onComplete(callback: (result: GenerationResult) => void): () => void {
+		this.#completeCallbacks.add(callback)
+		return () => this.#completeCallbacks.delete(callback)
+	}
+
+	onError(callback: (error: Error) => void): () => void {
+		this.#errorCallbacks.add(callback)
+		return () => this.#errorCallbacks.delete(callback)
+	}
+
+	result(): Promise<GenerationResult> {
+		return this.#resultPromise
+	}
+
+	[Symbol.asyncIterator](): AsyncIterator<string> {
+		const tokens: string[] = []
+		let resolveNext: ((value: IteratorResult<string>) => void) | undefined
+		let done = false
+
+		this.#streamer.onToken((token) => {
+			if (resolveNext !== undefined) {
+				resolveNext({ value: token, done: false })
+				resolveNext = undefined
+			} else {
+				tokens.push(token)
+			}
+		})
+
+		this.onComplete(() => {
+			done = true
+			if (resolveNext !== undefined) {
+				resolveNext({ value: undefined as unknown as string, done: true })
+			}
+		})
+
+		this.onError(() => {
+			done = true
+			if (resolveNext !== undefined) {
+				resolveNext({ value: undefined as unknown as string, done: true })
+			}
+		})
+
+		return {
+			next: () => {
+				if (tokens.length > 0) {
+					return Promise.resolve({ value: tokens.shift()!, done: false })
+				}
+				if (done) {
+					return Promise.resolve({ value: undefined as unknown as string, done: true })
+				}
+				return new Promise((resolve) => {
+					resolveNext = resolve
+				})
+			},
+		}
+	}
+
+	// Internal methods for provider
+
+	appendText(text: string): void {
+		this.#text += text
+	}
+
+	addToolCall(id: string, name: string, args: Record<string, unknown>): void {
+		this.#toolCalls.push({ id, name, arguments: args })
+	}
+
+	setFinishReason(reason: FinishReason): void {
+		this.#finishReason = reason
+	}
+
+	setUsage(usage: UsageStats): void {
+		this.#usage = usage
+	}
+
+	setError(error: Error): void {
+		this.#completed = true
+		this.#streamer.end()
+		this.#resultReject?.(error)
+		for (const callback of this.#errorCallbacks) {
+			callback(error)
+		}
+	}
+
+	setAborted(): void {
+		this.#aborted = true
+		this.#completed = true
+		this.#streamer.end()
+		const result = this.#buildResult()
+		this.#resultResolve?.(result)
+		for (const callback of this.#completeCallbacks) {
+			callback(result)
+		}
+	}
+
+	complete(): void {
+		if (this.#completed) return
+		this.#completed = true
+		this.#streamer.end()
+		const result = this.#buildResult()
+		this.#resultResolve?.(result)
+		for (const callback of this.#completeCallbacks) {
+			callback(result)
+		}
+	}
+
+	#buildResult(): GenerationResult {
+		const toolCalls: ToolCall[] = this.#toolCalls.map((tc) => ({
+			id: tc.id,
+			name: tc.name,
+			arguments: tc.arguments,
+		}))
+
+		return {
+			text: this.#text,
+			toolCalls,
+			finishReason: this.#finishReason,
+			...(this.#usage !== undefined && { usage: this.#usage }),
+			aborted: this.#aborted,
+		}
+	}
+}
+
+/**
+ * Creates an Ollama provider adapter.
+ *
+ * @param options - Ollama provider options
+ * @returns Provider adapter instance
+ *
+ * @example
+ * ```ts
+ * const provider = createOllamaProviderAdapter({
+ *   model: 'llama3',
+ * })
+ *
+ * const stream = provider.generate([
+ *   { role: 'user', content: 'Hello!' }
+ * ], {})
+ *
+ * for await (const token of stream) {
+ *   console.log(token)
+ * }
+ * ```
+ */
+export function createOllamaProviderAdapter(
+	options: OllamaProviderAdapterOptions,
+): ProviderAdapterInterface {
+	return new OllamaProvider(options)
+}
