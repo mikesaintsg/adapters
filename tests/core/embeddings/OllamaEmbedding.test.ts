@@ -16,7 +16,7 @@ describe('OllamaEmbedding', () => {
 	})
 
 	describe('embed', () => {
-		it('returns empty array for empty input', async () => {
+		it('returns empty array for empty input', async() => {
 			const adapter = createOllamaEmbeddingAdapter({
 				model: 'nomic-embed-text',
 			})
@@ -25,7 +25,7 @@ describe('OllamaEmbedding', () => {
 			expect(result).toEqual([])
 		})
 
-		it('embeds single text and returns Float32Array', async () => {
+		it('embeds single text and returns Float32Array', async() => {
 			const mockEmbedding = [0.1, 0.2, 0.3, 0.4, 0.5]
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
@@ -48,7 +48,7 @@ describe('OllamaEmbedding', () => {
 			expect(result[0]!.length).toBe(5)
 		})
 
-		it('embeds batch and returns all embeddings', async () => {
+		it('embeds batch and returns all embeddings', async() => {
 			const mockEmbeddings = [
 				[0.1, 0.2, 0.3],
 				[0.4, 0.5, 0.6],
@@ -76,7 +76,7 @@ describe('OllamaEmbedding', () => {
 			expect(result[2]!.length).toBe(3)
 		})
 
-		it('calls correct endpoint', async () => {
+		it('calls correct endpoint', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({
@@ -100,7 +100,7 @@ describe('OllamaEmbedding', () => {
 			)
 		})
 
-		it('throws MODEL_NOT_FOUND_ERROR for 404', async () => {
+		it('throws MODEL_NOT_FOUND_ERROR for 404', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({ error: 'model not found' }),
@@ -122,7 +122,7 @@ describe('OllamaEmbedding', () => {
 			}
 		})
 
-		it('throws INVALID_REQUEST_ERROR for 400', async () => {
+		it('throws INVALID_REQUEST_ERROR for 400', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({ error: 'invalid request' }),
@@ -144,7 +144,7 @@ describe('OllamaEmbedding', () => {
 			}
 		})
 
-		it('throws NETWORK_ERROR for network failure', async () => {
+		it('throws NETWORK_ERROR for network failure', async() => {
 			vi.mocked(fetch).mockRejectedValue(new Error('Network error'))
 
 			const adapter = createOllamaEmbeddingAdapter({

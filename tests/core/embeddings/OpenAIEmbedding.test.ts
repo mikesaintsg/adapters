@@ -16,7 +16,7 @@ describe('OpenAIEmbedding', () => {
 	})
 
 	describe('embed', () => {
-		it('returns empty array for empty input', async () => {
+		it('returns empty array for empty input', async() => {
 			const adapter = createOpenAIEmbeddingAdapter({
 				apiKey: 'test-key',
 			})
@@ -25,7 +25,7 @@ describe('OpenAIEmbedding', () => {
 			expect(result).toEqual([])
 		})
 
-		it('embeds single text and returns Float32Array', async () => {
+		it('embeds single text and returns Float32Array', async() => {
 			const mockEmbedding = [0.1, 0.2, 0.3, 0.4, 0.5]
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
@@ -50,7 +50,7 @@ describe('OpenAIEmbedding', () => {
 			expect(result[0]!.length).toBe(5)
 		})
 
-		it('embeds batch and preserves order', async () => {
+		it('embeds batch and preserves order', async() => {
 			const mockEmbeddings = [
 				[0.1, 0.2, 0.3],
 				[0.4, 0.5, 0.6],
@@ -85,7 +85,7 @@ describe('OpenAIEmbedding', () => {
 			expect(result[2]!.length).toBe(3)
 		})
 
-		it('includes dimensions in request when specified', async () => {
+		it('includes dimensions in request when specified', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({
@@ -114,7 +114,7 @@ describe('OpenAIEmbedding', () => {
 			)
 		})
 
-		it('throws AUTHENTICATION_ERROR for 401', async () => {
+		it('throws AUTHENTICATION_ERROR for 401', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({ error: { message: 'Invalid API key' } }),
@@ -138,7 +138,7 @@ describe('OpenAIEmbedding', () => {
 			}
 		})
 
-		it('throws RATE_LIMIT_ERROR for 429 with retryAfter', async () => {
+		it('throws RATE_LIMIT_ERROR for 429 with retryAfter', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({ error: { message: 'Rate limit exceeded' } }),
@@ -164,7 +164,7 @@ describe('OpenAIEmbedding', () => {
 			}
 		})
 
-		it('throws MODEL_NOT_FOUND_ERROR for 404', async () => {
+		it('throws MODEL_NOT_FOUND_ERROR for 404', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({ error: { message: 'Model not found' } }),
@@ -187,7 +187,7 @@ describe('OpenAIEmbedding', () => {
 			}
 		})
 
-		it('respects abort signal', async () => {
+		it('respects abort signal', async() => {
 			const controller = new AbortController()
 			controller.abort()
 

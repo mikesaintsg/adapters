@@ -16,7 +16,7 @@ describe('VoyageEmbedding', () => {
 	})
 
 	describe('embed', () => {
-		it('returns empty array for empty input', async () => {
+		it('returns empty array for empty input', async() => {
 			const adapter = createVoyageEmbeddingAdapter({
 				apiKey: 'test-key',
 			})
@@ -25,7 +25,7 @@ describe('VoyageEmbedding', () => {
 			expect(result).toEqual([])
 		})
 
-		it('embeds single text and returns Float32Array', async () => {
+		it('embeds single text and returns Float32Array', async() => {
 			const mockEmbedding = [0.1, 0.2, 0.3, 0.4, 0.5]
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
@@ -50,7 +50,7 @@ describe('VoyageEmbedding', () => {
 			expect(result[0]!.length).toBe(5)
 		})
 
-		it('embeds batch and preserves order', async () => {
+		it('embeds batch and preserves order', async() => {
 			const mockEmbeddings = [
 				[0.1, 0.2, 0.3],
 				[0.4, 0.5, 0.6],
@@ -84,7 +84,7 @@ describe('VoyageEmbedding', () => {
 			expect(result[2]!.length).toBe(3)
 		})
 
-		it('includes input_type in request when specified', async () => {
+		it('includes input_type in request when specified', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({
@@ -112,7 +112,7 @@ describe('VoyageEmbedding', () => {
 			)
 		})
 
-		it('throws AUTHENTICATION_ERROR for 401', async () => {
+		it('throws AUTHENTICATION_ERROR for 401', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({ detail: 'Invalid API key' }),
@@ -134,7 +134,7 @@ describe('VoyageEmbedding', () => {
 			}
 		})
 
-		it('throws RATE_LIMIT_ERROR for 429', async () => {
+		it('throws RATE_LIMIT_ERROR for 429', async() => {
 			vi.mocked(fetch).mockResolvedValue(
 				new Response(
 					JSON.stringify({ detail: 'Rate limit exceeded' }),

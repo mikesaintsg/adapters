@@ -1,7 +1,7 @@
 # Phase 4: Policy & Enhancement Adapters
 
-> **Status:** ⏳ Pending
-> **Started:** —
+> **Status:** ✅ Complete
+> **Started:** 2026-01-19
 > **Target:** —
 > **Depends on:** Phase 0 (Pre-Flight) ✅ Complete
 
@@ -12,10 +12,10 @@
 > **Purpose:** Quick orientation for models starting mid-project. 
 
 ```
-Current Deliverable: 4.1 Exponential Retry
-Checklist Progress:  0/48 items complete
-Last Completed: Phase 3 complete
-Next Task:  Implement exponential retry adapter
+Current Deliverable: Phase 4 Complete
+Checklist Progress:  All items complete
+Last Completed: All 10 adapters implemented with tests
+Next Task:  Begin Phase 5
 Blockers:  None
 ```
 
@@ -31,10 +31,10 @@ Implement all policy adapters (retry, rate limit) and enhancement adapters (cach
 
 | Metric          | Value     |
 |-----------------|-----------|
-| Deliverables    | 0/11      |
-| Checklist Items | 0/48      |
-| Tests Passing   | —         |
-| Quality Gates   | ⏳ Pending |
+| Deliverables    | 11/11     |
+| Checklist Items | All       |
+| Tests Passing   | 177       |
+| Quality Gates   | ✅ Pass    |
 
 ---
 
@@ -44,22 +44,22 @@ Implement all policy adapters (retry, rate limit) and enhancement adapters (cach
 
 | #   | Deliverable              | Status    | Assignee | Notes                    |
 |-----|--------------------------|-----------|----------|--------------------------|
-| 4.1 | Exponential Retry        | ⏳ Pending | —        | Backoff with jitter      |
-| 4.2 | Linear Retry             | ⏳ Pending | —        | Fixed delay              |
-| 4.3 | Token Bucket Rate Limit  | ⏳ Pending | —        | Token bucket algorithm   |
-| 4.4 | Sliding Window Rate Limit| ⏳ Pending | —        | Sliding window algorithm |
+| 4.1 | Exponential Retry        | ✅ Done    | —        | Backoff with jitter      |
+| 4.2 | Linear Retry             | ✅ Done    | —        | Fixed delay              |
+| 4.3 | Token Bucket Rate Limit  | ✅ Done    | —        | Token bucket algorithm   |
+| 4.4 | Sliding Window Rate Limit| ✅ Done    | —        | Sliding window algorithm |
 
 ### Enhancement Adapters
 
 | #   | Deliverable              | Status    | Assignee | Notes                    |
 |-----|--------------------------|-----------|----------|--------------------------|
-| 4.5 | LRU Cache                | ⏳ Pending | —        | In-memory with eviction  |
-| 4.6 | TTL Cache                | ⏳ Pending | —        | Time-based expiration    |
-| 4.7 | IndexedDB Cache          | ⏳ Pending | —        | Persistent browser cache |
-| 4.8 | Batch Adapter            | ⏳ Pending | —        | Request batching         |
-| 4.9 | Cohere Reranker          | ⏳ Pending | —        | API-based reranking      |
-| 4.10| Cross-Encoder Reranker   | ⏳ Pending | —        | Local model reranking    |
-| 4.11| Unit Tests               | ⏳ Pending | —        | All policy & enhancement |
+| 4.5 | LRU Cache                | ✅ Done    | —        | In-memory with eviction  |
+| 4.6 | TTL Cache                | ✅ Done    | —        | Time-based expiration    |
+| 4.7 | IndexedDB Cache          | ✅ Done    | —        | Persistent browser cache |
+| 4.8 | Batch Adapter            | ✅ Done    | —        | Request batching         |
+| 4.9 | Cohere Reranker          | ✅ Done    | —        | API-based reranking      |
+| 4.10| Cross-Encoder Reranker   | ✅ Done    | —        | Local model reranking    |
+| 4.11| Unit Tests               | ✅ Done    | —        | All policy & enhancement |
 
 **Status Legend:**
 - ✅ Done
@@ -512,12 +512,12 @@ npm test         # Unit tests
 
 **Current Status:**
 
-| Gate             | Last Run | Result |
-|------------------|----------|--------|
-| `npm run check`  | —        | ⏳      |
-| `npm run format` | —        | ⏳      |
-| `npm run build`  | —        | ⏳      |
-| `npm test`       | —        | ⏳      |
+| Gate             | Last Run   | Result |
+|------------------|------------|--------|
+| `npm run check`  | 2026-01-19 | ✅ Pass |
+| `npm run format` | 2026-01-19 | ✅ Pass |
+| `npm run build`  | 2026-01-19 | ✅ Pass |
+| `npm test`       | 2026-01-19 | ✅ Pass |
 
 ---
 
@@ -551,13 +551,13 @@ npm test         # Unit tests
 
 All of the following must be true:
 
-- [ ] All 10 adapters implemented
-- [ ] Retry adapters calculate delays correctly
-- [ ] Rate limit adapters throttle correctly
-- [ ] Cache adapters evict correctly
-- [ ] `npm run check` passes
-- [ ] `npm run format` passes
-- [ ] `npm run build` passes
-- [ ] `npm test` passes with ≥80% coverage
-- [ ] No `it.todo()` remaining
-- [ ] PLAN. md updated
+- [x] All 10 adapters implemented
+- [x] Retry adapters calculate delays correctly
+- [x] Rate limit adapters throttle correctly
+- [x] Cache adapters evict correctly
+- [x] `npm run check` passes
+- [x] `npm run format` passes
+- [x] `npm run build` passes
+- [x] `npm test` passes with ≥80% coverage
+- [x] No `it.todo()` remaining
+- [x] PLAN. md updated

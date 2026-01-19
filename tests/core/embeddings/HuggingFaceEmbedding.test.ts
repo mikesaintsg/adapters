@@ -23,7 +23,7 @@ describe('HuggingFaceEmbedding', () => {
 	}
 
 	describe('embed', () => {
-		it('returns empty array for empty input', async () => {
+		it('returns empty array for empty input', async() => {
 			const mockPipeline = createMockPipeline()
 			const adapter = createHuggingFaceEmbeddingAdapter({
 				pipeline: mockPipeline,
@@ -35,7 +35,7 @@ describe('HuggingFaceEmbedding', () => {
 			expect(result).toEqual([])
 		})
 
-		it('embeds single text and returns Float32Array', async () => {
+		it('embeds single text and returns Float32Array', async() => {
 			const mockEmbedding = [[0.1, 0.2, 0.3, 0.4, 0.5]]
 			const mockPipeline = createMockPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(createMockTensor(mockEmbedding))
@@ -53,7 +53,7 @@ describe('HuggingFaceEmbedding', () => {
 			expect(result[0]!.length).toBe(5)
 		})
 
-		it('embeds batch and returns all embeddings', async () => {
+		it('embeds batch and returns all embeddings', async() => {
 			const mockEmbeddings = [
 				[0.1, 0.2, 0.3],
 				[0.4, 0.5, 0.6],
@@ -76,7 +76,7 @@ describe('HuggingFaceEmbedding', () => {
 			expect(result[2]!.length).toBe(3)
 		})
 
-		it('passes pooling and normalize options to pipeline', async () => {
+		it('passes pooling and normalize options to pipeline', async() => {
 			const mockPipeline = createMockPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(createMockTensor([[0.1, 0.2, 0.3]]))
 
@@ -96,7 +96,7 @@ describe('HuggingFaceEmbedding', () => {
 			)
 		})
 
-		it('uses default pooling and normalize values', async () => {
+		it('uses default pooling and normalize values', async() => {
 			const mockPipeline = createMockPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(createMockTensor([[0.1, 0.2, 0.3]]))
 
@@ -114,7 +114,7 @@ describe('HuggingFaceEmbedding', () => {
 			)
 		})
 
-		it('disposes tensor after use', async () => {
+		it('disposes tensor after use', async() => {
 			const mockTensor = createMockTensor([[0.1, 0.2, 0.3]])
 			const mockPipeline = createMockPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(mockTensor)

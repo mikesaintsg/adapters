@@ -14,7 +14,7 @@ describe('NodeLlamaCppEmbedding', () => {
 	}
 
 	describe('embed', () => {
-		it('returns empty array for empty input', async () => {
+		it('returns empty array for empty input', async() => {
 			const mockContext = createMockEmbeddingContext()
 			const adapter = createNodeLlamaCppEmbeddingAdapter({
 				embeddingContext: mockContext,
@@ -24,7 +24,7 @@ describe('NodeLlamaCppEmbedding', () => {
 			expect(result).toEqual([])
 		})
 
-		it('embeds single text and returns Float32Array', async () => {
+		it('embeds single text and returns Float32Array', async() => {
 			const mockVector = [0.1, 0.2, 0.3, 0.4, 0.5]
 			const mockContext = createMockEmbeddingContext()
 			vi.mocked(mockContext.getEmbeddingFor).mockResolvedValue({
@@ -43,7 +43,7 @@ describe('NodeLlamaCppEmbedding', () => {
 			expect(mockContext.getEmbeddingFor).toHaveBeenCalledWith('Hello, world!')
 		})
 
-		it('embeds batch by processing one at a time', async () => {
+		it('embeds batch by processing one at a time', async() => {
 			const mockVectors = [
 				[0.1, 0.2, 0.3],
 				[0.4, 0.5, 0.6],
@@ -68,7 +68,7 @@ describe('NodeLlamaCppEmbedding', () => {
 			expect(mockContext.getEmbeddingFor).toHaveBeenCalledTimes(3)
 		})
 
-		it('respects abort signal', async () => {
+		it('respects abort signal', async() => {
 			const mockContext = createMockEmbeddingContext()
 			const controller = new AbortController()
 			controller.abort()
@@ -120,7 +120,7 @@ describe('NodeLlamaCppEmbedding', () => {
 			expect(metadata.dimensions).toBe(768)
 		})
 
-		it('auto-detects dimensions after first embed', async () => {
+		it('auto-detects dimensions after first embed', async() => {
 			const mockVector = [0.1, 0.2, 0.3, 0.4, 0.5]
 			const mockContext = createMockEmbeddingContext()
 			vi.mocked(mockContext.getEmbeddingFor).mockResolvedValue({

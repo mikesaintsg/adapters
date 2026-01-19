@@ -6,14 +6,6 @@
  */
 
 import type {
-	// Provider adapter interfaces - now exported from implementations
-	// Policy adapter interfaces
-	RetryAdapterInterface,
-	RateLimitAdapterInterface,
-	// Enhancement adapter interfaces
-	EmbeddingCacheAdapterInterface,
-	BatchAdapterInterface,
-	RerankerAdapterInterface,
 	// Transform adapter interfaces
 	ToolFormatAdapterInterface,
 	SimilarityAdapterInterface,
@@ -32,18 +24,6 @@ import type {
 } from '@mikesaintsg/core'
 
 import type {
-	// Policy options
-	ExponentialRetryAdapterOptions,
-	LinearRetryAdapterOptions,
-	TokenBucketRateLimitAdapterOptions,
-	SlidingWindowRateLimitAdapterOptions,
-	// Enhancement options
-	LRUCacheAdapterOptions,
-	TTLCacheAdapterOptions,
-	IndexedDBCacheAdapterOptions,
-	BatchAdapterOptions,
-	CohereRerankerAdapterOptions,
-	CrossEncoderRerankerAdapterOptions,
 	// Transform options
 	OpenAIToolFormatAdapterOptions,
 	AnthropicToolFormatAdapterOptions,
@@ -91,99 +71,23 @@ export { createHuggingFaceEmbeddingAdapter } from './core/embeddings/HuggingFace
 // Policy Adapter Factories
 // ============================================================================
 
-/**
- * Create an exponential retry adapter.
- */
-export function createExponentialRetryAdapter(
-	_options?: ExponentialRetryAdapterOptions,
-): RetryAdapterInterface {
-	throw new Error('Not implemented: createExponentialRetryAdapter')
-}
-
-/**
- * Create a linear retry adapter.
- */
-export function createLinearRetryAdapter(
-	_options?: LinearRetryAdapterOptions,
-): RetryAdapterInterface {
-	throw new Error('Not implemented: createLinearRetryAdapter')
-}
-
-/**
- * Create a token bucket rate limit adapter.
- */
-export function createTokenBucketRateLimitAdapter(
-	_options?: TokenBucketRateLimitAdapterOptions,
-): RateLimitAdapterInterface {
-	throw new Error('Not implemented: createTokenBucketRateLimitAdapter')
-}
-
-/**
- * Create a sliding window rate limit adapter.
- */
-export function createSlidingWindowRateLimitAdapter(
-	_options?: SlidingWindowRateLimitAdapterOptions,
-): RateLimitAdapterInterface {
-	throw new Error('Not implemented: createSlidingWindowRateLimitAdapter')
-}
+// Re-export from implementations
+export { createExponentialRetryAdapter } from './core/policy/ExponentialRetry.js'
+export { createLinearRetryAdapter } from './core/policy/LinearRetry.js'
+export { createTokenBucketRateLimitAdapter } from './core/policy/TokenBucketRateLimit.js'
+export { createSlidingWindowRateLimitAdapter } from './core/policy/SlidingWindowRateLimit.js'
 
 // ============================================================================
 // Enhancement Adapter Factories
 // ============================================================================
 
-/**
- * Create an LRU cache adapter for embeddings.
- */
-export function createLRUCacheAdapter(
-	_options?: LRUCacheAdapterOptions,
-): EmbeddingCacheAdapterInterface {
-	throw new Error('Not implemented: createLRUCacheAdapter')
-}
-
-/**
- * Create a TTL cache adapter for embeddings.
- */
-export function createTTLCacheAdapter(
-	_options?: TTLCacheAdapterOptions,
-): EmbeddingCacheAdapterInterface {
-	throw new Error('Not implemented: createTTLCacheAdapter')
-}
-
-/**
- * Create an IndexedDB cache adapter for embeddings.
- */
-export function createIndexedDBCacheAdapter(
-	_options: IndexedDBCacheAdapterOptions,
-): EmbeddingCacheAdapterInterface {
-	throw new Error('Not implemented: createIndexedDBCacheAdapter')
-}
-
-/**
- * Create a batch adapter for embedding requests.
- */
-export function createBatchAdapter(
-	_options?: BatchAdapterOptions,
-): BatchAdapterInterface {
-	throw new Error('Not implemented: createBatchAdapter')
-}
-
-/**
- * Create a Cohere reranker adapter.
- */
-export function createCohereRerankerAdapter(
-	_options: CohereRerankerAdapterOptions,
-): RerankerAdapterInterface {
-	throw new Error('Not implemented: createCohereRerankerAdapter')
-}
-
-/**
- * Create a cross-encoder reranker adapter.
- */
-export function createCrossEncoderRerankerAdapter(
-	_options: CrossEncoderRerankerAdapterOptions,
-): RerankerAdapterInterface {
-	throw new Error('Not implemented: createCrossEncoderRerankerAdapter')
-}
+// Re-export from implementations
+export { createLRUCacheAdapter } from './core/enhancement/LRUCache.js'
+export { createTTLCacheAdapter } from './core/enhancement/TTLCache.js'
+export { createIndexedDBCacheAdapter } from './core/enhancement/IndexedDBCache.js'
+export { createBatchAdapter } from './core/enhancement/Batch.js'
+export { createCohereRerankerAdapter } from './core/enhancement/CohereReranker.js'
+export { createCrossEncoderRerankerAdapter } from './core/enhancement/CrossEncoderReranker.js'
 
 // ============================================================================
 // Transform Adapter Factories

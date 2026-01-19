@@ -42,16 +42,16 @@ export const DEFAULT_COHERE_BASE_URL = 'https://api.cohere.ai/v1'
 // ============================================================================
 
 /** Default maximum retry attempts */
-export const DEFAULT_RETRY_MAX_ATTEMPTS = 3
+export const DEFAULT_MAX_RETRY_ATTEMPTS = 3
 
 /** Default initial delay in ms for exponential backoff */
-export const DEFAULT_RETRY_INITIAL_DELAY_MS = 1000
+export const DEFAULT_INITIAL_RETRY_DELAY_MS = 1000
 
 /** Default maximum delay in ms for exponential backoff */
-export const DEFAULT_RETRY_MAX_DELAY_MS = 30000
+export const DEFAULT_MAX_RETRY_DELAY_MS = 30000
 
 /** Default backoff multiplier for exponential retry */
-export const DEFAULT_RETRY_BACKOFF_MULTIPLIER = 2
+export const DEFAULT_BACKOFF_MULTIPLIER = 2
 
 /** Default linear retry delay in ms */
 export const DEFAULT_RETRY_LINEAR_DELAY_MS = 1000
@@ -61,13 +61,13 @@ export const DEFAULT_RETRY_LINEAR_DELAY_MS = 1000
 // ============================================================================
 
 /** Default requests per minute for rate limiting */
-export const DEFAULT_RATE_LIMIT_RPM = 60
+export const DEFAULT_REQUESTS_PER_MINUTE = 60
 
 /** Default maximum concurrent requests */
-export const DEFAULT_RATE_LIMIT_MAX_CONCURRENT = 10
+export const DEFAULT_MAX_CONCURRENT_REQUESTS = 10
 
 /** Default burst size for token bucket */
-export const DEFAULT_RATE_LIMIT_BURST_SIZE = 10
+export const DEFAULT_BURST_SIZE = 10
 
 /** Default sliding window size in ms */
 export const DEFAULT_RATE_LIMIT_WINDOW_MS = 60000
@@ -119,7 +119,7 @@ export const DEFAULT_OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
 export const DEFAULT_VOYAGE_EMBEDDING_MODEL = 'voyage-3'
 
 /** Default Cohere reranker model */
-export const DEFAULT_COHERE_RERANKER_MODEL = 'rerank-english-v3.0'
+export const DEFAULT_COHERE_RERANK_MODEL = 'rerank-english-v3.0'
 
 // ============================================================================
 // Persistence Defaults
@@ -132,7 +132,7 @@ export const DEFAULT_INDEXEDDB_DOCUMENTS_STORE = 'documents'
 export const DEFAULT_INDEXEDDB_METADATA_STORE = 'metadata'
 
 /** Default IndexedDB cache store name */
-export const DEFAULT_INDEXEDDB_CACHE_STORE = 'embedding_cache'
+export const DEFAULT_CACHE_STORE_NAME = 'embedding_cache'
 
 /** Default IndexedDB session database name */
 export const DEFAULT_INDEXEDDB_SESSION_DATABASE = 'mikesaintsg-sessions'
