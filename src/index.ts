@@ -155,9 +155,40 @@ export type {
 // ============================================================================
 
 export {
+	// Error helpers
 	isAdapterError,
 	createAdapterError,
+	mapNetworkError,
+	mapHttpStatusToErrorCode,
+
+	// Type guards
 	narrowUnknown,
+	isObject,
+	isNonEmptyString,
+	isPositiveNumber,
+	isNonNegativeInteger,
+
+	// HTTP helpers
+	parseRetryAfter,
+
+	// Vector helpers
+	validateVectorDimensions,
+	isEmptyVector,
+	isZeroVector,
+	vectorNorm,
+	dotProduct,
+
+	// JSON helpers
+	safeJsonParse,
+	safeJsonStringify,
+
+	// Timing helpers
+	delay,
+	exponentialDelay,
+
+	// Validation helpers
+	assert,
+	clamp,
 } from './helpers.js'
 
 export type { AdapterError } from './helpers.js'
