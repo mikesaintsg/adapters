@@ -81,6 +81,16 @@ export const NODE_LLAMA_CPP_DEFAULT_MODEL_NAME = 'node-llama-cpp'
 export const NODE_LLAMA_CPP_DEFAULT_EMBEDDING_MODEL_NAME = 'node-llama-cpp-embedding'
 
 // ============================================================================
+// HuggingFace Transformers Constants (Browser/Node.js)
+// ============================================================================
+
+/** Default pooling strategy for HuggingFace embeddings */
+export const HUGGINGFACE_DEFAULT_POOLING = 'mean'
+
+/** Default normalization setting for HuggingFace embeddings */
+export const HUGGINGFACE_DEFAULT_NORMALIZE = true
+
+// ============================================================================
 // Rate Limiting Constants
 // ============================================================================
 

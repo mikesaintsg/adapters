@@ -399,6 +399,137 @@ export interface NodeLlamaCppEvaluateOptions {
 }
 
 // ============================================================================
+// HuggingFace Transformers Adapter Options (Browser/Node.js)
+// ============================================================================
+
+/**
+ * HuggingFace Transformers embedding adapter options.
+ *
+ * Uses @huggingface/transformers FeatureExtractionPipeline for generating
+ * embeddings locally in the browser or Node.js.
+ *
+ * IMPORTANT: @huggingface/transformers is a devDependency only. Types are imported
+ * using `import type` to avoid runtime dependencies. Consumers must have
+ * @huggingface/transformers installed and pass the required pipeline instance.
+ *
+ * @see https://huggingface.co/docs/transformers.js
+ *
+ * @example
+ * ```ts
+ * import { pipeline } from '@huggingface/transformers'
+ * import { createHuggingFaceEmbeddingAdapter } from '@mikesaintsg/adapters'
+ *
+ * // Consumer initializes the pipeline
+ * const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
+ *
+ * // Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+ * const embedding = createHuggingFaceEmbeddingAdapter({
+ *   pipeline: extractor,
+ *   modelName: 'all-MiniLM-L6-v2',
+ *   dimensions: 384,
+ * })
+ *
+ * const embeddings = await embedding.embed(['Hello, world!'])
+ * ```
+ */
+export interface HuggingFaceEmbeddingAdapterOptions {
+	/**
+	 * Initialized FeatureExtractionPipeline from @huggingface/transformers.
+	 * The consumer is responsible for creating and managing this pipeline.
+	 *
+	 * Create with: `await pipeline('feature-extraction', modelName)`
+	 */
+	readonly pipeline: HuggingFaceFeatureExtractionPipeline
+	/** Model name for identification (required for metadata) */
+	readonly modelName: string
+	/** Embedding dimensions (required for metadata) */
+	readonly dimensions: number
+	/**
+	 * Pooling strategy for embeddings.
+	 * - 'mean': Mean pooling (recommended for most models)
+	 * - 'cls': Use CLS token embedding
+	 * - 'none': No pooling, returns full sequence
+	 * @default 'mean'
+	 */
+	readonly pooling?: HuggingFacePoolingStrategy
+	/**
+	 * Whether to normalize embeddings to unit length.
+	 * Recommended for similarity search.
+	 * @default true
+	 */
+	readonly normalize?: boolean
+}
+
+/** Pooling strategy for HuggingFace embeddings */
+export type HuggingFacePoolingStrategy = 'none' | 'mean' | 'cls'
+
+/**
+ * Minimal interface for HuggingFace FeatureExtractionPipeline.
+ * This allows consumers to pass their own pipeline without importing
+ * @huggingface/transformers at runtime.
+ */
+export interface HuggingFaceFeatureExtractionPipeline {
+	/**
+	 * Extract features from text(s).
+	 * @param texts - One or more texts to embed
+	 * @param options - Pipeline options for pooling and normalization
+	 * @returns A tensor containing the embeddings
+	 */
+	(
+		texts: string | readonly string[],
+		options?: HuggingFaceFeatureExtractionOptions,
+	): Promise<HuggingFaceTensor>
+	/**
+	 * Dispose of the pipeline resources.
+	 */
+	dispose?(): Promise<void>
+}
+
+/** Options for HuggingFace feature extraction */
+export interface HuggingFaceFeatureExtractionOptions {
+	/** Pooling strategy */
+	readonly pooling?: HuggingFacePoolingStrategy
+	/** Whether to normalize to unit length */
+	readonly normalize?: boolean
+}
+
+/**
+ * Minimal interface for HuggingFace Tensor.
+ * Represents the output from feature extraction.
+ */
+export interface HuggingFaceTensor {
+	/** The tensor data as a typed array */
+	readonly data: Float32Array | Float64Array | Int32Array | BigInt64Array | Uint8Array
+	/** The dimensions of the tensor [batch_size, sequence_length, hidden_size] or [batch_size, hidden_size] */
+	readonly dims: readonly number[]
+	/** The data type of the tensor */
+	readonly type: string
+	/** The number of elements in the tensor */
+	readonly size: number
+	/**
+	 * Convert tensor data to a n-dimensional JS list.
+	 * @returns Nested array representation of the tensor
+	 */
+	tolist(): unknown[]
+	/**
+	 * Dispose of tensor resources.
+	 */
+	dispose?(): void
+}
+
+/** Common HuggingFace embedding models */
+export type HuggingFaceEmbeddingModel =
+	| 'Xenova/all-MiniLM-L6-v2'
+	| 'Xenova/all-mpnet-base-v2'
+	| 'Xenova/paraphrase-MiniLM-L6-v2'
+	| 'Xenova/bert-base-uncased'
+	| 'Xenova/multilingual-e5-small'
+	| 'Xenova/bge-small-en-v1.5'
+	| 'Xenova/gte-small'
+	| 'sentence-transformers/all-MiniLM-L6-v2'
+	| (string & {})
+
+// ============================================================================
 // Wrapper Adapter Options
 // ============================================================================
 
@@ -822,6 +953,11 @@ export type CreateNodeLlamaCppProviderAdapter = (
 /** Factory function for node-llama-cpp embedding adapter */
 export type CreateNodeLlamaCppEmbeddingAdapter = (
 	options: NodeLlamaCppEmbeddingAdapterOptions
+) => EmbeddingAdapterInterface
+
+/** Factory function for HuggingFace embedding adapter */
+export type CreateHuggingFaceEmbeddingAdapter = (
+	options: HuggingFaceEmbeddingAdapterOptions
 ) => EmbeddingAdapterInterface
 
 // ============================================================================

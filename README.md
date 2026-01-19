@@ -11,7 +11,7 @@
 ## Features
 
 - ✅ **Provider Adapters** — OpenAI, Anthropic, Ollama, and node-llama-cpp for LLM chat completions
-- ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, and node-llama-cpp for text embeddings
+- ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, node-llama-cpp, and HuggingFace Transformers for text embeddings
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
 - ✅ **Policy Adapters** — Retry and rate limiting strategies
@@ -99,14 +99,15 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Source Adapters — Embeddings
 
-| Function                             | Description                           |
-|--------------------------------------|---------------------------------------|
-| `createOpenAIEmbeddingAdapter`       | OpenAI text embeddings                |
-| `createVoyageEmbeddingAdapter`       | Voyage AI embeddings (Anthropic rec.) |
-| `createOllamaEmbeddingAdapter`       | Ollama local embeddings               |
-| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp local embeddings       |
-| `createBatchedEmbeddingAdapter`      | Automatic request batching            |
-| `createCachedEmbeddingAdapter`       | In-memory embedding cache             |
+| Function                              | Description                              |
+|---------------------------------------|------------------------------------------|
+| `createOpenAIEmbeddingAdapter`        | OpenAI text embeddings                   |
+| `createVoyageEmbeddingAdapter`        | Voyage AI embeddings (Anthropic rec.)    |
+| `createOllamaEmbeddingAdapter`        | Ollama local embeddings                  |
+| `createNodeLlamaCppEmbeddingAdapter`  | node-llama-cpp local embeddings          |
+| `createHuggingFaceEmbeddingAdapter`   | HuggingFace Transformers local embeddings|
+| `createBatchedEmbeddingAdapter`       | Automatic request batching               |
+| `createCachedEmbeddingAdapter`        | In-memory embedding cache                |
 
 ### Policy Adapters
 
@@ -233,6 +234,29 @@ const embeddings = await embedding.embed(['Hello, world!'])
 ```
 
 **Note:** node-llama-cpp is **not** a runtime dependency of @mikesaintsg/adapters. Consumers must install node-llama-cpp themselves and pass initialized context objects. This allows consumers who don't use node-llama-cpp to avoid installing it.
+
+### HuggingFace Transformers Embedding (Browser/Node.js)
+
+```ts
+import { pipeline } from '@huggingface/transformers'
+import { createHuggingFaceEmbeddingAdapter } from '@mikesaintsg/adapters'
+
+// Consumer initializes the pipeline (downloads model on first use)
+const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
+
+// Pass to adapter - no @huggingface/transformers runtime dependency in @mikesaintsg/adapters
+const embedding = createHuggingFaceEmbeddingAdapter({
+  pipeline: extractor,
+  modelName: 'all-MiniLM-L6-v2',
+  dimensions: 384,
+  pooling: 'mean',      // Optional: 'mean' | 'cls' | 'none' (default: 'mean')
+  normalize: true,       // Optional: normalize to unit length (default: true)
+})
+
+const embeddings = await embedding.embed(['Hello, world!'])
+```
+
+**Note:** @huggingface/transformers is **not** a runtime dependency of @mikesaintsg/adapters. Consumers must install @huggingface/transformers themselves and pass an initialized pipeline. This allows consumers who don't use HuggingFace to avoid installing it.
 
 ### Policy Adapters (Retry & Rate Limiting)
 
