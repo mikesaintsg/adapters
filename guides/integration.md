@@ -1743,7 +1743,7 @@ test('chat interface', async ({ page }) => {
 
 ## Summary
 
-This integration guide demonstrates how all six packages work together: 
+This integration guide demonstrates how packages in the ecosystem work together:
 
 1. **Core** provides shared types and interfaces (including policy and enhancement adapter interfaces)
 2. **Adapters** implements all adapter categories (source, persistence, transform, policy, enhancement)
@@ -1751,6 +1751,8 @@ This integration guide demonstrates how all six packages work together:
 4. **VectorStore** provides RAG capabilities
 5. **ContextProtocol** manages tool calling
 6. **ContextBuilder** assembles and budgets context
+7. **Rater** provides factor-based rate calculations with conditions, lookups, and aggregation
+8. **ActionLoop** provides predictive workflow guidance with learned transitions
 
 The key patterns are: 
 
@@ -1764,4 +1766,294 @@ The key patterns are:
 - **Explicit data flow** — No hidden state or magic
 - **Graceful degradation** — Handle failures at each layer
 
-By following these patterns, you can build robust, maintainable AI applications that are easy to test, extend, and debug. 
+By following these patterns, you can build robust, maintainable AI applications that are easy to test, extend, and debug.
+
+---
+
+## Appendix: Rater Integration
+
+The `@mikesaintsg/rater` package provides factor-based rate calculations for dynamic pricing, insurance premiums, risk scoring, and similar use cases.
+
+### Integration with Storage Packages
+
+```typescript
+import { createRatingEngine } from '@mikesaintsg/rater'
+import { createStorage } from '@mikesaintsg/storage'
+import { createDatabase } from '@mikesaintsg/indexeddb'
+import type { RateFactorGroup, RatingResult } from '@mikesaintsg/rater'
+
+// Store rating configurations
+const storage = createStorage<{ groups: readonly RateFactorGroup[]; baseRate: number }>('localStorage', {
+	prefix: 'rater:',
+})
+
+// Load saved configuration
+const config = await storage.get('config')
+const engine = createRatingEngine({ baseRate: config?.baseRate ?? 100 })
+
+// Store rating history in IndexedDB
+interface RatingRecord {
+	id: string
+	subjectId: string
+	finalRate: number
+	breakdown: readonly string[]
+	timestamp: number
+}
+
+const db = await createDatabase({
+	name: 'ratings',
+	version: 1,
+	stores: {
+		history: { keyPath: 'id' },
+	},
+})
+
+// Track current subject being rated
+let currentSubjectId = ''
+
+engine.onRate(async (result) => {
+	await db.store('history').set({
+		id: crypto.randomUUID(),
+		subjectId: currentSubjectId,
+		finalRate: result.finalRate,
+		breakdown: result.breakdown,
+		timestamp: Date.now(),
+	})
+})
+```
+
+### Integration with Form Package
+
+```typescript
+import { createRatingEngine } from '@mikesaintsg/rater'
+import { createForm } from '@mikesaintsg/form'
+import type { RateFactor } from '@mikesaintsg/rater'
+
+// Build forms for rate factor configuration
+interface RateFactorForm {
+	id: string
+	label: string
+	baseRate: number
+}
+
+const form = createForm<RateFactorForm>(formElement, {
+	values: { id: '', label: '', baseRate: 0 },
+	onSubmit: (values) => {
+		const newFactor: RateFactor = {
+			id: values.id,
+			label: values.label,
+			baseRate: values.baseRate,
+		}
+		// Add to factor groups
+	},
+})
+```
+
+### Use Cases
+
+| Use Case                       | Rater Features Used                          |
+|--------------------------------|----------------------------------------------|
+| Insurance premium calculation  | Range tables, conditions, aggregation        |
+| Dynamic pricing                | Lookup tables, mathematical operations       |
+| Loan interest rates            | Conditions, factor groups                    |
+| Shipping cost calculation      | Range tables, aggregation                    |
+| Subscription tier pricing      | Lookup tables, conditions                    |
+| Risk scoring                   | Weighted factors, conditions                 |
+
+---
+
+## Appendix: ActionLoop Integration
+
+The `@mikesaintsg/actionloop` package provides predictive workflow guidance for user navigation and interaction patterns.
+
+### Basic Setup
+
+```typescript
+import {
+	createProceduralGraph,
+	createPredictiveGraph,
+	createWorkflowEngine,
+} from '@mikesaintsg/actionloop'
+
+// 1. Define workflow transitions
+const transitions = [
+	{ from: 'landing', to: 'login', weight: 1, actor: 'user' },
+	{ from: 'landing', to: 'register', weight: 1, actor: 'user' },
+	{ from: 'login', to: 'dashboard', weight: 1, actor: 'user' },
+	{ from: 'register', to: 'onboarding', weight: 1, actor: 'user' },
+	{ from: 'onboarding', to: 'dashboard', weight: 1, actor: 'user' },
+	{ from: 'dashboard', to: 'settings', weight: 1, actor: 'user' },
+	{ from: 'dashboard', to: 'profile', weight: 1, actor: 'user' },
+	{ from: 'dashboard', to: 'projects', weight: 1, actor: 'user' },
+] as const
+
+// 2. Create procedural graph (static rules)
+const procedural = createProceduralGraph({
+	transitions,
+	validateOnCreate: true,
+})
+
+// 3. Create predictive graph (dynamic weights)
+const predictive = createPredictiveGraph(procedural, {
+	decayAlgorithm: 'ewma',
+	decayFactor: 0.9,
+})
+
+// 4. Create workflow engine
+const engine = createWorkflowEngine(procedural, predictive, {
+	trackSessions: true,
+	validateTransitions: true,
+})
+```
+
+### Recording Transitions
+
+```typescript
+// Start a session
+const session = engine.startSession('user')
+
+// Record transitions
+engine.recordTransition('landing', 'login', {
+	actor: 'user',
+	sessionId: session.id,
+	path: '/login',
+})
+
+engine.recordTransition('login', 'dashboard', {
+	actor: 'user',
+	sessionId: session.id,
+	path: '/dashboard',
+})
+
+// Get predictions for current state
+const predictions = engine.predictNext('dashboard', {
+	actor: 'user',
+	sessionId: session.id,
+	path: '/dashboard',
+	count: 3,
+})
+// => ['projects', 'settings', 'profile'] ranked by learned weights
+```
+
+### Displaying Predictions
+
+```typescript
+// With confidence scores
+const detailed = engine.predictNextDetailed('dashboard', {
+	actor: 'user',
+	sessionId: session.id,
+	path: '/dashboard',
+	count: 5,
+})
+
+detailed.predictions.forEach(prediction => {
+	console.log(`${prediction.nodeId}: ${Math.round(prediction.confidence * 100)}%`)
+})
+```
+
+### Persisting Weights
+
+```typescript
+// Save to localStorage
+function saveWeights() {
+	const exported = predictive.export()
+	localStorage.setItem('actionloop:weights', JSON.stringify(exported))
+}
+
+function loadWeights() {
+	const stored = localStorage.getItem('actionloop:weights')
+	if (stored) {
+		predictive.import(JSON.parse(stored))
+	}
+}
+```
+
+### Cross-Tab Synchronization
+
+```typescript
+const channel = new BroadcastChannel('actionloop-sync')
+
+// Broadcast weight updates
+predictive.onWeightUpdate((from, to, actor, weight) => {
+	channel.postMessage({ type: 'weight', from, to, actor, weight })
+})
+
+// Listen for updates from other tabs
+channel.onmessage = (event) => {
+	if (event.data.type === 'weight') {
+		const { from, to, actor, weight } = event.data
+		predictive.setWeight(from, to, actor, weight)
+	}
+}
+```
+
+### Navigation Integration
+
+```typescript
+// Navigation guard
+function canNavigate(from: string, to: string): boolean {
+	return engine.isValidTransition(from, to)
+}
+
+// Navigation hook
+function onNavigate(from: string, to: string) {
+	engine.recordTransition(from, to, {
+		actor: 'user',
+		sessionId: currentSessionId,
+		path: `/${to}`,
+	})
+}
+```
+
+### Error Handling
+
+```typescript
+import { isActionLoopError } from '@mikesaintsg/actionloop'
+
+try {
+	engine.recordTransition('invalid', 'transition', context)
+} catch (error) {
+	if (isActionLoopError(error)) {
+		switch (error.code) {
+			case 'INVALID_TRANSITION':
+				console.warn('Invalid transition:', error.message)
+				break
+			case 'SESSION_NOT_FOUND':
+				console.info('Session expired, starting new session')
+				engine.startSession('user')
+				break
+			case 'NODE_NOT_FOUND':
+				console.error('Configuration error:', error.message)
+				break
+		}
+	}
+}
+```
+
+### Cleanup
+
+```typescript
+// Application shutdown
+window.addEventListener('beforeunload', () => {
+	// Save weights
+	const exported = predictive.export()
+	localStorage.setItem('actionloop:weights', JSON.stringify(exported))
+
+	// End session
+	engine.endSession(session.id, 'abandoned')
+
+	// Cleanup
+	engine.destroy()
+})
+```
+
+### Use Cases
+
+| Use Case                       | ActionLoop Features Used                     |
+|--------------------------------|----------------------------------------------|
+| Navigation suggestions         | Predictions, session tracking                |
+| Workflow optimization          | Transition recording, weight learning        |
+| User behavior analytics        | Session chains, prediction accuracy          |
+| Onboarding flows               | Valid transitions, step validation           |
+| Form wizard guidance           | Micro-transitions, predictions               |
+| Content recommendation         | Learned weights, confidence scores           |
