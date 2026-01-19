@@ -55,7 +55,85 @@ import type {
 	SessionPersistenceInterface,
 	// Provider adapter interface
 	ProviderAdapterInterface,
+	// Subscription cleanup
+	Unsubscribe,
 } from '@mikesaintsg/core'
+
+// ============================================================================
+// Streaming Adapter Interfaces
+// ============================================================================
+
+/**
+ * Streamer adapter interface for token streaming.
+ * Provides a standardized way to receive tokens as they are generated.
+ */
+export interface StreamerAdapterInterface {
+	/**
+	 * Subscribe to token streaming events.
+	 * @param callback - Called for each token received
+	 * @returns Cleanup function to unsubscribe
+	 */
+	onToken(callback: (token: string) => void): Unsubscribe
+
+	/**
+	 * Signal that streaming is complete.
+	 */
+	end(): void
+
+	/**
+	 * Check if streaming is supported.
+	 * @returns true if the adapter supports streaming
+	 */
+	supportsStreaming(): boolean
+}
+
+/**
+ * Extended streamer interface that can emit tokens.
+ * Used by implementations that need to push tokens.
+ */
+export interface StreamerEmitterInterface extends StreamerAdapterInterface {
+	/**
+	 * Emit a token to all subscribers.
+	 * @param token - The token to emit
+	 */
+	emit(token: string): void
+}
+
+/**
+ * Options for creating a TextStreamerAdapter.
+ * Used with HuggingFace Transformers TextStreamer.
+ */
+export interface TextStreamerAdapterOptions {
+	/**
+	 * TextStreamer class from @huggingface/transformers.
+	 * Must be the actual class (not an instance).
+	 */
+	readonly streamerClass: HuggingFaceTextStreamerClass
+	/**
+	 * Tokenizer instance from @huggingface/transformers.
+	 * Required for decoding tokens to text.
+	 */
+	readonly tokenizer: HuggingFaceTokenizer
+}
+
+/** Factory function for StreamerAdapter */
+export type CreateStreamerAdapter = () => StreamerEmitterInterface
+
+/** Factory function for TextStreamerAdapter */
+export type CreateTextStreamerAdapter = (
+	options: TextStreamerAdapterOptions
+) => TextStreamerAdapterInterface
+
+/**
+ * TextStreamerAdapter interface with access to the underlying HF streamer.
+ */
+export interface TextStreamerAdapterInterface extends StreamerEmitterInterface {
+	/**
+	 * Get the underlying HuggingFace TextStreamer instance.
+	 * @returns The TextStreamer or undefined if not created
+	 */
+	getStreamer(): HuggingFaceBaseStreamer | undefined
+}
 
 // ============================================================================
 // Provider Adapter Options
@@ -781,21 +859,6 @@ export interface HuggingFaceTextStreamerOptions {
 	readonly callback_function?: (text: string) => void
 	/** Callback function called when a new token is generated */
 	readonly token_callback_function?: (tokens: readonly bigint[]) => void
-}
-
-// ============================================================================
-// Wrapper Adapter Options
-// ============================================================================
-
-/**
- * Retryable provider adapter options.
- * Used to wrap a base provider with retry logic.
- */
-export interface RetryableProviderAdapterOptions {
-	/** The base provider adapter to wrap */
-	readonly adapter: ProviderAdapterInterface
-	/** Retry options */
-	readonly retry?: RetryOptions
 }
 
 // ============================================================================
