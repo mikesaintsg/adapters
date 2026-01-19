@@ -111,6 +111,8 @@ export interface OpenAIProviderAdapterOptions {
 	readonly defaultOptions?: GenerationDefaults
 	/** Custom streamer adapter (optional, default streamer used if not provided) */
 	readonly streamer?:  StreamerAdapterInterface
+	/** Custom SSE parser adapter (optional, default parser used if not provided) */
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 /**
@@ -130,6 +132,8 @@ export interface AnthropicProviderAdapterOptions {
 	readonly defaultOptions?: GenerationDefaults
 	/** Custom streamer adapter (optional, default streamer used if not provided) */
 	readonly streamer?: StreamerAdapterInterface
+	/** Custom SSE parser adapter (optional, default parser used if not provided) */
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 /**
@@ -156,6 +160,8 @@ export interface OllamaProviderAdapterOptions {
 	readonly defaultOptions?: GenerationDefaults
 	/** Custom streamer adapter (optional, default streamer used if not provided) */
 	readonly streamer?: StreamerAdapterInterface
+	/** Custom SSE parser adapter (optional, default parser used if not provided) */
+	readonly sseParser?: SSEParserAdapterInterface
 }
 
 /**
@@ -1234,12 +1240,39 @@ export interface SSEParserInterface {
 	reset(): void
 }
 
+/**
+ * SSE parser adapter interface.
+ * Provides configurable SSE parsing for provider adapters.
+ * Follows the same pattern as StreamerAdapterInterface:
+ * - Default implementation provided internally
+ * - Optional custom adapter via options
+ * - Not exposed in public API (internal implementation detail)
+ */
+export interface SSEParserAdapterInterface {
+	/** Create a new parser instance with the given options */
+	createParser(options: SSEParserOptions): SSEParserInterface
+}
+
+/**
+ * SSE parser adapter options.
+ * Configuration for custom SSE parser behavior.
+ */
+export interface SSEParserAdapterOptions {
+	/** Custom line delimiter (default: '\n') */
+	readonly lineDelimiter?: string
+	/** Custom event delimiter (default: '\n\n') */
+	readonly eventDelimiter?: string
+}
+
 // ============================================================================
 // Factory Function Types
 // ============================================================================
 
 /** Factory function for streamer adapter */
 export type CreateStreamerAdapter = () => StreamerAdapterInterface
+
+/** Factory function for SSE parser adapter (internal, not exported from index.ts) */
+export type CreateSSEParser = (options?: SSEParserAdapterOptions) => SSEParserAdapterInterface
 
 /** Factory function for OpenAI provider adapter */
 export type CreateOpenAIProviderAdapter = (

@@ -83,7 +83,7 @@ How we know the project is complete:
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
 │  │  streaming/ │  │  providers/ │  │      embeddings/        │ │
 │  │  Streamer   │  │  OpenAI     │  │  OpenAI, Voyage         │ │
-│  │             │  │  Anthropic  │  │  Ollama, NodeLlamaCpp   │ │
+│  │  SSE Parser │  │  Anthropic  │  │  Ollama, NodeLlamaCpp   │ │
 │  │             │  │  Ollama     │  │  HuggingFace            │ │
 │  │             │  │  NodeLlama  │  │                         │ │
 │  │             │  │  HuggingFace│  │                         │ │
@@ -102,7 +102,7 @@ How we know the project is complete:
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
 ├─────────────────────────────────────────────────────────────────┤
 │                       src/internal/                             │
-│                    (SSE Parser, Utilities)                      │
+│                    (Internal Utilities)                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -111,6 +111,7 @@ How we know the project is complete:
 | Component         | Purpose                              | Location                     |
 |-------------------|--------------------------------------|------------------------------|
 | Streamer          | Default token streaming              | `src/core/streaming/`        |
+| SSE Parser        | SSE parsing (internal, custom optional) | `src/core/streaming/`     |
 | Provider Adapters | LLM text generation (streaming)      | `src/core/providers/`        |
 | Embedding Adapters| Vector generation                    | `src/core/embeddings/`       |
 | Policy Adapters   | Retry and rate limiting              | `src/core/policy/`           |
@@ -119,14 +120,14 @@ How we know the project is complete:
 | Persistence       | IndexedDB, OPFS, HTTP                | `src/core/persistence/`      |
 | Bridge            | ToolCallBridge, RetrievalTool        | `src/core/bridge/`           |
 | Context Builder   | Dedup, truncation, priority          | `src/core/contextbuilder/`   |
-| SSE Parser        | Internal SSE parsing                 | `src/internal/`              |
 
 ### Key Interfaces
 
 | Interface                              | Purpose                          | Depends On                |
 |----------------------------------------|----------------------------------|---------------------------|
 | `StreamerAdapterInterface`             | Token emission                   | —                         |
-| `ProviderAdapterInterface`             | LLM generation                   | `StreamerAdapterInterface`|
+| `SSEParserAdapterInterface`            | SSE parsing (internal)           | —                         |
+| `ProviderAdapterInterface`             | LLM generation                   | `StreamerAdapterInterface`, `SSEParserAdapterInterface` |
 | `EmbeddingAdapterInterface`            | Vector generation                | —                         |
 | `RetryAdapterInterface`                | Retry policy                     | —                         |
 | `RateLimitAdapterInterface`            | Rate limiting                    | —                         |
@@ -273,12 +274,15 @@ How we know the project is complete:
 | `OllamaEmbeddingResponse`      | Internal | ⏳ Pending | 0     |
 | `SSEEvent`                     | Internal | ⏳ Pending | 0     |
 | `SSEParserInterface`           | Internal | ⏳ Pending | 0     |
+| `SSEParserAdapterInterface`    | Internal | ⏳ Pending | 0     |
+| `SSEParserAdapterOptions`      | Internal | ⏳ Pending | 0     |
 
 ### Factory Types
 
 | Type Name                              | Category | Status    | Phase |
 |----------------------------------------|----------|-----------|-------|
 | `CreateStreamerAdapter`                | Factory  | ⏳ Pending | 0     |
+| `CreateSSEParser`                      | Factory  | ⏳ Pending | 0     |
 | `CreateOpenAIProviderAdapter`          | Factory  | ⏳ Pending | 0     |
 | `CreateAnthropicProviderAdapter`       | Factory  | ⏳ Pending | 0     |
 | `CreateOllamaProviderAdapter`          | Factory  | ⏳ Pending | 0     |

@@ -1,4 +1,4 @@
-# Phase 1: Streaming & SSE
+# Phase 1: Streaming Infrastructure
 
 > **Status:** ⏳ Pending
 > **Started:** —
@@ -12,10 +12,10 @@
 > **Purpose:** Quick orientation for models starting mid-project. 
 
 ```
-Current Deliverable: 1.1 SSE Parser
+Current Deliverable: 1.1 SSE Parser Adapter
 Checklist Progress: 0/16 items complete
 Last Completed: Phase 0 complete
-Next Task:  Implement SSE parser
+Next Task:  Implement SSE parser adapter
 Blockers: None
 ```
 
@@ -23,7 +23,7 @@ Blockers: None
 
 ## Objective
 
-Implement the streaming infrastructure that all provider adapters depend on.  By end of phase, we have a working SSE parser and Streamer adapter that can emit tokens.
+Implement the streaming infrastructure that all provider adapters depend on.  By end of phase, we have a working SSE parser adapter and Streamer adapter that can emit tokens. Both follow identical patterns: default implementation provided internally, optional custom adapter via options.
 
 ---
 
@@ -42,7 +42,7 @@ Implement the streaming infrastructure that all provider adapters depend on.  By
 
 | #   | Deliverable              | Status    | Assignee | Notes                           |
 |-----|--------------------------|-----------|----------|---------------------------------|
-| 1.1 | SSE Parser               | ⏳ Pending | —        | Internal, stateful parser       |
+| 1.1 | SSE Parser Adapter       | ⏳ Pending | —        | Implements `SSEParserAdapterInterface` |
 | 1.2 | Streamer Adapter         | ⏳ Pending | —        | Default token emitter           |
 | 1.3 | Unit Tests               | ⏳ Pending | —        | SSE parsing, token emission     |
 
@@ -58,22 +58,26 @@ Implement the streaming infrastructure that all provider adapters depend on.  By
 
 > **Purpose:** Track which types must exist before implementation. 
 
-| Deliverable | Required Types                                         | Status    |
-|-------------|--------------------------------------------------------|-----------|
-| 1.1         | `SSEEvent`, `SSEParserOptions`, `SSEParserInterface`   | ⏳ Pending |
-| 1.2         | `StreamerAdapterInterface` (from core)                 | ✅ Done    |
+| Deliverable | Required Types                                                           | Status    |
+|-------------|--------------------------------------------------------------------------|-----------|
+| 1.1         | `SSEEvent`, `SSEParserOptions`, `SSEParserInterface`, `SSEParserAdapterInterface`, `SSEParserAdapterOptions` | ⏳ Pending |
+| 1.2         | `StreamerAdapterInterface` (from core)                                   | ✅ Done    |
 
 ---
 
-## Current Focus: 1.1 SSE Parser
+## Current Focus: 1.1 SSE Parser Adapter
 
 ### Requirements
 
-1. Stateful parser that handles chunked SSE data
-2. Handles `event: `, `data:`, `id:`, `retry:` fields
-3. Handles multi-line data fields
-4. Emits parsed events via callback
-5. Handles incomplete chunks across feed() calls
+1. Implements `SSEParserAdapterInterface`
+2. Creates stateful parser instances via `createParser(options)`
+3. Each parser handles chunked SSE data
+4. Handles `event: `, `data:`, `id:`, `retry:` fields
+5. Handles multi-line data fields
+6. Emits parsed events via callback
+7. Handles incomplete chunks across feed() calls
+8. NOT exported from index.ts (internal implementation detail)
+9. Factory is `createSSEParser` (internal, not public)
 
 ### Interface Contract
 
@@ -97,18 +101,28 @@ export interface SSEParserInterface {
 	end(): void
 	reset(): void
 }
+
+export interface SSEParserAdapterInterface {
+	createParser(options: SSEParserOptions): SSEParserInterface
+}
+
+export interface SSEParserAdapterOptions {
+	readonly lineDelimiter?: string
+	readonly eventDelimiter?: string
+}
 ```
 
 ### Implementation Order
 
-1. `src/internal/SSEParser.ts` — Implementation
-2. `tests/internal/SSEParser. test.ts` — Unit tests
+1. `src/core/streaming/SSEParser.ts` — Implementation
+2. `tests/core/streaming/SSEParser.test.ts` — Unit tests
 
 ### Implementation Checklist
 
 **Implementation:**
-- [ ] Create `src/internal/SSEParser.ts`
-- [ ] Implement `createSSEParser(options): SSEParserInterface`
+- [ ] Create `src/core/streaming/SSEParser.ts`
+- [ ] Implement `createSSEParser(options?): SSEParserAdapterInterface`
+- [ ] Implement `createParser()` method on adapter
 - [ ] Handle `data: ` field (including multi-line)
 - [ ] Handle `event:` field
 - [ ] Handle `id:` field
@@ -117,6 +131,7 @@ export interface SSEParserInterface {
 - [ ] Handle empty lines (event boundary)
 - [ ] Implement `end()` — flush remaining buffer
 - [ ] Implement `reset()` — clear state
+- [ ] Do NOT export from index.ts (internal only)
 
 **Tests:**
 - [ ] Test single complete event
