@@ -7,7 +7,6 @@
 
 import type {
 	// Provider adapter interfaces - now exported from implementations
-	EmbeddingAdapterInterface,
 	// Policy adapter interfaces
 	RetryAdapterInterface,
 	RateLimitAdapterInterface,
@@ -33,12 +32,6 @@ import type {
 } from '@mikesaintsg/core'
 
 import type {
-	// Embedding options
-	OpenAIEmbeddingAdapterOptions,
-	VoyageEmbeddingAdapterOptions,
-	OllamaEmbeddingAdapterOptions,
-	NodeLlamaCppEmbeddingAdapterOptions,
-	HuggingFaceEmbeddingAdapterOptions,
 	// Policy options
 	ExponentialRetryAdapterOptions,
 	LinearRetryAdapterOptions,
@@ -87,50 +80,12 @@ export { createHuggingFaceProviderAdapter } from './core/providers/HuggingFacePr
 // Embedding Adapter Factories
 // ============================================================================
 
-/**
- * Create an OpenAI embedding adapter.
- */
-export function createOpenAIEmbeddingAdapter(
-	_options: OpenAIEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	throw new Error('Not implemented: createOpenAIEmbeddingAdapter')
-}
-
-/**
- * Create a Voyage embedding adapter.
- */
-export function createVoyageEmbeddingAdapter(
-	_options: VoyageEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	throw new Error('Not implemented: createVoyageEmbeddingAdapter')
-}
-
-/**
- * Create an Ollama embedding adapter.
- */
-export function createOllamaEmbeddingAdapter(
-	_options: OllamaEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	throw new Error('Not implemented: createOllamaEmbeddingAdapter')
-}
-
-/**
- * Create a node-llama-cpp embedding adapter.
- */
-export function createNodeLlamaCppEmbeddingAdapter(
-	_options: NodeLlamaCppEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	throw new Error('Not implemented: createNodeLlamaCppEmbeddingAdapter')
-}
-
-/**
- * Create a HuggingFace Transformers embedding adapter.
- */
-export function createHuggingFaceEmbeddingAdapter(
-	_options: HuggingFaceEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	throw new Error('Not implemented: createHuggingFaceEmbeddingAdapter')
-}
+// Re-export from implementations
+export { createOpenAIEmbeddingAdapter } from './core/embeddings/OpenAIEmbedding.js'
+export { createVoyageEmbeddingAdapter } from './core/embeddings/VoyageEmbedding.js'
+export { createOllamaEmbeddingAdapter } from './core/embeddings/OllamaEmbedding.js'
+export { createNodeLlamaCppEmbeddingAdapter } from './core/embeddings/NodeLlamaCppEmbedding.js'
+export { createHuggingFaceEmbeddingAdapter } from './core/embeddings/HuggingFaceEmbedding.js'
 
 // ============================================================================
 // Policy Adapter Factories

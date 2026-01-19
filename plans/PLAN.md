@@ -1,8 +1,8 @@
 # Project Plan: @mikesaintsg/adapters Refactor
 
-> **Status:** Phase 2 of 6 — Provider Adapters ✅ Complete
+> **Status:** Phase 3 of 6 — Embedding Adapters ✅ Complete
 > **Last Updated:** 2026-01-19
-> **Next Milestone:** Phase 3 - Embedding Adapters
+> **Next Milestone:** Phase 4 - Policy & Enhancement Adapters
 
 ---
 
@@ -20,11 +20,11 @@
 ### Current Session State
 
 ```
-Phase: 2 of 6 (Provider Adapters) ✅ Complete
-Active Deliverable: Phase 2 Complete
+Phase: 3 of 6 (Embedding Adapters) ✅ Complete
+Active Deliverable: Phase 3 Complete
 Checklist Progress: All items complete
-Last Action: All 5 provider adapters implemented with 69 tests passing
-Next Action: Begin Phase 3 - Embedding Adapters
+Last Action: All 5 embedding adapters implemented with 43 tests passing
+Next Action: Begin Phase 4 - Policy & Enhancement Adapters
 ```
 
 > **Instructions:** Update this section at the END of each session with the model. 
@@ -152,8 +152,8 @@ How we know the project is complete:
 |---|--------------------|-------------|---------------------------------------|---------------------------------|
 | 0 | Pre-Flight         | ✅ Complete  | Scaffold, types, helpers, constants   | `plans/phases/00-preflight.md`  |
 | 1 | Streaming          | ✅ Complete  | Streamer adapter, SSE parser          | `plans/phases/01-streaming.md`  |
-| 2 | Provider Adapters  | 🔄 Active    | All 5 provider adapters               | `plans/phases/02-providers.md`  |
-| 3 | Embedding Adapters | ⏳ Pending   | All 5 embedding adapters              | `plans/phases/03-embeddings.md` |
+| 2 | Provider Adapters  | ✅ Complete  | All 5 provider adapters               | `plans/phases/02-providers.md`  |
+| 3 | Embedding Adapters | ✅ Complete  | All 5 embedding adapters              | `plans/phases/03-embeddings.md` |
 | 4 | Policy & Enhance   | ⏳ Pending   | Retry, rate limit, cache, batch       | `plans/phases/04-policy.md`     |
 | 5 | Transform & Persist| ⏳ Pending   | Tool format, similarity, persistence  | `plans/phases/05-transform.md`  |
 | 6 | Bridge & Finalize  | ⏳ Pending   | Bridges, context builder, docs        | `plans/phases/06-bridge.md`     |
