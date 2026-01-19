@@ -86,7 +86,7 @@ describe('OpenAIProvider', () => {
 	})
 
 	describe('generate', () => {
-		it('streams tokens from SSE response', async () => {
+		it('streams tokens from SSE response', async() => {
 			const mockResponse = createSSEResponse([
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n\n',
@@ -123,7 +123,7 @@ describe('OpenAIProvider', () => {
 			expect(result.aborted).toBe(false)
 		})
 
-		it('handles tool calls', async () => {
+		it('handles tool calls', async() => {
 			const mockResponse = createSSEResponse([
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"get_weather"}}]},"finish_reason":null}]}\n\n',
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"city\\":"}}]},"finish_reason":null}]}\n\n',
@@ -156,7 +156,7 @@ describe('OpenAIProvider', () => {
 			expect(result.toolCalls[0]?.arguments).toEqual({ city: 'NYC' })
 		})
 
-		it('handles abort', async () => {
+		it('handles abort', async() => {
 			// Create a slow response
 			const mockResponse = createSSEResponse([
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
@@ -186,7 +186,7 @@ describe('OpenAIProvider', () => {
 			expect(result.aborted).toBe(true)
 		})
 
-		it('uses custom streamer', async () => {
+		it('uses custom streamer', async() => {
 			const mockResponse = createSSEResponse([
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
 				'data: [DONE]\n\n',
@@ -220,7 +220,7 @@ describe('OpenAIProvider', () => {
 	})
 
 	describe('error handling', () => {
-		it('maps 401 to AUTHENTICATION_ERROR', async () => {
+		it('maps 401 to AUTHENTICATION_ERROR', async() => {
 			vi.mocked(fetch).mockResolvedValue(createErrorResponse(401, {
 				error: { message: 'Invalid API key', code: 'invalid_api_key' },
 			}))
@@ -243,7 +243,7 @@ describe('OpenAIProvider', () => {
 			await expect(stream.result()).rejects.toThrow('Invalid API key')
 		})
 
-		it('maps 429 to RATE_LIMIT_ERROR', async () => {
+		it('maps 429 to RATE_LIMIT_ERROR', async() => {
 			vi.mocked(fetch).mockResolvedValue(createErrorResponse(429, {
 				error: { message: 'Rate limit exceeded' },
 			}))
@@ -266,7 +266,7 @@ describe('OpenAIProvider', () => {
 			await expect(stream.result()).rejects.toThrow('Rate limit exceeded')
 		})
 
-		it('maps 404 to MODEL_NOT_FOUND_ERROR', async () => {
+		it('maps 404 to MODEL_NOT_FOUND_ERROR', async() => {
 			vi.mocked(fetch).mockResolvedValue(createErrorResponse(404, {
 				error: { message: 'Model not found' },
 			}))
@@ -292,7 +292,7 @@ describe('OpenAIProvider', () => {
 	})
 
 	describe('async iteration', () => {
-		it('supports for await...of', async () => {
+		it('supports for await...of', async() => {
 			const mockResponse = createSSEResponse([
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"A"},"finish_reason":null}]}\n\n',
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"B"},"finish_reason":null}]}\n\n',

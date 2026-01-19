@@ -6,8 +6,7 @@
  */
 
 import type {
-	// Provider adapter interfaces
-	ProviderAdapterInterface,
+	// Provider adapter interfaces - now exported from implementations
 	EmbeddingAdapterInterface,
 	// Policy adapter interfaces
 	RetryAdapterInterface,
@@ -34,11 +33,6 @@ import type {
 } from '@mikesaintsg/core'
 
 import type {
-	// Provider options
-	AnthropicProviderAdapterOptions,
-	OllamaProviderAdapterOptions,
-	NodeLlamaCppProviderAdapterOptions,
-	HuggingFaceProviderAdapterOptions,
 	// Embedding options
 	OpenAIEmbeddingAdapterOptions,
 	VoyageEmbeddingAdapterOptions,
@@ -82,48 +76,12 @@ export { createStreamerAdapter } from './core/streaming/Streamer.js'
 // Provider Adapter Factories
 // ============================================================================
 
-// Re-export from implementation
+// Re-export from implementations
 export { createOpenAIProviderAdapter } from './core/providers/OpenAIProvider.js'
-
-/**
- * Create an Anthropic provider adapter.
- * Streaming is native — no configuration needed.
- */
-export function createAnthropicProviderAdapter(
-	_options: AnthropicProviderAdapterOptions,
-): ProviderAdapterInterface {
-	throw new Error('Not implemented: createAnthropicProviderAdapter')
-}
-
-/**
- * Create an Ollama provider adapter.
- * Streaming is native — no configuration needed.
- */
-export function createOllamaProviderAdapter(
-	_options: OllamaProviderAdapterOptions,
-): ProviderAdapterInterface {
-	throw new Error('Not implemented: createOllamaProviderAdapter')
-}
-
-/**
- * Create a node-llama-cpp provider adapter.
- * Streaming is native — TextStreamer is used internally.
- */
-export function createNodeLlamaCppProviderAdapter(
-	_options: NodeLlamaCppProviderAdapterOptions,
-): ProviderAdapterInterface {
-	throw new Error('Not implemented: createNodeLlamaCppProviderAdapter')
-}
-
-/**
- * Create a HuggingFace Transformers provider adapter.
- * Streaming is native — TextStreamer is used internally.
- */
-export function createHuggingFaceProviderAdapter(
-	_options: HuggingFaceProviderAdapterOptions,
-): ProviderAdapterInterface {
-	throw new Error('Not implemented: createHuggingFaceProviderAdapter')
-}
+export { createAnthropicProviderAdapter } from './core/providers/AnthropicProvider.js'
+export { createOllamaProviderAdapter } from './core/providers/OllamaProvider.js'
+export { createNodeLlamaCppProviderAdapter } from './core/providers/NodeLlamaCppProvider.js'
+export { createHuggingFaceProviderAdapter } from './core/providers/HuggingFaceProvider.js'
 
 // ============================================================================
 // Embedding Adapter Factories

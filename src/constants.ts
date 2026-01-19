@@ -22,6 +22,12 @@ export const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-sonnet-20241022'
 /** Default Anthropic base URL */
 export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com'
 
+/** Default Anthropic API version */
+export const DEFAULT_ANTHROPIC_VERSION = '2023-06-01'
+
+/** Default Anthropic max tokens */
+export const DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
+
 /** Default Ollama base URL */
 export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 
