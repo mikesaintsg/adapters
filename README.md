@@ -14,6 +14,7 @@
 - ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, node-llama-cpp, and HuggingFace Transformers for text embeddings
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
+- ✅ **ActionLoop Adapters** — Event and weight persistence for ActionLoop workflows
 - ✅ **Policy Adapters** — Retry and rate limiting strategies
 - ✅ **Enhancement Adapters** — Caching, batching for embeddings
 - ✅ **Transform Adapters** — Similarity scoring algorithms
@@ -149,12 +150,21 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Persistence Adapters
 
-| Function                                  | Description                  |
-|-------------------------------------------|------------------------------|
-| `createIndexedDBSessionPersistenceAdapter`| Session storage in IndexedDB |
-| `createIndexedDBVectorPersistenceAdapter` | Vector storage in IndexedDB  |
-| `createOPFSVectorPersistenceAdapter`      | Vector storage in OPFS       |
-| `createHTTPVectorPersistenceAdapter`      | Remote vector storage        |
+| Function                                   | Description                  |
+|--------------------------------------------|------------------------------|
+| `createIndexedDBSessionPersistenceAdapter` | Session storage in IndexedDB |
+| `createIndexedDBVectorPersistenceAdapter`  | Vector storage in IndexedDB  |
+| `createOPFSVectorPersistenceAdapter`       | Vector storage in OPFS       |
+| `createHTTPVectorPersistenceAdapter`       | Remote vector storage        |
+
+### ActionLoop Persistence Adapters
+
+| Function                                   | Description                         |
+|--------------------------------------------|-------------------------------------|
+| `createIndexedDBEventPersistenceAdapter`   | ActionLoop events in IndexedDB      |
+| `createIndexedDBWeightPersistenceAdapter`  | ActionLoop weights in IndexedDB     |
+| `createInMemoryEventPersistenceAdapter`    | ActionLoop events in memory         |
+| `createInMemoryWeightPersistenceAdapter`   | ActionLoop weights in memory        |
 
 ### Streaming Adapters
 

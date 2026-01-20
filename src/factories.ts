@@ -27,6 +27,8 @@ import type {
 	TruncationAdapterInterface,
 	SSEParserOptions,
 	SSEParserInterface,
+	EventStorePersistenceAdapterInterface,
+	WeightPersistenceAdapterInterface,
 } from '@mikesaintsg/core'
 
 import type {
@@ -44,6 +46,9 @@ import type {
 	IndexedDBCacheAdapterOptions,
 	IndexedDBSessionPersistenceOptions,
 	IndexedDBVectorPersistenceOptions,
+	IndexedDBEventPersistenceOptions,
+	IndexedDBWeightPersistenceOptions,
+	InMemoryEventPersistenceOptions,
 	LinearRetryAdapterOptions,
 	LRUCacheAdapterOptions,
 	NodeLlamaCppEmbeddingAdapterOptions,
@@ -122,6 +127,14 @@ import {
 	HTTPVectorPersistence,
 	IndexedDBSessionPersistence,
 } from './core/persistence/index.js'
+
+// ActionLoop
+import {
+	IndexedDBEventPersistence,
+	IndexedDBWeightPersistence,
+	InMemoryEventPersistence,
+	InMemoryWeightPersistence,
+} from './core/actionloop/index.js'
 
 // Context Builder
 import {
@@ -1092,4 +1105,99 @@ export function createScoreTruncationAdapter(
 	options?: TruncationAdapterOptions,
 ): TruncationAdapterInterface {
 	return new ScoreTruncationAdapter(options)
+}
+
+// ============================================================================
+// ActionLoop Persistence Adapter Factories
+// ============================================================================
+
+/**
+ * Creates an IndexedDB event persistence adapter for ActionLoop.
+ *
+ * @param options - IndexedDB configuration with database access
+ * @returns EventStorePersistenceAdapterInterface implementation
+ *
+ * @example
+ * ```ts
+ * import { createDatabase } from '@mikesaintsg/indexeddb'
+ *
+ * const db = await createDatabase('my-app')
+ * const eventPersistence = createIndexedDBEventPersistenceAdapter({
+ *   database: db,
+ *   storeName: 'events',
+ * })
+ *
+ * const engine = createWorkflowEngine(procedural, predictive, {
+ *   eventPersistence,
+ * })
+ * ```
+ */
+export function createIndexedDBEventPersistenceAdapter(
+	options: IndexedDBEventPersistenceOptions,
+): EventStorePersistenceAdapterInterface {
+	return new IndexedDBEventPersistence(options)
+}
+
+/**
+ * Creates an IndexedDB weight persistence adapter for ActionLoop.
+ *
+ * @param options - IndexedDB configuration with database access
+ * @returns WeightPersistenceAdapterInterface implementation
+ *
+ * @example
+ * ```ts
+ * import { createDatabase } from '@mikesaintsg/indexeddb'
+ *
+ * const db = await createDatabase('my-app')
+ * const weightPersistence = createIndexedDBWeightPersistenceAdapter({
+ *   database: db,
+ *   storeName: 'weights',
+ * })
+ *
+ * const predictive = createPredictiveGraph(procedural, {
+ *   persistence: weightPersistence,
+ * })
+ * ```
+ */
+export function createIndexedDBWeightPersistenceAdapter(
+	options: IndexedDBWeightPersistenceOptions,
+): WeightPersistenceAdapterInterface {
+	return new IndexedDBWeightPersistence(options)
+}
+
+/**
+ * Creates an in-memory event persistence adapter for ActionLoop.
+ *
+ * Useful for testing or when persistence is not required.
+ *
+ * @param options - Optional configuration with max events limit
+ * @returns EventStorePersistenceAdapterInterface implementation
+ *
+ * @example
+ * ```ts
+ * const eventPersistence = createInMemoryEventPersistenceAdapter({
+ *   maxEvents: 5000,
+ * })
+ * ```
+ */
+export function createInMemoryEventPersistenceAdapter(
+	options?: InMemoryEventPersistenceOptions,
+): EventStorePersistenceAdapterInterface {
+	return new InMemoryEventPersistence(options)
+}
+
+/**
+ * Creates an in-memory weight persistence adapter for ActionLoop.
+ *
+ * Useful for testing or when persistence is not required.
+ *
+ * @returns WeightPersistenceAdapterInterface implementation
+ *
+ * @example
+ * ```ts
+ * const weightPersistence = createInMemoryWeightPersistenceAdapter()
+ * ```
+ */
+export function createInMemoryWeightPersistenceAdapter(): WeightPersistenceAdapterInterface {
+	return new InMemoryWeightPersistence()
 }

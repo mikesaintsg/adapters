@@ -48,6 +48,9 @@ import type {
 	StreamerAdapterInterface,
 	SSEParserAdapterInterface,
 	SerializedSession,
+	EventStorePersistenceAdapterInterface,
+	WeightPersistenceAdapterInterface,
+	ExportedPredictiveGraph,
 } from '@mikesaintsg/core'
 
 // ============================================================================
@@ -350,6 +353,44 @@ export interface IndexedDBSessionPersistenceOptions {
 	readonly databaseName?: string
 	readonly storeName?: string
 	readonly ttlMs?: number
+}
+
+/** IndexedDB event persistence options for ActionLoop */
+export interface IndexedDBEventPersistenceOptions {
+	readonly database: MinimalDatabaseAccess
+	readonly storeName?: string
+}
+
+/** IndexedDB weight persistence options for ActionLoop */
+export interface IndexedDBWeightPersistenceOptions {
+	readonly database: MinimalDatabaseAccess
+	readonly storeName?: string
+}
+
+/** In-memory event persistence options for ActionLoop */
+export interface InMemoryEventPersistenceOptions {
+	readonly maxEvents?: number
+}
+
+/** Stored event record in IndexedDB for ActionLoop */
+export interface ActionLoopStoredEventRecord {
+	readonly id: string
+	readonly timestamp: number
+	readonly sessionId: string
+	readonly actor: string
+	readonly from: string
+	readonly to: string
+	readonly path: string
+	readonly engagement: string
+	readonly namespace?: string
+	readonly dwell?: unknown
+	readonly metadata?: unknown
+}
+
+/** Stored weight record in IndexedDB for ActionLoop */
+export interface ActionLoopStoredWeightRecord {
+	readonly modelId: string
+	readonly data: ExportedPredictiveGraph
 }
 
 // ============================================================================
@@ -942,3 +983,9 @@ export type CreateFIFOTruncationAdapter = (options?: TruncationAdapterOptions) =
 export type CreateLIFOTruncationAdapter = (options?: TruncationAdapterOptions) => TruncationAdapterInterface
 export type CreateScoreTruncationAdapter = (options?: TruncationAdapterOptions) => TruncationAdapterInterface
 export type CreatePriorityAdapter = (options?: PriorityAdapterOptions) => PriorityAdapterInterface
+
+// --- ActionLoop Persistence Adapter Factories ---
+export type CreateIndexedDBEventPersistenceAdapter = (options: IndexedDBEventPersistenceOptions) => EventStorePersistenceAdapterInterface
+export type CreateIndexedDBWeightPersistenceAdapter = (options: IndexedDBWeightPersistenceOptions) => WeightPersistenceAdapterInterface
+export type CreateInMemoryEventPersistenceAdapter = (options?: InMemoryEventPersistenceOptions) => EventStorePersistenceAdapterInterface
+export type CreateInMemoryWeightPersistenceAdapter = () => WeightPersistenceAdapterInterface

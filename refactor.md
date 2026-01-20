@@ -34,10 +34,10 @@ The refactor aligns ActionLoop with the ecosystem's adapter pattern:
 | Update `PredictiveGraphOptions`                     | `actionloop` | ✅ Extracted to `types/actionloop/types.ts` |
 | Add `ActionLoopContextFormatterInterface`           | `actionloop` | ✅ Extracted to `types/actionloop/types.ts` |
 | Add LLM context types                               | `actionloop` | ✅ Extracted to `types/actionloop/types.ts` |
-| Implement `createIndexedDBEventPersistenceAdapter`  | `adapters`   | ⏳ Pending                                  |
-| Implement `createIndexedDBWeightPersistenceAdapter` | `adapters`   | ⏳ Pending                                  |
-| Implement `createInMemoryEventPersistenceAdapter`   | `adapters`   | ⏳ Pending                                  |
-| Implement `createInMemoryWeightPersistenceAdapter`  | `adapters`   | ⏳ Pending                                  |
+| Implement `createIndexedDBEventPersistenceAdapter`  | `adapters`   | ✅ Done                                     |
+| Implement `createIndexedDBWeightPersistenceAdapter` | `adapters`   | ✅ Done                                     |
+| Implement `createInMemoryEventPersistenceAdapter`   | `adapters`   | ✅ Done                                     |
+| Implement `createInMemoryWeightPersistenceAdapter`  | `adapters`   | ✅ Done                                     |
 | Implement `createActivityTracker`                   | `actionloop` | ⏳ Pending                                  |
 | Implement `createActionLoopContextFormatter`        | `actionloop` | ⏳ Pending                                  |
 
@@ -618,11 +618,11 @@ function extractPatterns(events: readonly TransitionEvent[]): PatternInsights {
 
 - [x] Add adapter options types to `types/adapters/types.ts`
 - [x] Add factory function types to `types/adapters/types.ts`
-- [ ] Implement `createIndexedDBEventPersistenceAdapter`
-- [ ] Implement `createIndexedDBWeightPersistenceAdapter`
-- [ ] Implement `createInMemoryEventPersistenceAdapter`
-- [ ] Implement `createInMemoryWeightPersistenceAdapter`
-- [ ] Add tests for each adapter
+- [x] Implement `createIndexedDBEventPersistenceAdapter`
+- [x] Implement `createIndexedDBWeightPersistenceAdapter`
+- [x] Implement `createInMemoryEventPersistenceAdapter`
+- [x] Implement `createInMemoryWeightPersistenceAdapter`
+- [x] Add tests for each adapter
 
 ### In `@mikesaintsg/actionloop`
 

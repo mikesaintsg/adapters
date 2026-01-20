@@ -18,13 +18,14 @@
 10. [Transform Adapters](#transform-adapters)
 11. [Persistence Adapters](#persistence-adapters)
 12. [Context Builder Adapters](#context-builder-adapters)
-13. [Error Handling](#error-handling)
-14. [TypeScript Integration](#typescript-integration)
-15. [Performance Tips](#performance-tips)
-16. [Browser Compatibility](#browser-compatibility)
-17. [Integration with Ecosystem](#integration-with-ecosystem)
-18. [API Reference](#api-reference)
-19. [License](#license)
+13. [ActionLoop Adapters](#actionloop-adapters)
+14. [Error Handling](#error-handling)
+15. [TypeScript Integration](#typescript-integration)
+16. [Performance Tips](#performance-tips)
+17. [Browser Compatibility](#browser-compatibility)
+18. [Integration with Ecosystem](#integration-with-ecosystem)
+19. [API Reference](#api-reference)
+20. [License](#license)
 
 ---
 
@@ -42,6 +43,7 @@
 - **Transform adapters** — Tool format conversion and similarity scoring
 - **Persistence adapters** — IndexedDB, OPFS, and HTTP storage
 - **Context builder adapters** — Deduplication, truncation, and priority
+- **ActionLoop adapters** — Event and weight persistence for workflow engines
 - **Zero dependencies** — Built entirely on native `fetch` API
 
 ### Package Role
@@ -1125,6 +1127,83 @@ const engine = createEngine(provider, {
 
 ---
 
+## ActionLoop Adapters
+
+ActionLoop adapters provide persistence for workflow engines and predictive graphs in the `@mikesaintsg/actionloop` package.
+
+### Event Persistence
+
+Event persistence adapters implement `EventStorePersistenceAdapterInterface` for storing transition events.
+
+#### IndexedDB Event Persistence
+
+```ts
+import { createIndexedDBEventPersistenceAdapter } from '@mikesaintsg/adapters'
+import { createDatabase } from '@mikesaintsg/indexeddb'
+
+const db = await createDatabase('actionloop-app')
+const eventPersistence = createIndexedDBEventPersistenceAdapter({
+	database: db,
+	storeName: 'events', // optional, defaults to 'actionloop_events'
+})
+
+// Use with workflow engine
+const engine = createWorkflowEngine(procedural, predictive, {
+	eventPersistence,
+})
+```
+
+#### In-Memory Event Persistence
+
+```ts
+import { createInMemoryEventPersistenceAdapter } from '@mikesaintsg/adapters'
+
+const eventPersistence = createInMemoryEventPersistenceAdapter({
+	maxEvents: 5000, // optional, defaults to 10000
+})
+```
+
+### Weight Persistence
+
+Weight persistence adapters implement `WeightPersistenceAdapterInterface` for storing predictive graph weights.
+
+#### IndexedDB Weight Persistence
+
+```ts
+import { createIndexedDBWeightPersistenceAdapter } from '@mikesaintsg/adapters'
+import { createDatabase } from '@mikesaintsg/indexeddb'
+
+const db = await createDatabase('actionloop-app')
+const weightPersistence = createIndexedDBWeightPersistenceAdapter({
+	database: db,
+	storeName: 'weights', // optional, defaults to 'actionloop_weights'
+})
+
+// Use with predictive graph
+const predictive = createPredictiveGraph(procedural, {
+	persistence: weightPersistence,
+})
+```
+
+#### In-Memory Weight Persistence
+
+```ts
+import { createInMemoryWeightPersistenceAdapter } from '@mikesaintsg/adapters'
+
+const weightPersistence = createInMemoryWeightPersistenceAdapter()
+```
+
+### ActionLoop Adapter Selection Guide
+
+| Adapter              | Persistence | Use Case                        |
+|----------------------|-------------|---------------------------------|
+| IndexedDB Event      | ✅           | Production event sourcing       |
+| In-Memory Event      | ❌           | Testing, temporary workflows    |
+| IndexedDB Weight     | ✅           | Production weight persistence   |
+| In-Memory Weight     | ❌           | Testing, development            |
+
+---
+
 
 ## Error Handling
 
@@ -1696,6 +1775,16 @@ const result = await engine.generateFromContext(context)
 | `createOPFSVectorPersistenceAdapter`       | `OPFSVectorPersistenceOptions`       | `VectorStorePersistenceAdapterInterface` |
 | `createHTTPVectorPersistenceAdapter`       | `HTTPVectorPersistenceOptions`       | `VectorStorePersistenceAdapterInterface` |
 | `createIndexedDBSessionPersistenceAdapter` | `IndexedDBSessionPersistenceOptions` | `SessionPersistenceInterface`            |
+
+
+### ActionLoop Persistence Adapter Factories
+
+| Factory                                    | Options                              | Returns                                   |
+|--------------------------------------------|--------------------------------------|-------------------------------------------|
+| `createIndexedDBEventPersistenceAdapter`   | `IndexedDBEventPersistenceOptions`   | `EventStorePersistenceAdapterInterface`   |
+| `createIndexedDBWeightPersistenceAdapter`  | `IndexedDBWeightPersistenceOptions`  | `WeightPersistenceAdapterInterface`       |
+| `createInMemoryEventPersistenceAdapter`    | `InMemoryEventPersistenceOptions?`   | `EventStorePersistenceAdapterInterface`   |
+| `createInMemoryWeightPersistenceAdapter`   | —                                    | `WeightPersistenceAdapterInterface`       |
 
 
 ### Context Builder Adapter Factories
