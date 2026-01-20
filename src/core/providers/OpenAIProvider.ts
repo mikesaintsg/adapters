@@ -8,88 +8,33 @@
 import type {
 	ProviderAdapterInterface,
 	GenerationOptions,
-	GenerationResult,
 	Message,
 	StreamHandleInterface,
 	ProviderCapabilities,
-	ToolCall,
 	FinishReason,
-	UsageStats,
+	StreamerAdapterInterface,
+	SSEParserAdapterInterface,
+	SSEEvent,
 } from '@mikesaintsg/core'
 
 import type {
 	OpenAIProviderAdapterOptions,
-	StreamerAdapterInterface,
-	SSEParserAdapterInterface,
-	SSEEvent,
-	Unsubscribe,
+	OpenAIChatCompletionChunk,
 } from '../../types.js'
 
-import { createStreamerAdapter } from '../streaming/Streamer.js'
-import { createSSEParser } from '../streaming/SSEParser.js'
+import { createStreamerAdapter, createSSEParserAdapter } from '../../factories.js'
 import { createAdapterError } from '../../helpers.js'
 import {
 	DEFAULT_OPENAI_MODEL,
 	DEFAULT_OPENAI_BASE_URL,
 	DEFAULT_TIMEOUT_MS,
 } from '../../constants.js'
+import { ProviderStreamHandle } from '../streamers/ProviderStreamHandle.js'
 
 /**
- * OpenAI chat completion chunk structure (streaming)
+ *  OpenAI provider implementation
  */
-interface OpenAIChatCompletionChunk {
-	readonly id: string
-	readonly object: 'chat.completion.chunk'
-	readonly created: number
-	readonly model: string
-	readonly choices: readonly OpenAIChunkChoice[]
-	readonly usage?: OpenAIUsage
-}
-
-interface OpenAIChunkChoice {
-	readonly index: number
-	readonly delta: OpenAIDelta
-	readonly finish_reason: string | null
-}
-
-interface OpenAIDelta {
-	readonly role?: string
-	readonly content?: string | null
-	readonly tool_calls?: readonly OpenAIToolCallDelta[]
-}
-
-interface OpenAIToolCallDelta {
-	readonly index: number
-	readonly id?: string
-	readonly type?: 'function'
-	readonly function?: {
-		readonly name?: string
-		readonly arguments?: string
-	}
-}
-
-interface OpenAIUsage {
-	readonly prompt_tokens: number
-	readonly completion_tokens: number
-	readonly total_tokens: number
-}
-
-/**
- * Create an OpenAI provider adapter.
- *
- * @param options - OpenAI provider options
- * @returns ProviderAdapterInterface implementation
- */
-export function createOpenAIProviderAdapter(
-	options: OpenAIProviderAdapterOptions,
-): ProviderAdapterInterface {
-	return new OpenAIProvider(options)
-}
-
-/**
- * Internal OpenAI provider implementation
- */
-class OpenAIProvider implements ProviderAdapterInterface {
+export class OpenAIProvider implements ProviderAdapterInterface {
 	readonly #id: string
 	readonly #apiKey: string
 	readonly #model: string
@@ -106,7 +51,7 @@ class OpenAIProvider implements ProviderAdapterInterface {
 		this.#baseURL = options.baseURL ?? DEFAULT_OPENAI_BASE_URL
 		this.#organization = options.organization
 		this.#streamer = options.streamer ?? createStreamerAdapter()
-		this.#sseParser = options.sseParser ?? createSSEParser()
+		this.#sseParser = options.sseParser ?? createSSEParserAdapter()
 		this.#defaultOptions = options.defaultOptions
 	}
 
@@ -124,8 +69,8 @@ class OpenAIProvider implements ProviderAdapterInterface {
 		// Merge default options with provided options
 		const mergedOptions = { ...this.#defaultOptions, ...options }
 
-		// Create stream handle
-		const handle = new OpenAIStreamHandle(
+		// Create stream handle using shared ProviderStreamHandle
+		const handle = new ProviderStreamHandle(
 			requestId,
 			abortController,
 			this.#streamer,
@@ -158,7 +103,7 @@ class OpenAIProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		handle: OpenAIStreamHandle,
+		handle: ProviderStreamHandle,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -313,7 +258,7 @@ class OpenAIProvider implements ProviderAdapterInterface {
 
 	async #processStream(
 		response: Response,
-		handle: OpenAIStreamHandle,
+		handle: ProviderStreamHandle,
 	): Promise<void> {
 		const reader = response.body?.getReader()
 		if (reader === undefined) {
@@ -355,7 +300,7 @@ class OpenAIProvider implements ProviderAdapterInterface {
 		}
 	}
 
-	#handleSSEEvent(event: SSEEvent, handle: OpenAIStreamHandle): void {
+	#handleSSEEvent(event: SSEEvent, handle: ProviderStreamHandle): void {
 		const data = event.data.trim()
 
 		// Handle stream end
@@ -372,7 +317,7 @@ class OpenAIProvider implements ProviderAdapterInterface {
 		}
 	}
 
-	#processChunk(chunk: OpenAIChatCompletionChunk, handle: OpenAIStreamHandle): void {
+	#processChunk(chunk: OpenAIChatCompletionChunk, handle: ProviderStreamHandle): void {
 		for (const choice of chunk.choices) {
 			// Handle text content
 			if (choice.delta.content !== undefined && choice.delta.content !== null) {
@@ -382,7 +327,11 @@ class OpenAIProvider implements ProviderAdapterInterface {
 			// Handle tool calls
 			if (choice.delta.tool_calls !== undefined) {
 				for (const toolCallDelta of choice.delta.tool_calls) {
-					handle.appendToolCall(toolCallDelta)
+					handle.updateToolCall(toolCallDelta.index, {
+						id: toolCallDelta.id,
+						name: toolCallDelta.function?.name,
+						arguments: toolCallDelta.function?.arguments,
+					})
 				}
 			}
 
@@ -466,183 +415,5 @@ class OpenAIProvider implements ProviderAdapterInterface {
 			return createAdapterError('TIMEOUT_ERROR', error.message)
 		}
 		return createAdapterError('NETWORK_ERROR', error.message)
-	}
-}
-
-/**
- * OpenAI-specific StreamHandle implementation
- */
-class OpenAIStreamHandle implements StreamHandleInterface {
-	readonly requestId: string
-	readonly #abortController: AbortController
-	readonly #streamer: StreamerAdapterInterface
-
-	#text = ''
-	#toolCalls = new Map<number, { id: string; name: string; arguments: string }>()
-	#finishReason: FinishReason = 'stop'
-	#usage: UsageStats | undefined
-	#aborted = false
-	#completed = false
-
-	#resultResolve: ((result: GenerationResult) => void) | undefined
-	#resultReject: ((error: Error) => void) | undefined
-	#resultPromise: Promise<GenerationResult>
-
-	#completeCallbacks = new Set<(result: GenerationResult) => void>()
-	#errorCallbacks = new Set<(error: Error) => void>()
-
-	constructor(
-		requestId: string,
-		abortController: AbortController,
-		streamer: StreamerAdapterInterface,
-	) {
-		this.requestId = requestId
-		this.#abortController = abortController
-		this.#streamer = streamer
-
-		this.#resultPromise = new Promise<GenerationResult>((resolve, reject) => {
-			this.#resultResolve = resolve
-			this.#resultReject = reject
-		})
-	}
-
-	[Symbol.asyncIterator](): AsyncIterator<string> {
-		const tokens: string[] = []
-		let resolve: (() => void) | undefined
-		let done = false
-
-		this.onToken((token) => {
-			tokens.push(token)
-			resolve?.()
-		})
-
-		this.onComplete(() => {
-			done = true
-			resolve?.()
-		})
-
-		this.onError(() => {
-			done = true
-			resolve?.()
-		})
-
-		return {
-			next: async(): Promise<IteratorResult<string>> => {
-				while (tokens.length === 0 && !done) {
-					await new Promise<void>((r) => { resolve = r })
-				}
-
-				const token = tokens.shift()
-				if (token !== undefined) {
-					return { value: token, done: false }
-				}
-
-				return { value: undefined as unknown as string, done: true }
-			},
-		}
-	}
-
-	result(): Promise<GenerationResult> {
-		return this.#resultPromise
-	}
-
-	abort(): void {
-		this.#abortController.abort()
-		this.setAborted()
-	}
-
-	onToken(callback: (token: string) => void): Unsubscribe {
-		return this.#streamer.onToken(callback)
-	}
-
-	onComplete(callback: (result: GenerationResult) => void): Unsubscribe {
-		this.#completeCallbacks.add(callback)
-		return () => { this.#completeCallbacks.delete(callback) }
-	}
-
-	onError(callback: (error: Error) => void): Unsubscribe {
-		this.#errorCallbacks.add(callback)
-		return () => { this.#errorCallbacks.delete(callback) }
-	}
-
-	// Internal methods for provider to call
-
-	emitToken(token: string): void {
-		this.#text += token
-		this.#streamer.emit(token)
-	}
-
-	appendToolCall(delta: OpenAIToolCallDelta): void {
-		const existing = this.#toolCalls.get(delta.index)
-		if (existing === undefined) {
-			this.#toolCalls.set(delta.index, {
-				id: delta.id ?? '',
-				name: delta.function?.name ?? '',
-				arguments: delta.function?.arguments ?? '',
-			})
-		} else {
-			if (delta.id !== undefined) existing.id = delta.id
-			if (delta.function?.name !== undefined) existing.name = delta.function.name
-			if (delta.function?.arguments !== undefined) existing.arguments += delta.function.arguments
-		}
-	}
-
-	setFinishReason(reason: FinishReason): void {
-		this.#finishReason = reason
-	}
-
-	setUsage(usage: UsageStats): void {
-		this.#usage = usage
-	}
-
-	setError(error: Error): void {
-		this.#completed = true
-		this.#streamer.end()
-		this.#resultReject?.(error)
-		for (const callback of this.#errorCallbacks) {
-			callback(error)
-		}
-	}
-
-	setAborted(): void {
-		this.#aborted = true
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-	}
-
-	complete(): void {
-		if (this.#completed) return
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
-		}
-	}
-
-	#buildResult(): GenerationResult {
-		const toolCalls: ToolCall[] = []
-		for (const [, tc] of this.#toolCalls) {
-			try {
-				toolCalls.push({
-					id: tc.id,
-					name: tc.name,
-					arguments: JSON.parse(tc.arguments) as Record<string, unknown>,
-				})
-			} catch {
-				// Skip malformed tool calls
-			}
-		}
-
-		return {
-			text: this.#text,
-			toolCalls,
-			finishReason: this.#finishReason,
-			...(this.#usage !== undefined && { usage: this.#usage }),
-			aborted: this.#aborted,
-		}
 	}
 }

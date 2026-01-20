@@ -106,6 +106,7 @@ createEngine({ provider: adapter })
 | `vectorstore`      | `EmbeddingAdapterInterface`  |
 | `contextprotocol`  | `ToolFormatAdapterInterface` |
 | `contextbuilder`   | `TokenCounterInterface`      |
+| `rater`            | N/A                          |
 
 ### Interface Ownership
 

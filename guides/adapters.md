@@ -11,19 +11,20 @@
 3. [Quick Start](#quick-start)
 4. [Core Concepts](#core-concepts)
 5. [Provider Adapters](#provider-adapters)
-6. [Embedding Adapters](#embedding-adapters)
-7. [Policy Adapters](#policy-adapters)
-8. [Enhancement Adapters](#enhancement-adapters)
-9. [Transform Adapters](#transform-adapters)
-10. [Persistence Adapters](#persistence-adapters)
-11. [Bridge Functions](#bridge-functions)
-12. [Error Handling](#error-handling)
-13. [TypeScript Integration](#typescript-integration)
-14. [Performance Tips](#performance-tips)
-15. [Browser Compatibility](#browser-compatibility)
-16. [Integration with Ecosystem](#integration-with-ecosystem)
-17. [API Reference](#api-reference)
-18. [License](#license)
+6. [Streaming Adapters](#streaming-adapters)
+7. [Embedding Adapters](#embedding-adapters)
+8. [Policy Adapters](#policy-adapters)
+9. [Enhancement Adapters](#enhancement-adapters)
+10. [Transform Adapters](#transform-adapters)
+11. [Persistence Adapters](#persistence-adapters)
+12. [Context Builder Adapters](#context-builder-adapters)
+13. [Error Handling](#error-handling)
+14. [TypeScript Integration](#typescript-integration)
+15. [Performance Tips](#performance-tips)
+16. [Browser Compatibility](#browser-compatibility)
+17. [Integration with Ecosystem](#integration-with-ecosystem)
+18. [API Reference](#api-reference)
+19. [License](#license)
 
 ---
 
@@ -40,7 +41,7 @@
 - **Enhancement adapters** — Caching, batching, and reranking
 - **Transform adapters** — Tool format conversion and similarity scoring
 - **Persistence adapters** — IndexedDB, OPFS, and HTTP storage
-- **Bridge functions** — Connect inference to contextprotocol
+- **Context builder adapters** — Deduplication, truncation, and priority
 - **Zero dependencies** — Built entirely on native `fetch` API
 
 ### Package Role
@@ -66,16 +67,16 @@ This package is the **implementation home** for all adapter interfaces defined i
 
 ### When to Use This Package
 
-| Scenario | Use @mikesaintsg/adapters | Use Custom Implementation |
-|----------|---------------------------|---------------------------|
-| OpenAI, Anthropic, Ollama integration | ✅ | |
-| Standard retry/rate limiting | ✅ | |
-| LRU/TTL caching | ✅ | |
-| IndexedDB/OPFS persistence | ✅ | |
-| Custom token streaming behavior | ✅ (custom streamer) | |
-| Proprietary LLM provider | | ✅ (implement interface) |
-| Custom caching strategy | | ✅ (implement interface) |
-| Domain-specific persistence | | ✅ (implement interface) |
+| Scenario                              | Use @mikesaintsg/adapters | Use Custom Implementation |
+|---------------------------------------|---------------------------|---------------------------|
+| OpenAI, Anthropic, Ollama integration | ✅                         |                           |
+| Standard retry/rate limiting          | ✅                         |                           |
+| LRU/TTL caching                       | ✅                         |                           |
+| IndexedDB/OPFS persistence            | ✅                         |                           |
+| Custom token streaming behavior       | ✅ (custom streamer)       |                           |
+| Proprietary LLM provider              |                           | ✅ (implement interface)   |
+| Custom caching strategy               |                           | ✅ (implement interface)   |
+| Domain-specific persistence           |                           | ✅ (implement interface)   |
 
 ---
 
@@ -127,7 +128,7 @@ const store = await createVectorStore(embedding, {
 	cache: createLRUCacheAdapter({ maxSize: 10000 }),
 })
 
-// 5. Use the systems — streaming works out of the box
+// 5. Use the systems — streamers works out of the box
 const session = engine.createSession({ system: 'You are helpful.' })
 session.addMessage('user', 'Hello!')
 
@@ -164,15 +165,15 @@ const engine = createEngine(provider) // provider:  ProviderAdapterInterface
 
 ### Adapter Categories
 
-| Category | Purpose | Interfaces | Examples |
-|----------|---------|------------|----------|
-| **Provider** | LLM text generation (streaming) | `ProviderAdapterInterface` | OpenAI, Anthropic, Ollama |
-| **Embedding** | Vector generation | `EmbeddingAdapterInterface` | OpenAI, Voyage, HuggingFace |
-| **Streaming** | Token emission and SSE parsing | `StreamerAdapterInterface`, `SSEParserAdapterInterface` | Default streamer, SSE parser |
-| **Policy** | Request behavior | `RetryAdapterInterface`, `RateLimitAdapterInterface` | Exponential retry, Token bucket |
-| **Enhancement** | Added capabilities | `EmbeddingCacheAdapterInterface`, `BatchAdapterInterface`, `RerankerAdapterInterface` | LRU cache, Cohere reranker |
-| **Transform** | Format conversion | `ToolFormatAdapterInterface`, `SimilarityAdapterInterface` | OpenAI tools, Cosine similarity |
-| **Persistence** | Data storage | `VectorStorePersistenceAdapterInterface`, `SessionPersistenceInterface` | IndexedDB, OPFS, HTTP |
+| Category        | Purpose                         | Interfaces                                                                            | Examples                        |
+|-----------------|---------------------------------|---------------------------------------------------------------------------------------|---------------------------------|
+| **Provider**    | LLM text generation (streaming) | `ProviderAdapterInterface`                                                            | OpenAI, Anthropic, Ollama       |
+| **Embedding**   | Vector generation               | `EmbeddingAdapterInterface`                                                           | OpenAI, Voyage, HuggingFace     |
+| **Streaming**   | Token emission and SSE parsing  | `StreamerAdapterInterface`, `SSEParserAdapterInterface`                               | Default streamer, SSE parser    |
+| **Policy**      | Request behavior                | `RetryAdapterInterface`, `RateLimitAdapterInterface`                                  | Exponential retry, Token bucket |
+| **Enhancement** | Added capabilities              | `EmbeddingCacheAdapterInterface`, `BatchAdapterInterface`, `RerankerAdapterInterface` | LRU cache, Cohere reranker      |
+| **Transform**   | Format conversion               | `ToolFormatAdapterInterface`, `SimilarityAdapterInterface`                            | OpenAI tools, Cosine similarity |
+| **Persistence** | Data storage                    | `VectorStorePersistenceAdapterInterface`, `SessionPersistenceInterface`               | IndexedDB, OPFS, HTTP           |
 
 ### Factory Pattern
 
@@ -199,47 +200,68 @@ const engine = createEngine({
 
 ### Streaming Architecture
 
-All provider adapters stream by default.  Streaming is not opt-in — it is the native behavior.
+All provider adapters stream by default. Streaming adapters handle the token emission pipeline.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Provider Adapter                            │
-│  ┌───────────────┐    ┌───────────────┐    ┌────────────────┐  │
-│  │  fetch() with │───▶│  SSE Parser   │───▶│   Streamer     │  │
-│  │  streaming    │    │  (internal)   │    │   Adapter      │  │
-│  └───────────────┘    └───────────────┘    └───────┬────────┘  │
-│                                                     │           │
-├─────────────────────────────────────────────────────┼───────────┤
-│                     StreamHandleInterface           │           │
-│  ┌──────────────────────────────────────────────────▼────────┐ │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Server-side (OpenAI, Anthropic)                        │   │
+│  │  fetch() → SSE Parser Adapter → Streamer Adapter        │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Local NDJSON (Ollama)                                  │   │
+│  │  fetch() → NDJSON parsing → Streamer Adapter            │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Local callback (node-llama-cpp, HuggingFace)           │   │
+│  │  Generator/TextStreamer → Streamer Adapter              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                     StreamHandleInterface                       │
+│  ┌───────────────────────────────────────────────────────────┐ │
 │  │  for await (const token of stream) { ... }                │ │
-│  │  stream. onToken((token) => { ... })                       │ │
+│  │  stream.onToken((token) => { ... })                       │ │
 │  │  stream.result() → Promise<GenerationResult>              │ │
-│  └────────────────────────────────────────────────────────────┘ │
+│  └───────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Streaming by Provider Type:**
+
+| Provider Type  | Streaming Format                | Streaming Adapter Used    |
+|----------------|---------------------------------|---------------------------|
+| OpenAI         | SSE (Server-Sent Events)        | SSE Parser → Streamer     |
+| Anthropic      | SSE (Server-Sent Events)        | SSE Parser → Streamer     |
+| Ollama         | NDJSON (Newline Delimited JSON) | NDJSON parsing → Streamer |
+| node-llama-cpp | AsyncGenerator (local)          | Direct → Streamer         |
+| HuggingFace    | TextStreamer callback (local)   | Callback → Streamer       |
+
 **Key principles:**
 
-1. **SSE parsing is internal** — Each provider adapter handles its own SSE format
-2. **Default SSE parser provided** — `createSSEParser()` is used internally by all providers
-3. **Custom SSE parser optional** — Pass `sseParser` option to use your own implementation
-4. **Default streamer provided** — `createStreamerAdapter()` is used internally by all providers
-5. **Custom streamer optional** — Pass `streamer` option to use your own implementation
-6. **No streaming flags** — No `stream:  true`, no `supportsStreaming()` checks
+1. **Streamers are universal** — All providers emit tokens through `StreamerAdapterInterface`
+2. **SSE parsers are for server-side only** — Used by OpenAI, Anthropic (not Ollama, local providers)
+3. **Default adapters provided** — `createStreamerAdapter()` and `createSSEParserAdapter()` are used internally
+4. **Custom adapters optional** — Pass `streamer` or `sseParser` option to use your own implementation
+5. **No streaming flags** — No `stream: true`, no `supportsStreaming()` checks
 
-### Internal Utilities
+### Streaming Adapters
 
-The following utilities are used internally by provider adapters and are NOT part of the public API:
+Streaming adapters are first-class adapters in the ecosystem. Interfaces are defined in `@mikesaintsg/core`, implementations in `@mikesaintsg/adapters`.
 
-| Utility | Purpose | Factory |
-|---------|---------|---------|
-| SSE Parser | Parse Server-Sent Events from streaming responses | `createSSEParser()` |
+| Adapter    | Interface                   | Factory                    | Purpose                               |
+|------------|-----------------------------|----------------------------|---------------------------------------|
+| Streamer   | `StreamerAdapterInterface`  | `createStreamerAdapter()`  | Universal token emission              |
+| SSE Parser | `SSEParserAdapterInterface` | `createSSEParserAdapter()` | Parse SSE streams (OpenAI, Anthropic) |
 
-Both SSE Parser and Streamer follow the same pattern:
+Both follow the same opt-in pattern as other adapters:
 - Default implementation provided internally
 - Optional custom adapter via options (`sseParser`, `streamer`)
-- No boolean flags, no opt-in
+- Interfaces in core, implementations in adapters
 
 ### Opt-In Design
 
@@ -290,23 +312,23 @@ const store = await createVectorStore(embeddingAdapter, {
 
 ### Interface Ownership
 
-| Interface | Defined In | Implemented In |
-|-----------|------------|----------------|
-| `ProviderAdapterInterface` | `core` | `adapters` |
-| `EmbeddingAdapterInterface` | `core` | `adapters` |
-| `StreamerAdapterInterface` | `core` | `adapters` |
-| `RetryAdapterInterface` | `core` | `adapters` |
-| `RateLimitAdapterInterface` | `core` | `adapters` |
-| `EmbeddingCacheAdapterInterface` | `core` | `adapters` |
-| `BatchAdapterInterface` | `core` | `adapters` |
-| `RerankerAdapterInterface` | `core` | `adapters` |
-| `SimilarityAdapterInterface` | `core` | `adapters` |
-| `ToolFormatAdapterInterface` | `core` | `adapters` |
-| `VectorStorePersistenceAdapterInterface` | `core` | `adapters` |
-| `SessionPersistenceInterface` | `core` | `adapters` |
-| `DeduplicationAdapterInterface` | `core` | `adapters` |
-| `TruncationAdapterInterface` | `core` | `adapters` |
-| `PriorityAdapterInterface` | `core` | `adapters` |
+| Interface                                | Defined In | Implemented In |
+|------------------------------------------|------------|----------------|
+| `ProviderAdapterInterface`               | `core`     | `adapters`     |
+| `EmbeddingAdapterInterface`              | `core`     | `adapters`     |
+| `StreamerAdapterInterface`               | `core`     | `adapters`     |
+| `RetryAdapterInterface`                  | `core`     | `adapters`     |
+| `RateLimitAdapterInterface`              | `core`     | `adapters`     |
+| `EmbeddingCacheAdapterInterface`         | `core`     | `adapters`     |
+| `BatchAdapterInterface`                  | `core`     | `adapters`     |
+| `RerankerAdapterInterface`               | `core`     | `adapters`     |
+| `SimilarityAdapterInterface`             | `core`     | `adapters`     |
+| `ToolFormatAdapterInterface`             | `core`     | `adapters`     |
+| `VectorStorePersistenceAdapterInterface` | `core`     | `adapters`     |
+| `SessionPersistenceInterface`            | `core`     | `adapters`     |
+| `DeduplicationAdapterInterface`          | `core`     | `adapters`     |
+| `TruncationAdapterInterface`             | `core`     | `adapters`     |
+| `PriorityAdapterInterface`               | `core`     | `adapters`     |
 
 ---
 
@@ -316,13 +338,13 @@ Provider adapters implement `ProviderAdapterInterface` for LLM text generation. 
 
 ### Supported Providers
 
-| Factory | Provider | Environment | Tools |
-|---------|----------|-------------|-------|
-| `createOpenAIProviderAdapter` | OpenAI | Cloud | ✅ |
-| `createAnthropicProviderAdapter` | Anthropic | Cloud | ✅ |
-| `createOllamaProviderAdapter` | Ollama | Local | ✅ |
-| `createNodeLlamaCppProviderAdapter` | node-llama-cpp | Local | ❌ |
-| `createHuggingFaceProviderAdapter` | HuggingFace | Local/Browser | ❌ |
+| Factory                             | Provider       | Environment   | Tools |
+|-------------------------------------|----------------|---------------|-------|
+| `createOpenAIProviderAdapter`       | OpenAI         | Cloud         | ✅     |
+| `createAnthropicProviderAdapter`    | Anthropic      | Cloud         | ✅     |
+| `createOllamaProviderAdapter`       | Ollama         | Local         | ✅     |
+| `createNodeLlamaCppProviderAdapter` | node-llama-cpp | Local         | ❌     |
+| `createHuggingFaceProviderAdapter`  | HuggingFace    | Local/Browser | ❌     |
 
 ### Streaming Behavior
 
@@ -350,9 +372,9 @@ const result = await stream.result()
 console.log('\nFinish reason:', result.finishReason)
 ```
 
-### Custom Streamer
+### Custom Streamer Adapter
 
-Provide a custom streamer to control token emission:
+Provide a custom streamer to control token emission. Streamers implement `StreamerAdapterInterface` from `@mikesaintsg/core`.
 
 ```ts
 import { createStreamerAdapter } from '@mikesaintsg/adapters'
@@ -370,6 +392,28 @@ const provider = createOpenAIProviderAdapter({
 	streamer: customStreamer, // Use custom streamer
 })
 ```
+
+### Custom SSE Parser Adapter
+
+For server-side providers (OpenAI, Anthropic), you can provide a custom SSE parser. SSE parsers implement `SSEParserAdapterInterface` from `@mikesaintsg/core`.
+
+```ts
+import { createSSEParserAdapter } from '@mikesaintsg/adapters'
+
+// Create custom SSE parser with different delimiters
+const customSSEParser = createSSEParserAdapter({
+	lineDelimiter: '\n',
+	eventDelimiter: '\n\n',
+})
+
+const provider = createOpenAIProviderAdapter({
+	apiKey: process.env.OPENAI_API_KEY!,
+	model: 'gpt-4o',
+	sseParser: customSSEParser, // Use custom SSE parser
+})
+```
+
+**Note:** SSE parsers are only used by server-side providers (OpenAI, Anthropic). Local providers (Ollama, node-llama-cpp, HuggingFace) do not use SSE.
 
 ### OpenAI
 
@@ -496,19 +540,119 @@ const engine = createEngine(provider)
 
 ---
 
+## Streaming Adapters
+
+Streaming adapters handle token emission during LLM generation. They are first-class adapters with interfaces defined in `@mikesaintsg/core` and implementations in `@mikesaintsg/adapters`.
+
+### Adapter Overview
+
+| Adapter    | Interface                   | Factory                    | Purpose                  | Used By           |
+|------------|-----------------------------|----------------------------|--------------------------|-------------------|
+| Streamer   | `StreamerAdapterInterface`  | `createStreamerAdapter()`  | Universal token emission | All providers     |
+| SSE Parser | `SSEParserAdapterInterface` | `createSSEParserAdapter()` | Parse SSE streams        | OpenAI, Anthropic |
+
+### StreamerAdapterInterface
+
+The streamer adapter provides a universal token emission interface. All provider adapters emit tokens through a streamer.
+
+```ts
+import { createStreamerAdapter } from '@mikesaintsg/adapters'
+import type { StreamerAdapterInterface } from '@mikesaintsg/core'
+
+const streamer: StreamerAdapterInterface = createStreamerAdapter()
+
+// Subscribe to tokens
+const unsubscribe = streamer.onToken((token) => {
+	process.stdout.write(token)
+})
+
+// Use with provider (tokens emitted internally)
+const provider = createOpenAIProviderAdapter({
+	apiKey: process.env.OPENAI_API_KEY!,
+	model: 'gpt-4o',
+	streamer, // Custom streamer
+})
+
+// Cleanup
+unsubscribe()
+```
+
+### SSEParserAdapterInterface
+
+The SSE parser adapter handles Server-Sent Events streaming format used by server-side LLM providers.
+
+**Used by:** OpenAI, Anthropic, and other API-based providers using SSE format.
+
+**NOT used by:** Ollama (uses NDJSON), node-llama-cpp (direct emission), HuggingFace (TextStreamer callback).
+
+```ts
+import { createSSEParserAdapter } from '@mikesaintsg/adapters'
+import type { SSEParserAdapterInterface } from '@mikesaintsg/core'
+
+const sseAdapter: SSEParserAdapterInterface = createSSEParserAdapter({
+	lineDelimiter: '\n',
+	eventDelimiter: '\n\n',
+})
+
+// Create parser for a stream
+const parser = sseAdapter.createParser({
+	onEvent: (event) => {
+		const data = JSON.parse(event.data)
+		console.log('Content:', data.choices[0]?.delta?.content)
+	},
+	onError: (error) => {
+		console.error('Parse error:', error)
+	},
+	onEnd: () => {
+		console.log('Stream complete')
+	},
+})
+
+// Feed chunks from fetch response
+const response = await fetch('https://api.openai.com/v1/chat/completions', {
+	// ... options
+})
+
+const reader = response.body!.getReader()
+const decoder = new TextDecoder()
+
+while (true) {
+	const { done, value } = await reader.read()
+	if (done) break
+	parser.feed(decoder.decode(value))
+}
+
+parser.end()
+```
+
+### File Structure
+
+Streaming adapter implementations are in `src/streamers/`:
+
+```
+@mikesaintsg/adapters/
+  src/
+    streamers/
+      streamer.ts       # createStreamerAdapter()
+      sse-parser.ts     # createSSEParserAdapter()
+      index.ts          # Barrel exports
+```
+
+---
+
 ## Embedding Adapters
 
 Embedding adapters implement `EmbeddingAdapterInterface` for vector generation. They are the **required first parameter** to `createVectorStore()`.
 
 ### Supported Providers
 
-| Factory | Provider | Environment | Dimensions |
-|---------|----------|-------------|------------|
-| `createOpenAIEmbeddingAdapter` | OpenAI | Cloud | 256–3072 |
-| `createVoyageEmbeddingAdapter` | Voyage AI | Cloud | 1024 |
-| `createOllamaEmbeddingAdapter` | Ollama | Local | Model-dependent |
-| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp | Local | Model-dependent |
-| `createHuggingFaceEmbeddingAdapter` | HuggingFace | Local/Browser | Model-dependent |
+| Factory                              | Provider       | Environment   | Dimensions      |
+|--------------------------------------|----------------|---------------|-----------------|
+| `createOpenAIEmbeddingAdapter`       | OpenAI         | Cloud         | 256–3072        |
+| `createVoyageEmbeddingAdapter`       | Voyage AI      | Cloud         | 1024            |
+| `createOllamaEmbeddingAdapter`       | Ollama         | Local         | Model-dependent |
+| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp | Local         | Model-dependent |
+| `createHuggingFaceEmbeddingAdapter`  | HuggingFace    | Local/Browser | Model-dependent |
 
 ### OpenAI
 
@@ -613,11 +757,11 @@ const store = await createVectorStore(embedding)
 
 **Pooling strategies:**
 
-| Strategy | Description | Use Case |
-|----------|-------------|----------|
-| `mean` | Mean pooling across all tokens | Most sentence embedding models |
-| `cls` | Use CLS token embedding | BERT-style models |
-| `none` | No pooling (full sequence) | Advanced use cases |
+| Strategy | Description                    | Use Case                       |
+|----------|--------------------------------|--------------------------------|
+| `mean`   | Mean pooling across all tokens | Most sentence embedding models |
+| `cls`    | Use CLS token embedding        | BERT-style models              |
+| `none`   | No pooling (full sequence)     | Advanced use cases             |
 
 **HuggingFace embedding models:** `Xenova/all-MiniLM-L6-v2` (384d), `Xenova/all-mpnet-base-v2` (768d), `Xenova/bge-small-en-v1.5` (384d), `Xenova/gte-small` (384d)
 
@@ -878,21 +1022,21 @@ const store = await createVectorStore(embedding, {
 })
 ```
 
-| Adapter | Formula | Best For |
-|---------|---------|----------|
-| Cosine | `dot(a,b) / (‖a‖ × ‖b‖)` | Normalized vectors, semantic similarity |
-| Dot | `dot(a,b)` | Pre-normalized vectors |
-| Euclidean | `1 / (1 + distance(a,b))` | Absolute distance matters |
+| Adapter   | Formula                   | Best For                                |
+|-----------|---------------------------|-----------------------------------------|
+| Cosine    | `dot(a,b) / (‖a‖ × ‖b‖)`  | Normalized vectors, semantic similarity |
+| Dot       | `dot(a,b)`                | Pre-normalized vectors                  |
+| Euclidean | `1 / (1 + distance(a,b))` | Absolute distance matters               |
 
 ---
 
 ## Persistence Adapters
 
-Persistence adapters store and load data across sessions.
+Persistence adapters store and load data across sessions. All persistence adapters extend the base `PersistenceAdapterInterface` which provides `isAvailable()` and `clear()` methods.
 
 ### VectorStore Persistence
 
-VectorStore persistence adapters implement `VectorStorePersistenceAdapterInterface`.
+VectorStore persistence adapters implement `VectorStorePersistenceAdapterInterface` (extends `PersistenceAdapterInterface`).
 
 #### IndexedDB
 
@@ -953,7 +1097,7 @@ const store = await createVectorStore(embedding, { persistence })
 
 ### Session Persistence
 
-Session persistence adapters implement `SessionPersistenceInterface`.
+Session persistence adapters implement `SessionPersistenceInterface` (extends `PersistenceAdapterInterface`).
 
 ```ts
 import { createIndexedDBSessionPersistenceAdapter } from '@mikesaintsg/adapters'
@@ -972,110 +1116,15 @@ const engine = createEngine(provider, {
 
 ### Adapter Selection Guide
 
-| Adapter | Persistence | Capacity | Speed | Use Case |
-|---------|-------------|----------|-------|----------|
-| IndexedDB | ✅ | ~500MB–2GB | Medium | General browser storage |
-| OPFS | ✅ | Large files | Fast | Large datasets, file-based access |
-| HTTP | ✅ | Unlimited | Network-dependent | Shared/cloud storage |
-| In-Memory | ❌ | RAM-limited | Fastest | Development, testing |
+| Adapter           | Persistence | Capacity    | Speed             | Use Case                   |
+|-------------------|-------------|-------------|-------------------|----------------------------|
+| IndexedDB Vector  | ✅           | ~500MB–2GB  | Medium            | General browser storage    |
+| OPFS Vector       | ✅           | Large files | Fast              | Large datasets, file-based |
+| HTTP Vector       | ✅           | Unlimited   | Network-dependent | Shared/cloud storage       |
+| IndexedDB Session | ✅           | ~500MB–2GB  | Medium            | Session persistence        |
 
 ---
 
-## Bridge Functions
-
-Bridge functions connect different packages in the ecosystem.
-
-### Tool Call Bridge
-
-Connects inference tool calls to contextprotocol execution: 
-
-```ts
-import { createToolCallBridge } from '@mikesaintsg/adapters'
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
-import { createEngine } from '@mikesaintsg/inference'
-
-// Create registry and register tools
-const registry = createToolRegistry(formatter)
-
-registry.register(
-	{
-		name: 'get_weather',
-		description:  'Get current weather',
-		parameters: {
-			type: 'object',
-			properties: { city: { type: 'string' } },
-			required: ['city'],
-		},
-	},
-	async (params) => {
-		const city = params.city as string
-		return { temperature: 72, condition: 'sunny' }
-	}
-)
-
-// Create bridge
-const bridge = createToolCallBridge({
-	registry,
-	timeout: 30000,
-	onError: (error, toolCall) => {
-		console.error(`Tool ${toolCall.name} failed:`, error)
-	},
-})
-
-// Use in generation loop
-const session = engine.createSession({
-	system: 'You have access to weather data.',
-})
-
-session.addMessage('user', 'What is the weather in Paris?')
-
-const stream = session.stream({ tools: registry.all() })
-for await (const token of stream) {
-	process.stdout. write(token)
-}
-
-const result = await stream.result()
-
-// Execute tool calls via bridge (array overload)
-if (result.toolCalls.length > 0) {
-	const toolResults = await bridge.execute(result.toolCalls)
-	
-	for (const toolResult of toolResults) {
-		session.addToolResult(toolResult. callId, toolResult. name, toolResult.value)
-	}
-	
-	// Continue generation with tool results
-	const followUp = await session. generate()
-	console.log(followUp. text)
-}
-```
-
-### Retrieval Tool Factory
-
-Creates a tool that queries a vector store — connects vectorstore to contextprotocol: 
-
-```ts
-import { createRetrievalTool } from '@mikesaintsg/adapters'
-import { createVectorStore } from '@mikesaintsg/vectorstore'
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
-
-const store = await createVectorStore(embedding)
-await store.add('Paris is the capital of France.')
-await store.add('Berlin is the capital of Germany.')
-
-const retrievalTool = createRetrievalTool({
-	vectorStore: store,
-	name: 'search_knowledge',
-	description: 'Search the knowledge base for relevant information',
-	defaultLimit: 5,
-	scoreThreshold: 0.7,
-})
-
-// Register with contextprotocol
-registry.register(retrievalTool. schema, retrievalTool. handler)
-```
-
----
 
 ## Error Handling
 
@@ -1083,19 +1132,19 @@ registry.register(retrievalTool. schema, retrievalTool. handler)
 
 All adapter errors use the `AdapterErrorCode` type:
 
-| Code | Description | Recovery |
-|------|-------------|----------|
-| `AUTHENTICATION_ERROR` | Invalid API key | Verify API key is correct |
-| `RATE_LIMIT_ERROR` | Rate limit exceeded | Wait and retry with backoff |
-| `QUOTA_EXCEEDED_ERROR` | Usage quota exceeded | Check billing, increase quota |
-| `NETWORK_ERROR` | Network failure | Check network, retry |
-| `TIMEOUT_ERROR` | Request timeout | Increase timeout, retry |
-| `INVALID_REQUEST_ERROR` | Malformed request | Check request format |
-| `MODEL_NOT_FOUND_ERROR` | Unknown model | Use valid model name |
-| `CONTEXT_LENGTH_ERROR` | Context too long | Truncate context |
-| `CONTENT_FILTER_ERROR` | Content blocked | Modify content |
-| `SERVICE_ERROR` | Provider service error | Retry later |
-| `UNKNOWN_ERROR` | Unexpected error | Check logs, report bug |
+| Code                    | Description            | Recovery                      |
+|-------------------------|------------------------|-------------------------------|
+| `AUTHENTICATION_ERROR`  | Invalid API key        | Verify API key is correct     |
+| `RATE_LIMIT_ERROR`      | Rate limit exceeded    | Wait and retry with backoff   |
+| `QUOTA_EXCEEDED_ERROR`  | Usage quota exceeded   | Check billing, increase quota |
+| `NETWORK_ERROR`         | Network failure        | Check network, retry          |
+| `TIMEOUT_ERROR`         | Request timeout        | Increase timeout, retry       |
+| `INVALID_REQUEST_ERROR` | Malformed request      | Check request format          |
+| `MODEL_NOT_FOUND_ERROR` | Unknown model          | Use valid model name          |
+| `CONTEXT_LENGTH_ERROR`  | Context too long       | Truncate context              |
+| `CONTENT_FILTER_ERROR`  | Content blocked        | Modify content                |
+| `SERVICE_ERROR`         | Provider service error | Retry later                   |
+| `UNKNOWN_ERROR`         | Unexpected error       | Check logs, report bug        |
 
 ### Error Data Structure
 
@@ -1292,9 +1341,6 @@ import type {
 	CreateIndexedDBVectorPersistence,
 	CreateHTTPVectorPersistence,
 	CreateIndexedDBSessionPersistence,
-	// Bridge factories
-	CreateToolCallBridge,
-	CreateRetrievalTool,
 	// Context builder factories
 	CreateDeduplicationAdapter,
 	CreatePriorityTruncationAdapter,
@@ -1313,7 +1359,7 @@ interface StreamerAdapterInterface {
 	onToken(callback: (token: string) => void): Unsubscribe
 	/** Emit a token to all subscribers */
 	emit(token: string): void
-	/** Signal end of streaming */
+	/** Signal end of streamers */
 	end(): void
 }
 ```
@@ -1436,15 +1482,15 @@ const provider = createOpenAIProviderAdapter({
 
 ## Browser Compatibility
 
-| Feature | Chrome | Firefox | Safari | Edge | Notes |
-|---------|--------|---------|--------|------|-------|
-| Fetch API | ✅ | ✅ | ✅ | ✅ | Required for all cloud adapters |
-| Streaming (SSE) | ✅ | ✅ | ✅ | ✅ | Native to all providers |
-| IndexedDB | ✅ | ✅ | ✅ | ✅ | Persistence adapters |
-| OPFS | ✅ | ✅ | ⚠️ | ✅ | Limited in Safari private browsing |
-| Web Crypto | ✅ | ✅ | ✅ | ✅ | Used for hashing |
-| AbortController | ✅ | ✅ | ✅ | ✅ | Request cancellation |
-| TextDecoder | ✅ | ✅ | ✅ | ✅ | SSE parsing |
+| Feature         | Chrome | Firefox | Safari | Edge | Notes                              |
+|-----------------|--------|---------|--------|------|------------------------------------|
+| Fetch API       | ✅      | ✅       | ✅      | ✅    | Required for all cloud adapters    |
+| Streaming (SSE) | ✅      | ✅       | ✅      | ✅    | Native to all providers            |
+| IndexedDB       | ✅      | ✅       | ✅      | ✅    | Persistence adapters               |
+| OPFS            | ✅      | ✅       | ⚠️     | ✅    | Limited in Safari private browsing |
+| Web Crypto      | ✅      | ✅       | ✅      | ✅    | Used for hashing                   |
+| AbortController | ✅      | ✅       | ✅      | ✅    | Request cancellation               |
+| TextDecoder     | ✅      | ✅       | ✅      | ✅    | SSE parsing                        |
 
 ### Node.js Compatibility
 
@@ -1474,101 +1520,77 @@ const persistence = supportsOPFS
 ```ts
 import { createEngine } from '@mikesaintsg/inference'
 import { createVectorStore } from '@mikesaintsg/vectorstore'
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
-import { createContextBuilder } from '@mikesaintsg/contextbuilder'
 import { createDatabase } from '@mikesaintsg/indexeddb'
 import {
 	createOpenAIProviderAdapter,
 	createOpenAIEmbeddingAdapter,
-	createOpenAIToolFormatAdapter,
 	createIndexedDBVectorPersistenceAdapter,
 	createExponentialRetryAdapter,
 	createLRUCacheAdapter,
 	createTokenBucketRateLimitAdapter,
-	createToolCallBridge,
-	createRetrievalTool,
 } from '@mikesaintsg/adapters'
 
 // Initialize database
 const db = await createDatabase({
 	name: 'rag-app',
-	version:  1,
+	version: 1,
 	stores: {
 		documents: { keyPath: 'id' },
-		metadata: { keyPath:  'key' },
+		metadata: { keyPath: 'key' },
 	},
 })
 
 // Create adapters
 const provider = createOpenAIProviderAdapter({
-	apiKey: process. env.OPENAI_API_KEY! ,
+	apiKey: process.env.OPENAI_API_KEY!,
 	model: 'gpt-4o',
 })
 
 const embedding = createOpenAIEmbeddingAdapter({
-	apiKey: process.env. OPENAI_API_KEY!,
+	apiKey: process.env.OPENAI_API_KEY!,
 	model: 'text-embedding-3-small',
 })
-
-const formatter = createOpenAIToolFormatAdapter()
 
 // Create systems with adapters
 const engine = createEngine(provider, {
 	retry: createExponentialRetryAdapter({ maxAttempts: 3 }),
-	rateLimit: createTokenBucketRateLimitAdapter({ requestsPerMinute:  50 }),
+	rateLimit: createTokenBucketRateLimitAdapter({ requestsPerMinute: 50 }),
 })
 
 const store = await createVectorStore(embedding, {
 	persistence: createIndexedDBVectorPersistenceAdapter({
 		database: db,
 		documentsStore: 'documents',
-		metadataStore:  'metadata',
+		metadataStore: 'metadata',
 	}),
 	retry: createExponentialRetryAdapter(),
-	cache: createLRUCacheAdapter({ maxSize:  10000 }),
+	cache: createLRUCacheAdapter({ maxSize: 10000 }),
 })
 
-// Create tool registry with retrieval
-const registry = createToolRegistry(formatter)
+// Add documents to the store
+await store.add('Paris is the capital of France.')
+await store.add('Berlin is the capital of Germany.')
+await store.add('Tokyo is the capital of Japan.')
 
-const retrievalTool = createRetrievalTool({
-	vectorStore: store,
-	name: 'search_docs',
-	description: 'Search documentation for relevant information',
-	defaultLimit: 5,
-	scoreThreshold: 0.7,
-})
+// Search for relevant documents
+const results = await store.search('What is the capital of France?', { limit: 5 })
+console.log('Relevant documents:', results)
 
-registry.register(retrievalTool.schema, retrievalTool. handler)
-
-// Create bridge for tool execution
-const bridge = createToolCallBridge({ registry })
-
-// Use the integrated system
+// Use the engine for generation
 const session = engine.createSession({
-	system: 'You are a helpful assistant with access to documentation.  Use the search_docs tool to find relevant information.',
+	system: 'You are a helpful assistant.',
 })
 
-session.addMessage('user', 'How do I configure retry policies?')
+session.addMessage('user', 'Tell me about European capitals.')
 
-const stream = session.stream({ tools: registry.all() })
+const stream = session.stream()
 
 for await (const token of stream) {
 	process.stdout.write(token)
 }
 
-const result = await stream. result()
-
-if (result.toolCalls.length > 0) {
-	const toolResults = await bridge.execute(result.toolCalls)
-	
-	for (const toolResult of toolResults) {
-		session. addToolResult(toolResult.callId, toolResult.name, toolResult.value)
-	}
-	
-	const followUp = await session.generate()
-	console.log('\n\n' + followUp.text)
-}
+const result = await stream.result()
+console.log('\\nGeneration complete:', result.finishReason)
 ```
 
 ### With @mikesaintsg/contextbuilder
@@ -1605,86 +1627,87 @@ const result = await engine.generateFromContext(context)
 
 ### Streamer Adapter Factory
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createStreamerAdapter` | — | `StreamerAdapterInterface` |
+| Factory                 | Options | Returns                    |
+|-------------------------|---------|----------------------------|
+| `createStreamerAdapter` | —       | `StreamerAdapterInterface` |
 
 ### Provider Adapter Factories
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createOpenAIProviderAdapter` | `OpenAIProviderAdapterOptions` | `ProviderAdapterInterface` |
-| `createAnthropicProviderAdapter` | `AnthropicProviderAdapterOptions` | `ProviderAdapterInterface` |
-| `createOllamaProviderAdapter` | `OllamaProviderAdapterOptions` | `ProviderAdapterInterface` |
+| Factory                             | Options                              | Returns                    |
+|-------------------------------------|--------------------------------------|----------------------------|
+| `createOpenAIProviderAdapter`       | `OpenAIProviderAdapterOptions`       | `ProviderAdapterInterface` |
+| `createAnthropicProviderAdapter`    | `AnthropicProviderAdapterOptions`    | `ProviderAdapterInterface` |
+| `createOllamaProviderAdapter`       | `OllamaProviderAdapterOptions`       | `ProviderAdapterInterface` |
 | `createNodeLlamaCppProviderAdapter` | `NodeLlamaCppProviderAdapterOptions` | `ProviderAdapterInterface` |
-| `createHuggingFaceProviderAdapter` | `HuggingFaceProviderAdapterOptions` | `ProviderAdapterInterface` |
+| `createHuggingFaceProviderAdapter`  | `HuggingFaceProviderAdapterOptions`  | `ProviderAdapterInterface` |
+
+### Streaming Adapter Factories
+
+| Factory                  | Options                   | Returns                     |
+|--------------------------|---------------------------|-----------------------------|
+| `createStreamerAdapter`  | —                         | `StreamerAdapterInterface`  |
+| `createSSEParserAdapter` | `SSEParserAdapterOptions` | `SSEParserAdapterInterface` |
 
 ### Embedding Adapter Factories
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createOpenAIEmbeddingAdapter` | `OpenAIEmbeddingAdapterOptions` | `EmbeddingAdapterInterface` |
-| `createVoyageEmbeddingAdapter` | `VoyageEmbeddingAdapterOptions` | `EmbeddingAdapterInterface` |
-| `createOllamaEmbeddingAdapter` | `OllamaEmbeddingAdapterOptions` | `EmbeddingAdapterInterface` |
+| Factory                              | Options                               | Returns                     |
+|--------------------------------------|---------------------------------------|-----------------------------|
+| `createOpenAIEmbeddingAdapter`       | `OpenAIEmbeddingAdapterOptions`       | `EmbeddingAdapterInterface` |
+| `createVoyageEmbeddingAdapter`       | `VoyageEmbeddingAdapterOptions`       | `EmbeddingAdapterInterface` |
+| `createOllamaEmbeddingAdapter`       | `OllamaEmbeddingAdapterOptions`       | `EmbeddingAdapterInterface` |
 | `createNodeLlamaCppEmbeddingAdapter` | `NodeLlamaCppEmbeddingAdapterOptions` | `EmbeddingAdapterInterface` |
-| `createHuggingFaceEmbeddingAdapter` | `HuggingFaceEmbeddingAdapterOptions` | `EmbeddingAdapterInterface` |
+| `createHuggingFaceEmbeddingAdapter`  | `HuggingFaceEmbeddingAdapterOptions`  | `EmbeddingAdapterInterface` |
 
 ### Policy Adapter Factories
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createExponentialRetryAdapter` | `ExponentialRetryAdapterOptions` | `RetryAdapterInterface` |
-| `createLinearRetryAdapter` | `LinearRetryAdapterOptions` | `RetryAdapterInterface` |
-| `createTokenBucketRateLimitAdapter` | `TokenBucketRateLimitAdapterOptions` | `RateLimitAdapterInterface` |
+| Factory                               | Options                                | Returns                     |
+|---------------------------------------|----------------------------------------|-----------------------------|
+| `createExponentialRetryAdapter`       | `ExponentialRetryAdapterOptions`       | `RetryAdapterInterface`     |
+| `createLinearRetryAdapter`            | `LinearRetryAdapterOptions`            | `RetryAdapterInterface`     |
+| `createTokenBucketRateLimitAdapter`   | `TokenBucketRateLimitAdapterOptions`   | `RateLimitAdapterInterface` |
 | `createSlidingWindowRateLimitAdapter` | `SlidingWindowRateLimitAdapterOptions` | `RateLimitAdapterInterface` |
 
 ### Enhancement Adapter Factories
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createLRUCacheAdapter` | `LRUCacheAdapterOptions` | `EmbeddingCacheAdapterInterface` |
-| `createTTLCacheAdapter` | `TTLCacheAdapterOptions` | `EmbeddingCacheAdapterInterface` |
-| `createIndexedDBCacheAdapter` | `IndexedDBCacheAdapterOptions` | `EmbeddingCacheAdapterInterface` |
-| `createBatchAdapter` | `BatchAdapterOptions` | `BatchAdapterInterface` |
-| `createCohereRerankerAdapter` | `CohereRerankerAdapterOptions` | `RerankerAdapterInterface` |
-| `createCrossEncoderRerankerAdapter` | `CrossEncoderRerankerAdapterOptions` | `RerankerAdapterInterface` |
+| Factory                             | Options                              | Returns                          |
+|-------------------------------------|--------------------------------------|----------------------------------|
+| `createLRUCacheAdapter`             | `LRUCacheAdapterOptions`             | `EmbeddingCacheAdapterInterface` |
+| `createTTLCacheAdapter`             | `TTLCacheAdapterOptions`             | `EmbeddingCacheAdapterInterface` |
+| `createIndexedDBCacheAdapter`       | `IndexedDBCacheAdapterOptions`       | `EmbeddingCacheAdapterInterface` |
+| `createBatchAdapter`                | `BatchAdapterOptions`                | `BatchAdapterInterface`          |
+| `createCohereRerankerAdapter`       | `CohereRerankerAdapterOptions`       | `RerankerAdapterInterface`       |
+| `createCrossEncoderRerankerAdapter` | `CrossEncoderRerankerAdapterOptions` | `RerankerAdapterInterface`       |
 
 ### Transform Adapter Factories
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createOpenAIToolFormatAdapter` | `OpenAIToolFormatAdapterOptions` | `ToolFormatAdapterInterface` |
+| Factory                            | Options                             | Returns                      |
+|------------------------------------|-------------------------------------|------------------------------|
+| `createOpenAIToolFormatAdapter`    | `OpenAIToolFormatAdapterOptions`    | `ToolFormatAdapterInterface` |
 | `createAnthropicToolFormatAdapter` | `AnthropicToolFormatAdapterOptions` | `ToolFormatAdapterInterface` |
-| `createCosineSimilarityAdapter` | — | `SimilarityAdapterInterface` |
-| `createDotSimilarityAdapter` | — | `SimilarityAdapterInterface` |
-| `createEuclideanSimilarityAdapter` | — | `SimilarityAdapterInterface` |
+| `createCosineSimilarityAdapter`    | —                                   | `SimilarityAdapterInterface` |
+| `createDotSimilarityAdapter`       | —                                   | `SimilarityAdapterInterface` |
+| `createEuclideanSimilarityAdapter` | —                                   | `SimilarityAdapterInterface` |
 
 ### Persistence Adapter Factories
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createIndexedDBVectorPersistenceAdapter` | `IndexedDBVectorPersistenceOptions` | `VectorStorePersistenceAdapterInterface` |
-| `createOPFSVectorPersistenceAdapter` | `OPFSVectorPersistenceOptions` | `VectorStorePersistenceAdapterInterface` |
-| `createHTTPVectorPersistenceAdapter` | `HTTPVectorPersistenceOptions` | `VectorStorePersistenceAdapterInterface` |
-| `createIndexedDBSessionPersistenceAdapter` | `IndexedDBSessionPersistenceOptions` | `SessionPersistenceInterface` |
+| Factory                                    | Options                              | Returns                                  |
+|--------------------------------------------|--------------------------------------|------------------------------------------|
+| `createIndexedDBVectorPersistenceAdapter`  | `IndexedDBVectorPersistenceOptions`  | `VectorStorePersistenceAdapterInterface` |
+| `createOPFSVectorPersistenceAdapter`       | `OPFSVectorPersistenceOptions`       | `VectorStorePersistenceAdapterInterface` |
+| `createHTTPVectorPersistenceAdapter`       | `HTTPVectorPersistenceOptions`       | `VectorStorePersistenceAdapterInterface` |
+| `createIndexedDBSessionPersistenceAdapter` | `IndexedDBSessionPersistenceOptions` | `SessionPersistenceInterface`            |
 
-### Bridge Function Factories
-
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createToolCallBridge` | `ToolCallBridgeOptions` | `ToolCallBridgeInterface` |
-| `createRetrievalTool` | `RetrievalToolOptions` | `RetrievalToolInterface` |
 
 ### Context Builder Adapter Factories
 
-| Factory | Options | Returns |
-|---------|---------|---------|
-| `createDeduplicationAdapter` | `DeduplicationAdapterOptions` | `DeduplicationAdapterInterface` |
-| `createPriorityTruncationAdapter` | `TruncationAdapterOptions` | `TruncationAdapterInterface` |
-| `createFIFOTruncationAdapter` | `TruncationAdapterOptions` | `TruncationAdapterInterface` |
-| `createLIFOTruncationAdapter` | `TruncationAdapterOptions` | `TruncationAdapterInterface` |
-| `createScoreTruncationAdapter` | `TruncationAdapterOptions` | `TruncationAdapterInterface` |
-| `createPriorityAdapter` | `PriorityAdapterOptions` | `PriorityAdapterInterface` |
+| Factory                           | Options                       | Returns                         |
+|-----------------------------------|-------------------------------|---------------------------------|
+| `createDeduplicationAdapter`      | `DeduplicationAdapterOptions` | `DeduplicationAdapterInterface` |
+| `createPriorityTruncationAdapter` | `TruncationAdapterOptions`    | `TruncationAdapterInterface`    |
+| `createFIFOTruncationAdapter`     | `TruncationAdapterOptions`    | `TruncationAdapterInterface`    |
+| `createLIFOTruncationAdapter`     | `TruncationAdapterOptions`    | `TruncationAdapterInterface`    |
+| `createScoreTruncationAdapter`    | `TruncationAdapterOptions`    | `TruncationAdapterInterface`    |
+| `createPriorityAdapter`           | `PriorityAdapterOptions`      | `PriorityAdapterInterface`      |
 
 ### Core Interfaces
 
@@ -1696,7 +1719,7 @@ interface StreamerAdapterInterface {
 	onToken(callback: (token: string) => void): Unsubscribe
 	/** Emit a token to all subscribers */
 	emit(token: string): void
-	/** Signal end of streaming */
+	/** Signal end of streamers */
 	end(): void
 }
 ```
@@ -1707,7 +1730,7 @@ interface StreamerAdapterInterface {
 interface ProviderAdapterInterface {
 	/** Unique identifier for this adapter instance */
 	getId(): string
-	/** Generate a streaming response */
+	/** Generate a streamers response */
 	generate(messages: readonly Message[], options:  GenerationOptions): StreamHandleInterface
 	/** Whether this provider supports tool calling */
 	supportsTools(): boolean
@@ -1727,29 +1750,6 @@ interface EmbeddingAdapterInterface {
 }
 ```
 
-#### ToolCallBridgeInterface
-
-```ts
-interface ToolCallBridgeInterface {
-	/** Execute a single tool call */
-	execute(toolCall: ToolCall): Promise<ToolResult>
-	/** Execute multiple tool calls */
-	execute(toolCalls:  readonly ToolCall[]): Promise<readonly ToolResult[]>
-	/** Check if a tool is registered */
-	hasTool(name: string): boolean
-}
-```
-
-#### RetrievalToolInterface
-
-```ts
-interface RetrievalToolInterface {
-	/** Tool schema for registration */
-	readonly schema: ToolSchema
-	/** Tool handler function */
-	readonly handler: (args:  Readonly<Record<string, unknown>>) => Promise<readonly unknown[]>
-}
-```
 
 ### Options Types
 

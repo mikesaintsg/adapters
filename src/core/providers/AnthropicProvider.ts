@@ -2,31 +2,26 @@
  * Anthropic Provider Adapter
  *
  * Implements ProviderAdapterInterface for Anthropic's Claude API.
- * Uses SSE streaming with event-based message format.
+ * Uses SSE streamers with event-based message format.
  */
 
 import type {
 	ProviderAdapterInterface,
 	StreamHandleInterface,
 	GenerationOptions,
-	GenerationResult,
 	Message,
 	ProviderCapabilities,
 	FinishReason,
-	UsageStats,
-	ToolCall,
+	StreamerAdapterInterface,
+	SSEParserAdapterInterface,
+	SSEEvent,
 } from '@mikesaintsg/core'
 
 import type {
 	AnthropicProviderAdapterOptions,
-	StreamerAdapterInterface,
-	SSEParserAdapterInterface,
-	SSEEvent,
 	AnthropicMessageStreamEvent,
 } from '../../types.js'
 
-import { createStreamerAdapter } from '../streaming/Streamer.js'
-import { createSSEParser } from '../streaming/SSEParser.js'
 import { createAdapterError } from '../../helpers.js'
 import {
 	DEFAULT_ANTHROPIC_MODEL,
@@ -35,12 +30,14 @@ import {
 	DEFAULT_ANTHROPIC_VERSION,
 	DEFAULT_ANTHROPIC_MAX_TOKENS,
 } from '../../constants.js'
+import { createSSEParserAdapter, createStreamerAdapter } from '../../factories.js'
+import { ProviderStreamHandle } from '../streamers/ProviderStreamHandle.js'
 
 /**
  * Anthropic provider implementation.
  * Streams responses using Anthropic's SSE format.
  */
-class AnthropicProvider implements ProviderAdapterInterface {
+export class AnthropicProvider implements ProviderAdapterInterface {
 	readonly #id: string
 	readonly #apiKey: string
 	readonly #model: string
@@ -54,7 +51,7 @@ class AnthropicProvider implements ProviderAdapterInterface {
 		this.#model = options.model ?? DEFAULT_ANTHROPIC_MODEL
 		this.#baseURL = options.baseURL ?? DEFAULT_ANTHROPIC_BASE_URL
 		this.#streamer = options.streamer ?? createStreamerAdapter()
-		this.#sseParser = options.sseParser ?? createSSEParser()
+		this.#sseParser = options.sseParser ?? createSSEParserAdapter()
 	}
 
 	getId(): string {
@@ -68,14 +65,14 @@ class AnthropicProvider implements ProviderAdapterInterface {
 		const abortController = new AbortController()
 		const requestId = crypto.randomUUID()
 
-		// Create stream handle
-		const handle = new AnthropicStreamHandle(
+		// Create stream handle using shared ProviderStreamHandle
+		const handle = new ProviderStreamHandle(
 			requestId,
 			abortController,
 			this.#streamer,
 		)
 
-		// Start async streaming
+		// Start async streamers
 		void this.#executeGeneration(messages, options, handle, abortController.signal)
 
 		return handle
@@ -102,7 +99,7 @@ class AnthropicProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		handle: AnthropicStreamHandle,
+		handle: ProviderStreamHandle,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -260,7 +257,7 @@ class AnthropicProvider implements ProviderAdapterInterface {
 
 	async #processStream(
 		response: Response,
-		handle: AnthropicStreamHandle,
+		handle: ProviderStreamHandle,
 	): Promise<void> {
 		const reader = response.body?.getReader()
 		if (reader === undefined) {
@@ -295,7 +292,7 @@ class AnthropicProvider implements ProviderAdapterInterface {
 		}
 	}
 
-	#handleSSEEvent(event: SSEEvent, handle: AnthropicStreamHandle): void {
+	#handleSSEEvent(event: SSEEvent, handle: ProviderStreamHandle): void {
 		const data = event.data.trim()
 
 		// Skip empty events
@@ -307,7 +304,7 @@ class AnthropicProvider implements ProviderAdapterInterface {
 			switch (parsed.type) {
 				case 'content_block_start':
 					if (parsed.content_block?.type === 'tool_use') {
-						handle.startToolUse(
+						handle.startToolCall(
 							parsed.index ?? 0,
 							parsed.content_block.id ?? '',
 							parsed.content_block.name ?? '',
@@ -317,10 +314,9 @@ class AnthropicProvider implements ProviderAdapterInterface {
 
 				case 'content_block_delta':
 					if (parsed.delta?.type === 'text_delta' && parsed.delta.text !== undefined) {
-						handle.appendText(parsed.delta.text)
-						this.#streamer.emit(parsed.delta.text)
+						handle.emitToken(parsed.delta.text)
 					} else if (parsed.delta?.type === 'input_json_delta' && parsed.delta.partial_json !== undefined) {
-						handle.appendToolArguments(parsed.index ?? 0, parsed.delta.partial_json)
+						handle.appendToolCallArguments(parsed.index ?? 0, parsed.delta.partial_json)
 					}
 					break
 
@@ -430,218 +426,4 @@ class AnthropicProvider implements ProviderAdapterInterface {
 		}
 		return createAdapterError('NETWORK_ERROR', error.message)
 	}
-}
-
-/**
- * Stream handle for Anthropic responses.
- * Implements StreamHandleInterface for async iteration and result collection.
- */
-class AnthropicStreamHandle implements StreamHandleInterface {
-	readonly requestId: string
-	readonly #abortController: AbortController
-	readonly #streamer: StreamerAdapterInterface
-
-	#text = ''
-	#toolCalls = new Map<number, { id: string; name: string; arguments: string }>()
-	#finishReason: FinishReason = 'stop'
-	#usage: UsageStats | undefined
-	#aborted = false
-	#completed = false
-
-	#resultResolve: ((result: GenerationResult) => void) | undefined
-	#resultReject: ((error: Error) => void) | undefined
-	#resultPromise: Promise<GenerationResult>
-
-	#completeCallbacks = new Set<(result: GenerationResult) => void>()
-	#errorCallbacks = new Set<(error: Error) => void>()
-
-	constructor(
-		requestId: string,
-		abortController: AbortController,
-		streamer: StreamerAdapterInterface,
-	) {
-		this.requestId = requestId
-		this.#abortController = abortController
-		this.#streamer = streamer
-
-		this.#resultPromise = new Promise((resolve, reject) => {
-			this.#resultResolve = resolve
-			this.#resultReject = reject
-		})
-	}
-
-	// StreamHandleInterface implementation
-
-	abort(): void {
-		this.#abortController.abort()
-		this.setAborted()
-	}
-
-	onToken(callback: (token: string) => void): () => void {
-		return this.#streamer.onToken(callback)
-	}
-
-	onComplete(callback: (result: GenerationResult) => void): () => void {
-		this.#completeCallbacks.add(callback)
-		return () => this.#completeCallbacks.delete(callback)
-	}
-
-	onError(callback: (error: Error) => void): () => void {
-		this.#errorCallbacks.add(callback)
-		return () => this.#errorCallbacks.delete(callback)
-	}
-
-	result(): Promise<GenerationResult> {
-		return this.#resultPromise
-	}
-
-	[Symbol.asyncIterator](): AsyncIterator<string> {
-		const tokens: string[] = []
-		let resolveNext: ((value: IteratorResult<string>) => void) | undefined
-		let done = false
-
-		this.#streamer.onToken((token) => {
-			if (resolveNext !== undefined) {
-				resolveNext({ value: token, done: false })
-				resolveNext = undefined
-			} else {
-				tokens.push(token)
-			}
-		})
-
-		this.onComplete(() => {
-			done = true
-			if (resolveNext !== undefined) {
-				resolveNext({ value: undefined as unknown as string, done: true })
-			}
-		})
-
-		this.onError(() => {
-			done = true
-			if (resolveNext !== undefined) {
-				resolveNext({ value: undefined as unknown as string, done: true })
-			}
-		})
-
-		return {
-			next: () => {
-				if (tokens.length > 0) {
-					return Promise.resolve({ value: tokens.shift()!, done: false })
-				}
-				if (done) {
-					return Promise.resolve({ value: undefined as unknown as string, done: true })
-				}
-				return new Promise((resolve) => {
-					resolveNext = resolve
-				})
-			},
-		}
-	}
-
-	// Internal methods for provider
-
-	appendText(text: string): void {
-		this.#text += text
-	}
-
-	startToolUse(index: number, id: string, name: string): void {
-		this.#toolCalls.set(index, { id, name, arguments: '' })
-	}
-
-	appendToolArguments(index: number, json: string): void {
-		const toolCall = this.#toolCalls.get(index)
-		if (toolCall !== undefined) {
-			toolCall.arguments += json
-		}
-	}
-
-	setFinishReason(reason: FinishReason): void {
-		this.#finishReason = reason
-	}
-
-	setUsage(usage: UsageStats): void {
-		this.#usage = usage
-	}
-
-	setError(error: Error): void {
-		this.#completed = true
-		this.#streamer.end()
-		this.#resultReject?.(error)
-		for (const callback of this.#errorCallbacks) {
-			callback(error)
-		}
-	}
-
-	setAborted(): void {
-		this.#aborted = true
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
-		}
-	}
-
-	complete(): void {
-		if (this.#completed) return
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
-		}
-	}
-
-	#buildResult(): GenerationResult {
-		const toolCalls: ToolCall[] = []
-		for (const [, tc] of this.#toolCalls) {
-			try {
-				toolCalls.push({
-					id: tc.id,
-					name: tc.name,
-					arguments: JSON.parse(tc.arguments) as Record<string, unknown>,
-				})
-			} catch {
-				// Skip malformed tool calls
-			}
-		}
-
-		return {
-			text: this.#text,
-			toolCalls,
-			finishReason: this.#finishReason,
-			...(this.#usage !== undefined && { usage: this.#usage }),
-			aborted: this.#aborted,
-		}
-	}
-}
-
-/**
- * Creates an Anthropic provider adapter.
- *
- * @param options - Anthropic provider options
- * @returns Provider adapter instance
- *
- * @example
- * ```ts
- * const provider = createAnthropicProviderAdapter({
- *   apiKey: 'sk-ant-...',
- *   model: 'claude-3-5-sonnet-20241022',
- * })
- *
- * const stream = provider.generate([
- *   { role: 'user', content: 'Hello!' }
- * ], {})
- *
- * for await (const token of stream) {
- *   console.log(token)
- * }
- * ```
- */
-export function createAnthropicProviderAdapter(
-	options: AnthropicProviderAdapterOptions,
-): ProviderAdapterInterface {
-	return new AnthropicProvider(options)
 }

@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { createNodeLlamaCppProviderAdapter } from '../../../src/core/providers/NodeLlamaCppProvider.js'
+import { createNodeLlamaCppProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
-import type { NodeLlamaCppContext, NodeLlamaCppContextSequence, NodeLlamaCppModel } from '../../../src/types.js'
+import type { NodeLlamaCppContext, NodeLlamaCppContextSequence, NodeLlamaCppModel } from '@mikesaintsg/adapters'
 
 // Create mock context for testing
 function createMockContext(tokens: number[]): NodeLlamaCppContext {

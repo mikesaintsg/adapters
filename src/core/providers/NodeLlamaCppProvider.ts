@@ -2,7 +2,7 @@
  * node-llama-cpp Provider Adapter
  *
  * Implements ProviderAdapterInterface for local LLaMA models via node-llama-cpp.
- * Uses token-by-token streaming via the LlamaContext evaluate method.
+ * Uses token-by-token streamers via the LlamaContext evaluate method.
  *
  * IMPORTANT: node-llama-cpp is NOT a runtime dependency. The consumer must
  * install node-llama-cpp and pass initialized context instances.
@@ -12,29 +12,28 @@ import type {
 	ProviderAdapterInterface,
 	StreamHandleInterface,
 	GenerationOptions,
-	GenerationResult,
 	Message,
 	ProviderCapabilities,
-	FinishReason,
+	StreamerAdapterInterface,
 } from '@mikesaintsg/core'
 
 import type {
 	NodeLlamaCppProviderAdapterOptions,
-	StreamerAdapterInterface,
 	NodeLlamaCppContext,
 	NodeLlamaCppChatWrapper,
 	NodeLlamaCppChatHistoryItem,
 } from '../../types.js'
 
-import { createStreamerAdapter } from '../streaming/Streamer.js'
+import { createStreamerAdapter } from '../../factories.js'
 import { createAdapterError } from '../../helpers.js'
 import { DEFAULT_TIMEOUT_MS } from '../../constants.js'
+import { ProviderStreamHandle } from '../streamers/ProviderStreamHandle.js'
 
 /**
  * node-llama-cpp provider implementation.
  * Streams responses using token-by-token evaluation.
  */
-class NodeLlamaCppProvider implements ProviderAdapterInterface {
+export class NodeLlamaCppProvider implements ProviderAdapterInterface {
 	readonly #id: string
 	readonly #context: NodeLlamaCppContext
 	readonly #chatWrapper: NodeLlamaCppChatWrapper | undefined
@@ -62,8 +61,8 @@ class NodeLlamaCppProvider implements ProviderAdapterInterface {
 		const abortController = new AbortController()
 		const requestId = crypto.randomUUID()
 
-		// Create stream handle
-		const handle = new NodeLlamaCppStreamHandle(
+		// Create stream handle using shared ProviderStreamHandle
+		const handle = new ProviderStreamHandle(
 			requestId,
 			abortController,
 			this.#streamer,
@@ -96,7 +95,7 @@ class NodeLlamaCppProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		handle: NodeLlamaCppStreamHandle,
+		handle: ProviderStreamHandle,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -133,8 +132,7 @@ class NodeLlamaCppProvider implements ProviderAdapterInterface {
 				const tokenText = this.#context.model.detokenize([tokenId])
 
 				// Emit token
-				handle.appendText(tokenText)
-				this.#streamer.emit(tokenText)
+				handle.emitToken(tokenText)
 
 				generatedCount++
 
@@ -221,194 +219,4 @@ class NodeLlamaCppProvider implements ProviderAdapterInterface {
 		}
 		return createAdapterError('SERVICE_ERROR', error.message)
 	}
-}
-
-/**
- * Stream handle for node-llama-cpp responses.
- * Implements StreamHandleInterface for async iteration and result collection.
- */
-class NodeLlamaCppStreamHandle implements StreamHandleInterface {
-	readonly requestId: string
-	readonly #abortController: AbortController
-	readonly #streamer: StreamerAdapterInterface
-
-	#text = ''
-	#finishReason: FinishReason = 'stop'
-	#aborted = false
-	#completed = false
-
-	#resultResolve: ((result: GenerationResult) => void) | undefined
-	#resultReject: ((error: Error) => void) | undefined
-	#resultPromise: Promise<GenerationResult>
-
-	#completeCallbacks = new Set<(result: GenerationResult) => void>()
-	#errorCallbacks = new Set<(error: Error) => void>()
-
-	constructor(
-		requestId: string,
-		abortController: AbortController,
-		streamer: StreamerAdapterInterface,
-	) {
-		this.requestId = requestId
-		this.#abortController = abortController
-		this.#streamer = streamer
-
-		this.#resultPromise = new Promise((resolve, reject) => {
-			this.#resultResolve = resolve
-			this.#resultReject = reject
-		})
-	}
-
-	// StreamHandleInterface implementation
-
-	abort(): void {
-		this.#abortController.abort()
-		this.setAborted()
-	}
-
-	onToken(callback: (token: string) => void): () => void {
-		return this.#streamer.onToken(callback)
-	}
-
-	onComplete(callback: (result: GenerationResult) => void): () => void {
-		this.#completeCallbacks.add(callback)
-		return () => this.#completeCallbacks.delete(callback)
-	}
-
-	onError(callback: (error: Error) => void): () => void {
-		this.#errorCallbacks.add(callback)
-		return () => this.#errorCallbacks.delete(callback)
-	}
-
-	result(): Promise<GenerationResult> {
-		return this.#resultPromise
-	}
-
-	[Symbol.asyncIterator](): AsyncIterator<string> {
-		const tokens: string[] = []
-		let resolveNext: ((value: IteratorResult<string>) => void) | undefined
-		let done = false
-
-		this.#streamer.onToken((token) => {
-			if (resolveNext !== undefined) {
-				resolveNext({ value: token, done: false })
-				resolveNext = undefined
-			} else {
-				tokens.push(token)
-			}
-		})
-
-		this.onComplete(() => {
-			done = true
-			if (resolveNext !== undefined) {
-				resolveNext({ value: undefined as unknown as string, done: true })
-			}
-		})
-
-		this.onError(() => {
-			done = true
-			if (resolveNext !== undefined) {
-				resolveNext({ value: undefined as unknown as string, done: true })
-			}
-		})
-
-		return {
-			next: () => {
-				if (tokens.length > 0) {
-					return Promise.resolve({ value: tokens.shift()!, done: false })
-				}
-				if (done) {
-					return Promise.resolve({ value: undefined as unknown as string, done: true })
-				}
-				return new Promise((resolve) => {
-					resolveNext = resolve
-				})
-			},
-		}
-	}
-
-	// Internal methods for provider
-
-	appendText(text: string): void {
-		this.#text += text
-	}
-
-	setFinishReason(reason: FinishReason): void {
-		this.#finishReason = reason
-	}
-
-	setError(error: Error): void {
-		this.#completed = true
-		this.#streamer.end()
-		this.#resultReject?.(error)
-		for (const callback of this.#errorCallbacks) {
-			callback(error)
-		}
-	}
-
-	setAborted(): void {
-		this.#aborted = true
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
-		}
-	}
-
-	complete(): void {
-		if (this.#completed) return
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
-		}
-	}
-
-	#buildResult(): GenerationResult {
-		return {
-			text: this.#text,
-			toolCalls: [], // node-llama-cpp doesn't support tool calls
-			finishReason: this.#finishReason,
-			aborted: this.#aborted,
-		}
-	}
-}
-
-/**
- * Creates a node-llama-cpp provider adapter.
- *
- * @param options - node-llama-cpp provider options
- * @returns Provider adapter instance
- *
- * @example
- * ```ts
- * import { getLlama } from 'node-llama-cpp'
- * import { createNodeLlamaCppProviderAdapter } from '@mikesaintsg/adapters'
- *
- * const llama = await getLlama()
- * const model = await llama.loadModel({ modelPath: './llama-3-8b.gguf' })
- * const context = await model.createContext()
- *
- * const provider = createNodeLlamaCppProviderAdapter({
- *   context,
- *   modelName: 'llama3',
- * })
- *
- * const stream = provider.generate([
- *   { role: 'user', content: 'Hello!' }
- * ], {})
- *
- * for await (const token of stream) {
- *   console.log(token)
- * }
- * ```
- */
-export function createNodeLlamaCppProviderAdapter(
-	options: NodeLlamaCppProviderAdapterOptions,
-): ProviderAdapterInterface {
-	return new NodeLlamaCppProvider(options)
 }

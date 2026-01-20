@@ -9,49 +9,28 @@ import type {
 	SerializableSession,
 	SerializedSession,
 } from '@mikesaintsg/core'
-import type { IndexedDBSessionPersistenceOptions } from '../../types.js'
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DEFAULT_DATABASE_NAME = 'mikesaintsg-sessions'
-const DEFAULT_STORE_NAME = 'sessions'
-const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
-
-// ============================================================================
-// Internal Types
-// ============================================================================
-
-interface SessionRecord {
-	readonly id: string
-	readonly session: SerializedSession
-	readonly timestamp: number
-}
-
-// ============================================================================
-// Helper
-// ============================================================================
-
-function toError(error: unknown): Error {
-	if (error instanceof Error) return error
-	return new Error(String(error))
-}
+import type { IndexedDBSessionPersistenceOptions, SessionRecord } from '../../types.js'
+import {
+	DEFAULT_INDEXEDDB_SESSION_DATABASE,
+	DEFAULT_INDEXEDDB_SESSION_STORE,
+	DEFAULT_SESSION_TTL_MS,
+} from '../../constants.js'
+import { toError } from '../../helpers.js'
 
 // ============================================================================
 // Implementation
 // ============================================================================
 
-class IndexedDBSessionPersistence implements SessionPersistenceInterface {
+export class IndexedDBSessionPersistence implements SessionPersistenceInterface {
 	#databaseName: string
 	#storeName: string
 	#ttlMs: number
 	#database: IDBDatabase | null = null
 
 	constructor(options?: IndexedDBSessionPersistenceOptions) {
-		this.#databaseName = options?.databaseName ?? DEFAULT_DATABASE_NAME
-		this.#storeName = options?.storeName ?? DEFAULT_STORE_NAME
-		this.#ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS
+		this.#databaseName = options?.databaseName ?? DEFAULT_INDEXEDDB_SESSION_DATABASE
+		this.#storeName = options?.storeName ?? DEFAULT_INDEXEDDB_SESSION_STORE
+		this.#ttlMs = options?.ttlMs ?? DEFAULT_SESSION_TTL_MS
 	}
 
 	async save(id: string, session: SerializableSession): Promise<void> {
@@ -159,6 +138,28 @@ class IndexedDBSessionPersistence implements SessionPersistenceInterface {
 		})
 	}
 
+	async isAvailable(): Promise<boolean> {
+		try {
+			await this.#getDatabase()
+			return true
+		} catch {
+			return false
+		}
+	}
+
+	async clear(): Promise<void> {
+		const db = await this.#getDatabase()
+
+		return new Promise((resolve, reject) => {
+			const transaction = db.transaction(this.#storeName, 'readwrite')
+			const store = transaction.objectStore(this.#storeName)
+			const request = store.clear()
+
+			request.onsuccess = () => resolve()
+			request.onerror = () => reject(toError(request.error))
+		})
+	}
+
 	async #getDatabase(): Promise<IDBDatabase> {
 		if (this.#database) {
 			return this.#database
@@ -182,30 +183,4 @@ class IndexedDBSessionPersistence implements SessionPersistenceInterface {
 			}
 		})
 	}
-}
-
-// ============================================================================
-// Factory
-// ============================================================================
-
-/**
- * Create an IndexedDB session persistence adapter.
- *
- * Stores session data with TTL-based expiration.
- *
- * @example
- * ```ts
- * const persistence = createIndexedDBSessionPersistenceAdapter({
- *   databaseName: 'my-app-sessions',
- *   ttlMs: 7 * 24 * 60 * 60 * 1000, // 7 days
- * })
- *
- * await persistence.save('session-1', mySession)
- * const data = await persistence.load('session-1')
- * ```
- */
-export function createIndexedDBSessionPersistenceAdapter(
-	options?: IndexedDBSessionPersistenceOptions,
-): SessionPersistenceInterface {
-	return new IndexedDBSessionPersistence(options)
 }

@@ -1,9 +1,5 @@
-/**
- * Anthropic Provider Tests
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createAnthropicProviderAdapter } from '../../../src/core/providers/AnthropicProvider.js'
+import { createAnthropicProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
 
 // Helper to create mock SSE response for Anthropic

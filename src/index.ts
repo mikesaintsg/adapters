@@ -5,12 +5,13 @@
  *
  * This package provides:
  * - Provider adapters for LLM text generation (OpenAI, Anthropic, Ollama, etc.)
+ * - Streaming adapters for token emission and SSE parsing
  * - Embedding adapters for vector generation
  * - Policy adapters for retry and rate limiting
  * - Enhancement adapters for caching, batching, and reranking
  * - Transform adapters for tool format conversion and similarity scoring
  * - Persistence adapters for IndexedDB, OPFS, and HTTP storage
- * - Bridge functions for connecting inference to contextprotocol
+ * - Context builder adapters for deduplication, truncation, and priority
  *
  * All provider adapters stream natively with SSE parsing built-in.
  * Streaming is not opt-in — it is the native behavior.
@@ -20,296 +21,50 @@
 // Types (public API)
 // ============================================================================
 
-export type {
-	// Unsubscribe type
-	Unsubscribe,
-
-	// Streamer adapter interface
-	StreamerAdapterInterface,
-
-	// Error types
-	AdapterErrorCode,
-	AdapterErrorData,
-
-	// Provider adapter options
-	OpenAIProviderAdapterOptions,
-	AnthropicProviderAdapterOptions,
-	OllamaProviderAdapterOptions,
-	NodeLlamaCppProviderAdapterOptions,
-	HuggingFaceProviderAdapterOptions,
-
-	// Embedding adapter options
-	OpenAIEmbeddingAdapterOptions,
-	VoyageEmbeddingAdapterOptions,
-	OllamaEmbeddingAdapterOptions,
-	NodeLlamaCppEmbeddingAdapterOptions,
-	HuggingFaceEmbeddingAdapterOptions,
-
-	// Policy adapter options
-	ExponentialRetryAdapterOptions,
-	LinearRetryAdapterOptions,
-	TokenBucketRateLimitAdapterOptions,
-	SlidingWindowRateLimitAdapterOptions,
-
-	// Enhancement adapter options
-	LRUCacheAdapterOptions,
-	TTLCacheAdapterOptions,
-	IndexedDBCacheAdapterOptions,
-	BatchAdapterOptions,
-	CohereRerankerAdapterOptions,
-	CrossEncoderRerankerAdapterOptions,
-
-	// Transform adapter options
-	OpenAIToolFormatAdapterOptions,
-	AnthropicToolFormatAdapterOptions,
-
-	// Persistence adapter options
-	IndexedDBVectorPersistenceOptions,
-	OPFSVectorPersistenceOptions,
-	HTTPVectorPersistenceOptions,
-	IndexedDBSessionPersistenceOptions,
-
-	// Context builder adapter options
-	DeduplicationAdapterOptions,
-	TruncationAdapterOptions,
-	PriorityAdapterOptions,
-	PriorityWeights,
-
-	// Model types
-	OllamaChatModel,
-	OllamaEmbeddingModel,
-	VoyageEmbeddingModel,
-	HuggingFaceTextGenerationModel,
-	HuggingFaceEmbeddingModel,
-	HuggingFacePoolingStrategy,
-	OpenAIToolChoice,
-	AnthropicToolChoice,
-
-	// External dependency interfaces (for consumers to implement)
-	NodeLlamaCppContext,
-	NodeLlamaCppContextSequence,
-	NodeLlamaCppModel,
-	NodeLlamaCppEmbeddingContext,
-	NodeLlamaCppEmbedding,
-	NodeLlamaCppChatWrapper,
-	NodeLlamaCppLlamaText,
-	NodeLlamaCppChatHistoryItem,
-	NodeLlamaCppEvaluateOptions,
-	HuggingFaceFeatureExtractionPipeline,
-	HuggingFaceFeatureExtractionOptions,
-	HuggingFaceTextGenerationPipeline,
-	HuggingFaceTextGenerationOptions,
-	HuggingFaceTextGenerationOutput,
-	HuggingFaceTensor,
-	HuggingFacePreTrainedModel,
-	HuggingFaceGenerateOptions,
-	HuggingFaceGenerationConfig,
-	HuggingFaceModelOutput,
-	HuggingFaceTokenizer,
-	HuggingFaceEncodedInput,
-	HuggingFaceBaseStreamer,
-
-	// Factory function types
-	CreateStreamerAdapter,
-	CreateOpenAIProviderAdapter,
-	CreateAnthropicProviderAdapter,
-	CreateOllamaProviderAdapter,
-	CreateNodeLlamaCppProviderAdapter,
-	CreateHuggingFaceProviderAdapter,
-	CreateOpenAIEmbeddingAdapter,
-	CreateVoyageEmbeddingAdapter,
-	CreateOllamaEmbeddingAdapter,
-	CreateNodeLlamaCppEmbeddingAdapter,
-	CreateHuggingFaceEmbeddingAdapter,
-	CreateExponentialRetryAdapter,
-	CreateLinearRetryAdapter,
-	CreateTokenBucketRateLimitAdapter,
-	CreateSlidingWindowRateLimitAdapter,
-	CreateLRUCacheAdapter,
-	CreateTTLCacheAdapter,
-	CreateIndexedDBCacheAdapter,
-	CreateBatchAdapter,
-	CreateCohereRerankerAdapter,
-	CreateCrossEncoderRerankerAdapter,
-	CreateOpenAIToolFormatAdapter,
-	CreateAnthropicToolFormatAdapter,
-	CreateCosineSimilarityAdapter,
-	CreateDotSimilarityAdapter,
-	CreateEuclideanSimilarityAdapter,
-	CreateIndexedDBVectorPersistence,
-	CreateOPFSVectorPersistence,
-	CreateHTTPVectorPersistence,
-	CreateIndexedDBSessionPersistence,
-	CreateToolCallBridge,
-	CreateRetrievalTool,
-	CreateDeduplicationAdapter,
-	CreatePriorityTruncationAdapter,
-	CreateFIFOTruncationAdapter,
-	CreateLIFOTruncationAdapter,
-	CreateScoreTruncationAdapter,
-	CreatePriorityAdapter,
-} from './types.js'
+export type * from './types.js'
 
 // ============================================================================
 // Helpers (public API)
 // ============================================================================
 
-export {
-	// Error helpers
-	isAdapterError,
-	createAdapterError,
-	mapNetworkError,
-	mapHttpStatusToErrorCode,
-
-	// Type guards
-	narrowUnknown,
-	isObject,
-	isNonEmptyString,
-	isPositiveNumber,
-	isNonNegativeInteger,
-
-	// HTTP helpers
-	parseRetryAfter,
-
-	// Vector helpers
-	validateVectorDimensions,
-	isEmptyVector,
-	isZeroVector,
-	vectorNorm,
-	dotProduct,
-
-	// JSON helpers
-	safeJsonParse,
-	safeJsonStringify,
-
-	// Timing helpers
-	delay,
-	exponentialDelay,
-
-	// Validation helpers
-	assert,
-	clamp,
-} from './helpers.js'
-
-export type { AdapterError } from './helpers.js'
+export * from './helpers.js'
 
 // ============================================================================
 // Constants (public API)
 // ============================================================================
 
-export {
-	// Provider defaults
-	DEFAULT_OPENAI_MODEL,
-	DEFAULT_OPENAI_BASE_URL,
-	DEFAULT_ANTHROPIC_MODEL,
-	DEFAULT_ANTHROPIC_BASE_URL,
-	DEFAULT_OLLAMA_BASE_URL,
-	DEFAULT_VOYAGE_BASE_URL,
-	DEFAULT_COHERE_BASE_URL,
-
-	// Retry defaults
-	DEFAULT_MAX_RETRY_ATTEMPTS,
-	DEFAULT_INITIAL_RETRY_DELAY_MS,
-	DEFAULT_MAX_RETRY_DELAY_MS,
-	DEFAULT_BACKOFF_MULTIPLIER,
-	DEFAULT_RETRY_LINEAR_DELAY_MS,
-
-	// Rate limit defaults
-	DEFAULT_REQUESTS_PER_MINUTE,
-	DEFAULT_MAX_CONCURRENT_REQUESTS,
-	DEFAULT_BURST_SIZE,
-	DEFAULT_RATE_LIMIT_WINDOW_MS,
-
-	// Cache defaults
-	DEFAULT_CACHE_MAX_SIZE,
-	DEFAULT_CACHE_TTL_MS,
-	DEFAULT_INDEXEDDB_CACHE_TTL_MS,
-
-	// Batch defaults
-	DEFAULT_BATCH_SIZE,
-	DEFAULT_BATCH_DELAY_MS,
-
-	// Timeout defaults
-	DEFAULT_TIMEOUT_MS,
-	DEFAULT_OLLAMA_TIMEOUT_MS,
-	DEFAULT_NODE_LLAMA_CPP_TIMEOUT_MS,
-
-	// Embedding defaults
-	DEFAULT_OPENAI_EMBEDDING_MODEL,
-	DEFAULT_VOYAGE_EMBEDDING_MODEL,
-	DEFAULT_COHERE_RERANK_MODEL,
-
-	// Persistence defaults
-	DEFAULT_INDEXEDDB_DOCUMENTS_STORE,
-	DEFAULT_INDEXEDDB_METADATA_STORE,
-	DEFAULT_CACHE_STORE_NAME,
-	DEFAULT_INDEXEDDB_SESSION_DATABASE,
-	DEFAULT_INDEXEDDB_SESSION_STORE,
-	DEFAULT_SESSION_TTL_MS,
-	DEFAULT_OPFS_CHUNK_SIZE,
-
-	// Error codes
-	RETRYABLE_ERROR_CODES,
-} from './constants.js'
+export * from './constants.js'
 
 // ============================================================================
 // Factory Functions (public API)
 // ============================================================================
 
-export {
-	// Streamer
-	createStreamerAdapter,
+export * from './factories.js'
 
-	// Provider adapters
-	createOpenAIProviderAdapter,
-	createAnthropicProviderAdapter,
-	createOllamaProviderAdapter,
-	createNodeLlamaCppProviderAdapter,
-	createHuggingFaceProviderAdapter,
+// ============================================================================
+// Class Exports (for advanced usage)
+// ============================================================================
 
-	// Embedding adapters
-	createOpenAIEmbeddingAdapter,
-	createVoyageEmbeddingAdapter,
-	createOllamaEmbeddingAdapter,
-	createNodeLlamaCppEmbeddingAdapter,
-	createHuggingFaceEmbeddingAdapter,
+// Streamers
+export * from './core/streamers/index.js'
 
-	// Policy adapters
-	createExponentialRetryAdapter,
-	createLinearRetryAdapter,
-	createTokenBucketRateLimitAdapter,
-	createSlidingWindowRateLimitAdapter,
+// Providers
+export * from './core/providers/index.js'
 
-	// Enhancement adapters
-	createLRUCacheAdapter,
-	createTTLCacheAdapter,
-	createIndexedDBCacheAdapter,
-	createBatchAdapter,
-	createCohereRerankerAdapter,
-	createCrossEncoderRerankerAdapter,
+// Embeddings
+export * from './core/embeddings/index.js'
 
-	// Transform adapters
-	createOpenAIToolFormatAdapter,
-	createAnthropicToolFormatAdapter,
-	createCosineSimilarityAdapter,
-	createDotSimilarityAdapter,
-	createEuclideanSimilarityAdapter,
+// Policies
+export * from './core/policies/index.js'
 
-	// Persistence adapters
-	createIndexedDBVectorPersistenceAdapter,
-	createOPFSVectorPersistenceAdapter,
-	createHTTPVectorPersistenceAdapter,
-	createIndexedDBSessionPersistenceAdapter,
+// Enhancements (caches, batching, rerankers)
+export * from './core/enhancements/index.js'
 
-	// Bridge functions
-	createToolCallBridge,
-	createRetrievalTool,
+// Transforms (formatters, similarities)
+export * from './core/transforms/index.js'
 
-	// Context builder adapters
-	createDeduplicationAdapter,
-	createPriorityTruncationAdapter,
-	createFIFOTruncationAdapter,
-	createLIFOTruncationAdapter,
-	createScoreTruncationAdapter,
-	createPriorityAdapter,
-} from './factories.js'
+// Persistence
+export * from './core/persistence/index.js'
+
+// Context Builder
+export * from './core/contextbuilder/index.js'

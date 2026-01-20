@@ -27,6 +27,8 @@ import {
 	exponentialDelay,
 	assert,
 	clamp,
+	toError,
+	chunkArray,
 } from '@mikesaintsg/adapters'
 
 describe('helpers', () => {
@@ -581,6 +583,81 @@ describe('helpers', () => {
 		it('handles decimal values', () => {
 			expect(clamp(0.5, 0, 1)).toBe(0.5)
 			expect(clamp(1.5, 0, 1)).toBe(1)
+		})
+	})
+
+	describe('toError', () => {
+		it('returns same Error instance', () => {
+			const error = new Error('test')
+			expect(toError(error)).toBe(error)
+		})
+
+		it('converts string to Error', () => {
+			const result = toError('string error')
+			expect(result).toBeInstanceOf(Error)
+			expect(result.message).toBe('string error')
+		})
+
+		it('converts number to Error', () => {
+			const result = toError(123)
+			expect(result).toBeInstanceOf(Error)
+			expect(result.message).toBe('123')
+		})
+
+		it('converts null to Error', () => {
+			const result = toError(null)
+			expect(result).toBeInstanceOf(Error)
+			expect(result.message).toBe('null')
+		})
+
+		it('converts undefined to Error', () => {
+			const result = toError(undefined)
+			expect(result).toBeInstanceOf(Error)
+			expect(result.message).toBe('undefined')
+		})
+
+		it('converts object to Error', () => {
+			const result = toError({ foo: 'bar' })
+			expect(result).toBeInstanceOf(Error)
+			expect(result.message).toBe('[object Object]')
+		})
+	})
+
+	describe('chunkArray', () => {
+		it('splits array into chunks of specified size', () => {
+			expect(chunkArray([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
+		})
+
+		it('returns single chunk for array smaller than chunk size', () => {
+			expect(chunkArray([1, 2, 3], 5)).toEqual([[1, 2, 3]])
+		})
+
+		it('returns empty array for empty input', () => {
+			expect(chunkArray([], 2)).toEqual([])
+		})
+
+		it('handles chunk size of 1', () => {
+			expect(chunkArray([1, 2, 3], 1)).toEqual([[1], [2], [3]])
+		})
+
+		it('handles array with exact chunk size multiple', () => {
+			expect(chunkArray([1, 2, 3, 4], 2)).toEqual([[1, 2], [3, 4]])
+		})
+
+		it('preserves element types', () => {
+			const result = chunkArray(['a', 'b', 'c'], 2)
+			expect(result).toEqual([['a', 'b'], ['c']])
+		})
+
+		it('handles readonly arrays', () => {
+			const readonly: readonly number[] = [1, 2, 3]
+			expect(chunkArray(readonly, 2)).toEqual([[1, 2], [3]])
+		})
+
+		it('handles objects in array', () => {
+			const objs = [{ a: 1 }, { b: 2 }, { c: 3 }]
+			const result = chunkArray(objs, 2)
+			expect(result).toEqual([[{ a: 1 }, { b: 2 }], [{ c: 3 }]])
 		})
 	})
 })

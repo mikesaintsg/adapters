@@ -27,7 +27,7 @@
 ## Installation
 
 ```bash
-npm install @mikesaintsg/adapters @mikesaintsg/core
+npm install @mikesaintsg/adapters
 ```
 
 ---
@@ -58,7 +58,7 @@ const embedding = createOpenAIEmbeddingAdapter({
 // 3. Create engine with provider (required first parameter)
 const engine = createEngine(provider)
 
-// 4. Use policy adapters for resilience
+// 4. Use policies adapters for resilience
 const retry = createExponentialRetryAdapter({ maxAttempts: 3 })
 const cache = createLRUCacheAdapter({ maxSize: 10000 })
 
@@ -100,15 +100,13 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Source Adapters — Embeddings
 
-| Function                              | Description                              |
-|---------------------------------------|------------------------------------------|
-| `createOpenAIEmbeddingAdapter`        | OpenAI text embeddings                   |
-| `createVoyageEmbeddingAdapter`        | Voyage AI embeddings (Anthropic rec.)    |
-| `createOllamaEmbeddingAdapter`        | Ollama local embeddings                  |
-| `createNodeLlamaCppEmbeddingAdapter`  | node-llama-cpp local embeddings          |
-| `createHuggingFaceEmbeddingAdapter`   | HuggingFace Transformers local embeddings|
-| `createBatchedEmbeddingAdapter`       | Automatic request batching               |
-| `createCachedEmbeddingAdapter`        | In-memory embedding cache                |
+| Function                             | Description                               |
+|--------------------------------------|-------------------------------------------|
+| `createOpenAIEmbeddingAdapter`       | OpenAI text embeddings                    |
+| `createVoyageEmbeddingAdapter`       | Voyage AI embeddings (Anthropic rec.)     |
+| `createOllamaEmbeddingAdapter`       | Ollama local embeddings                   |
+| `createNodeLlamaCppEmbeddingAdapter` | node-llama-cpp local embeddings           |
+| `createHuggingFaceEmbeddingAdapter`  | HuggingFace Transformers local embeddings |
 
 ### Policy Adapters
 
@@ -160,18 +158,10 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Streaming Adapters
 
-| Function                     | Description                           |
-|------------------------------|---------------------------------------|
-| `createStreamerAdapter`      | Base token streaming adapter          |
-| `createTextStreamerAdapter`  | HuggingFace TextStreamer integration  |
-
-### Utilities
-
-| Function             | Description                    |
-|----------------------|--------------------------------|
-| `createRateLimiter`  | Request rate limiting          |
-| `createSSEParser`    | Server-Sent Events parsing     |
-| `withRetry`          | Retry wrapper for operations   |
+| Function                  | Description                           |
+|---------------------------|---------------------------------------|
+| `createStreamerAdapter`   | Universal token streaming adapter     |
+| `createSSEParserAdapter`  | Server-Sent Events parsing            |
 
 ---
 
@@ -276,11 +266,11 @@ import { createEngine } from '@mikesaintsg/inference'
 // Consumer initializes the pipeline (downloads model on first use)
 const generator = await pipeline('text-generation', 'Xenova/gpt2')
 
-// Pass to adapter with streaming enabled
+// Pass to adapter with streamers enabled
 const provider = createHuggingFaceProviderAdapter({
   pipeline: generator,
   modelName: 'gpt2',
-  streamerClass: TextStreamer, // Optional: enables streaming
+  streamerClass: TextStreamer, // Optional: enables streamers
   defaultOptions: {
     maxTokens: 100,
     temperature: 0.7,
@@ -297,7 +287,7 @@ import { pipeline, TextStreamer } from '@huggingface/transformers'
 const provider = createHuggingFaceProviderAdapter({
   pipeline: generator,
   modelName: 'gpt2',
-  streamerClass: TextStreamer, // Enables streaming
+  streamerClass: TextStreamer, // Enables streamers
 })
 ```
 
@@ -402,7 +392,7 @@ import {
 } from '@mikesaintsg/adapters'
 import { pipeline, TextStreamer } from '@huggingface/transformers'
 
-// Basic streaming adapter
+// Basic streamers adapter
 const streamer = createStreamerAdapter()
 streamer.onToken((token) => process.stdout.write(token))
 streamer.emit('Hello')

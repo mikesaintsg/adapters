@@ -11,38 +11,25 @@ import type {
 	VectorStoreMetadata,
 	MinimalDirectoryAccess,
 } from '@mikesaintsg/core'
-import type { OPFSVectorPersistenceOptions } from '../../types.js'
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DEFAULT_CHUNK_SIZE = 100
-const METADATA_FILE = 'metadata.json'
-const DOCUMENTS_PREFIX = 'documents_'
-
-// ============================================================================
-// Internal Types
-// ============================================================================
-
-interface StoredDocumentRecord {
-	readonly id: string
-	readonly content: string
-	readonly embedding: readonly number[]
-	readonly metadata?: Readonly<Record<string, unknown>> | undefined
-}
+import type { OPFSVectorPersistenceOptions, StoredDocumentRecord } from '../../types.js'
+import {
+	DEFAULT_OPFS_CHUNK_SIZE,
+	DEFAULT_OPFS_METADATA_FILE,
+	DEFAULT_OPFS_DOCUMENTS_PREFIX,
+} from '../../constants.js'
+import { chunkArray } from '../../helpers.js'
 
 // ============================================================================
 // Implementation
 // ============================================================================
 
-class OPFSVectorPersistence implements VectorStorePersistenceAdapterInterface {
+export class OPFSVectorPersistence implements VectorStorePersistenceAdapterInterface {
 	#directory: MinimalDirectoryAccess
 	#chunkSize: number
 
 	constructor(options: OPFSVectorPersistenceOptions) {
 		this.#directory = options.directory
-		this.#chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE
+		this.#chunkSize = options.chunkSize ?? DEFAULT_OPFS_CHUNK_SIZE
 	}
 
 	async save(docs: StoredDocument | readonly StoredDocument[]): Promise<void> {
@@ -52,13 +39,13 @@ class OPFSVectorPersistence implements VectorStorePersistenceAdapterInterface {
 		const files = await this.#directory.listFiles()
 		for (const file of files) {
 			const name = file.getName()
-			if (name.startsWith(DOCUMENTS_PREFIX)) {
+			if (name.startsWith(DEFAULT_OPFS_DOCUMENTS_PREFIX)) {
 				await this.#directory.removeFile(name)
 			}
 		}
 
 		// Chunk and save documents
-		const chunks = this.#chunkArray(documents, this.#chunkSize)
+		const chunks = chunkArray(documents, this.#chunkSize)
 
 		for (let i = 0; i < chunks.length; i++) {
 			const chunk = chunks[i]
@@ -71,7 +58,7 @@ class OPFSVectorPersistence implements VectorStorePersistenceAdapterInterface {
 				metadata: doc.metadata,
 			}))
 
-			const fileName = `${DOCUMENTS_PREFIX}${i.toString().padStart(6, '0')}.json`
+			const fileName = `${DEFAULT_OPFS_DOCUMENTS_PREFIX}${i.toString().padStart(6, '0')}.json`
 			const file = await this.#directory.createFile(fileName)
 			await file.write(JSON.stringify(serialized))
 		}
@@ -80,7 +67,7 @@ class OPFSVectorPersistence implements VectorStorePersistenceAdapterInterface {
 	async load(): Promise<readonly StoredDocument[]> {
 		const files = await this.#directory.listFiles()
 		const documentFiles = files
-			.filter((file) => file.getName().startsWith(DOCUMENTS_PREFIX))
+			.filter((file) => file.getName().startsWith(DEFAULT_OPFS_DOCUMENTS_PREFIX))
 			.sort((a, b) => a.getName().localeCompare(b.getName()))
 
 		const allDocuments: StoredDocument[] = []
@@ -108,15 +95,15 @@ class OPFSVectorPersistence implements VectorStorePersistenceAdapterInterface {
 
 	async saveMetadata(metadata: VectorStoreMetadata): Promise<void> {
 		// Remove existing metadata file if exists
-		if (await this.#directory.hasFile(METADATA_FILE)) {
-			await this.#directory.removeFile(METADATA_FILE)
+		if (await this.#directory.hasFile(DEFAULT_OPFS_METADATA_FILE)) {
+			await this.#directory.removeFile(DEFAULT_OPFS_METADATA_FILE)
 		}
-		const file = await this.#directory.createFile(METADATA_FILE)
+		const file = await this.#directory.createFile(DEFAULT_OPFS_METADATA_FILE)
 		await file.write(JSON.stringify(metadata))
 	}
 
 	async loadMetadata(): Promise<VectorStoreMetadata | undefined> {
-		const file = await this.#directory.getFile(METADATA_FILE)
+		const file = await this.#directory.getFile(DEFAULT_OPFS_METADATA_FILE)
 		if (!file) {
 			return undefined
 		}
@@ -153,39 +140,4 @@ class OPFSVectorPersistence implements VectorStorePersistenceAdapterInterface {
 			return false
 		}
 	}
-
-	#chunkArray<T>(array: readonly T[], size: number): T[][] {
-		const chunks: T[][] = []
-		for (let i = 0; i < array.length; i += size) {
-			chunks.push(array.slice(i, i + size))
-		}
-		return chunks
-	}
-}
-
-// ============================================================================
-// Factory
-// ============================================================================
-
-/**
- * Create an OPFS vector persistence adapter.
- *
- * Uses the Origin Private File System for persistent storage.
- * Chunks documents for efficient storage and retrieval of large datasets.
- *
- * @example
- * ```ts
- * const persistence = createOPFSVectorPersistenceAdapter({
- *   directory: myDirectoryAccess,
- *   chunkSize: 100,
- * })
- *
- * await persistence.save([{ id: '1', content: 'Hello', embedding: new Float32Array([0.1, 0.2]) }])
- * const docs = await persistence.load()
- * ```
- */
-export function createOPFSVectorPersistenceAdapter(
-	options: OPFSVectorPersistenceOptions,
-): VectorStorePersistenceAdapterInterface {
-	return new OPFSVectorPersistence(options)
 }

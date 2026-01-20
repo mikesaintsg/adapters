@@ -15,57 +15,21 @@ import type {
 import type {
 	OllamaEmbeddingAdapterOptions,
 	OllamaEmbeddingResponse,
-	AdapterErrorCode,
 } from '../../types.js'
 
 import {
+	DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS,
+	DEFAULT_OLLAMA_EMBEDDING_MODELS_DIMENSIONS,
 	DEFAULT_OLLAMA_BASE_URL,
 	DEFAULT_OLLAMA_TIMEOUT_MS,
 } from '../../constants.js'
 
-import { createAdapterError } from '../../helpers.js'
-
-/**
- * Map HTTP status to adapter error code.
- */
-function mapStatusToErrorCode(status: number): AdapterErrorCode {
-	switch (status) {
-		case 400:
-			return 'INVALID_REQUEST_ERROR'
-		case 404:
-			return 'MODEL_NOT_FOUND_ERROR'
-		default:
-			if (status >= 500) {
-				return 'SERVICE_ERROR'
-			}
-			return 'UNKNOWN_ERROR'
-	}
-}
-
-/**
- * Get default dimensions for common Ollama embedding models.
- */
-function getDefaultDimensions(model: string): number {
-	if (model.includes('nomic-embed-text')) {
-		return 768
-	}
-	if (model.includes('mxbai-embed-large')) {
-		return 1024
-	}
-	if (model.includes('all-minilm')) {
-		return 384
-	}
-	if (model.includes('snowflake-arctic-embed')) {
-		return 1024
-	}
-	// Default fallback
-	return 768
-}
+import { createAdapterError, mapHttpStatusToErrorCode } from '../../helpers.js'
 
 /**
  * Ollama Embedding Adapter implementation.
  */
-class OllamaEmbedding implements EmbeddingAdapterInterface {
+export class OllamaEmbedding implements EmbeddingAdapterInterface {
 	readonly #model: string
 	readonly #baseURL: string
 	readonly #timeout: number
@@ -126,7 +90,7 @@ class OllamaEmbedding implements EmbeddingAdapterInterface {
 		}
 
 		if (!response.ok) {
-			const errorCode = mapStatusToErrorCode(response.status)
+			const errorCode = mapHttpStatusToErrorCode(response.status)
 			let message = `Ollama API error: ${response.status}`
 
 			try {
@@ -151,25 +115,7 @@ class OllamaEmbedding implements EmbeddingAdapterInterface {
 		return {
 			provider: 'ollama',
 			model: this.#model,
-			dimensions: getDefaultDimensions(this.#model),
+			dimensions: DEFAULT_OLLAMA_EMBEDDING_MODELS_DIMENSIONS[this.#model] ?? DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS,
 		}
 	}
-}
-
-/**
- * Create an Ollama embedding adapter.
- *
- * @example
- * ```ts
- * const embedding = createOllamaEmbeddingAdapter({
- *   model: 'nomic-embed-text',
- * })
- *
- * const vectors = await embedding.embed(['Hello, world!'])
- * ```
- */
-export function createOllamaEmbeddingAdapter(
-	options: OllamaEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	return new OllamaEmbedding(options)
 }

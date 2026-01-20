@@ -460,3 +460,40 @@ export function assert(condition: boolean, message: string): asserts condition {
 export function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value))
 }
+
+/**
+ * Convert an unknown value to an Error instance.
+ *
+ * @param error - The unknown error value
+ * @returns An Error instance
+ */
+export function toError(error: unknown): Error {
+	if (error instanceof Error) return error
+	return new Error(String(error))
+}
+
+// ============================================================================
+// Array Helpers
+// ============================================================================
+
+/**
+ * Split an array into chunks of a specified size.
+ *
+ * @param array - The array to chunk
+ * @param size - Maximum size of each chunk
+ * @returns Array of chunks
+ *
+ * @example
+ * ```ts
+ * chunkArray([1, 2, 3, 4, 5], 2) // [[1, 2], [3, 4], [5]]
+ * chunkArray([1, 2, 3], 5) // [[1, 2, 3]]
+ * chunkArray([], 2) // []
+ * ```
+ */
+export function chunkArray<T>(array: readonly T[], size: number): T[][] {
+	const chunks: T[][] = []
+	for (let i = 0; i < array.length; i += size) {
+		chunks.push(array.slice(i, i + size))
+	}
+	return chunks
+}

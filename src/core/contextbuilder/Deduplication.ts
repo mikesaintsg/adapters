@@ -21,7 +21,7 @@ import type { DeduplicationAdapterOptions } from '../../types.js'
  * - 'keep_highest_priority': Keep the highest priority frame
  * - 'merge': Merge duplicate content
  */
-class DeduplicationAdapter implements DeduplicationAdapterInterface {
+export class DeduplicationAdapter implements DeduplicationAdapterInterface {
 	#strategy: DeduplicationStrategy
 
 	constructor(options?: DeduplicationAdapterOptions) {
@@ -114,27 +114,4 @@ class DeduplicationAdapter implements DeduplicationAdapterInterface {
 		}
 		return 50
 	}
-}
-
-/**
- * Creates a Deduplication adapter
- *
- * @param options - Optional deduplication configuration
- * @returns DeduplicationAdapterInterface implementation
- *
- * @example
- * ```ts
- * const dedup = createDeduplicationAdapter({ strategy: 'keep_latest' })
- *
- * // Select which frame to keep from duplicates
- * const selected = dedup.select(duplicateFrames)
- *
- * // Check if a frame should be preserved
- * const preserve = dedup.shouldPreserve(frame)
- * ```
- */
-export function createDeduplicationAdapter(
-	options?: DeduplicationAdapterOptions,
-): DeduplicationAdapterInterface {
-	return new DeduplicationAdapter(options)
 }

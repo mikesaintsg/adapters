@@ -2,39 +2,37 @@
  * Ollama Provider Adapter
  *
  * Implements ProviderAdapterInterface for local Ollama models.
- * Uses NDJSON streaming (newline-delimited JSON) instead of SSE.
+ * Uses NDJSON streamers (newline-delimited JSON) instead of SSE.
  */
 
 import type {
 	ProviderAdapterInterface,
 	StreamHandleInterface,
 	GenerationOptions,
-	GenerationResult,
 	Message,
 	ProviderCapabilities,
 	FinishReason,
-	UsageStats,
-	ToolCall,
+	StreamerAdapterInterface,
 } from '@mikesaintsg/core'
 
 import type {
 	OllamaProviderAdapterOptions,
-	StreamerAdapterInterface,
 	OllamaChatStreamChunk,
 } from '../../types.js'
 
-import { createStreamerAdapter } from '../streaming/Streamer.js'
+import { createStreamerAdapter } from '../../factories.js'
 import { createAdapterError } from '../../helpers.js'
 import {
 	DEFAULT_OLLAMA_BASE_URL,
 	DEFAULT_TIMEOUT_MS,
 } from '../../constants.js'
+import { ProviderStreamHandle } from '../streamers/ProviderStreamHandle.js'
 
 /**
  * Ollama provider implementation.
  * Streams responses using NDJSON format.
  */
-class OllamaProvider implements ProviderAdapterInterface {
+export class OllamaProvider implements ProviderAdapterInterface {
 	readonly #id: string
 	readonly #model: string
 	readonly #baseURL: string
@@ -62,14 +60,14 @@ class OllamaProvider implements ProviderAdapterInterface {
 		const abortController = new AbortController()
 		const requestId = crypto.randomUUID()
 
-		// Create stream handle
-		const handle = new OllamaStreamHandle(
+		// Create stream handle using shared ProviderStreamHandle
+		const handle = new ProviderStreamHandle(
 			requestId,
 			abortController,
 			this.#streamer,
 		)
 
-		// Start async streaming
+		// Start async streamers
 		void this.#executeGeneration(messages, options, handle, abortController.signal)
 
 		return handle
@@ -96,7 +94,7 @@ class OllamaProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		handle: OllamaStreamHandle,
+		handle: ProviderStreamHandle,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -220,7 +218,7 @@ class OllamaProvider implements ProviderAdapterInterface {
 
 	async #processStream(
 		response: Response,
-		handle: OllamaStreamHandle,
+		handle: ProviderStreamHandle,
 	): Promise<void> {
 		const reader = response.body?.getReader()
 		if (reader === undefined) {
@@ -265,25 +263,31 @@ class OllamaProvider implements ProviderAdapterInterface {
 		}
 	}
 
-	#processLine(line: string, handle: OllamaStreamHandle): void {
+	#processLine(line: string, handle: ProviderStreamHandle): void {
 		try {
 			const chunk = JSON.parse(line) as OllamaChatStreamChunk
 
 			// Handle text content
 			if (chunk.message?.content !== undefined && chunk.message.content !== '') {
-				handle.appendText(chunk.message.content)
-				this.#streamer.emit(chunk.message.content)
+				handle.emitToken(chunk.message.content)
 			}
 
 			// Handle tool calls
 			if (chunk.message?.tool_calls !== undefined) {
+				let index = 0
 				for (const toolCall of chunk.message.tool_calls) {
 					if (toolCall !== undefined) {
-						handle.addToolCall(
+						// Ollama sends complete tool calls, not incremental
+						handle.startToolCall(
+							index,
 							toolCall.id ?? crypto.randomUUID(),
 							toolCall.function.name,
-							toolCall.function.arguments,
 						)
+						handle.appendToolCallArguments(
+							index,
+							JSON.stringify(toolCall.function.arguments),
+						)
+						index++
 					}
 				}
 			}
@@ -359,203 +363,4 @@ class OllamaProvider implements ProviderAdapterInterface {
 		}
 		return createAdapterError('NETWORK_ERROR', error.message)
 	}
-}
-
-/**
- * Stream handle for Ollama responses.
- * Implements StreamHandleInterface for async iteration and result collection.
- */
-class OllamaStreamHandle implements StreamHandleInterface {
-	readonly requestId: string
-	readonly #abortController: AbortController
-	readonly #streamer: StreamerAdapterInterface
-
-	#text = ''
-	#toolCalls: { id: string; name: string; arguments: Record<string, unknown> }[] = []
-	#finishReason: FinishReason = 'stop'
-	#usage: UsageStats | undefined
-	#aborted = false
-	#completed = false
-
-	#resultResolve: ((result: GenerationResult) => void) | undefined
-	#resultReject: ((error: Error) => void) | undefined
-	#resultPromise: Promise<GenerationResult>
-
-	#completeCallbacks = new Set<(result: GenerationResult) => void>()
-	#errorCallbacks = new Set<(error: Error) => void>()
-
-	constructor(
-		requestId: string,
-		abortController: AbortController,
-		streamer: StreamerAdapterInterface,
-	) {
-		this.requestId = requestId
-		this.#abortController = abortController
-		this.#streamer = streamer
-
-		this.#resultPromise = new Promise((resolve, reject) => {
-			this.#resultResolve = resolve
-			this.#resultReject = reject
-		})
-	}
-
-	// StreamHandleInterface implementation
-
-	abort(): void {
-		this.#abortController.abort()
-		this.setAborted()
-	}
-
-	onToken(callback: (token: string) => void): () => void {
-		return this.#streamer.onToken(callback)
-	}
-
-	onComplete(callback: (result: GenerationResult) => void): () => void {
-		this.#completeCallbacks.add(callback)
-		return () => this.#completeCallbacks.delete(callback)
-	}
-
-	onError(callback: (error: Error) => void): () => void {
-		this.#errorCallbacks.add(callback)
-		return () => this.#errorCallbacks.delete(callback)
-	}
-
-	result(): Promise<GenerationResult> {
-		return this.#resultPromise
-	}
-
-	[Symbol.asyncIterator](): AsyncIterator<string> {
-		const tokens: string[] = []
-		let resolveNext: ((value: IteratorResult<string>) => void) | undefined
-		let done = false
-
-		this.#streamer.onToken((token) => {
-			if (resolveNext !== undefined) {
-				resolveNext({ value: token, done: false })
-				resolveNext = undefined
-			} else {
-				tokens.push(token)
-			}
-		})
-
-		this.onComplete(() => {
-			done = true
-			if (resolveNext !== undefined) {
-				resolveNext({ value: undefined as unknown as string, done: true })
-			}
-		})
-
-		this.onError(() => {
-			done = true
-			if (resolveNext !== undefined) {
-				resolveNext({ value: undefined as unknown as string, done: true })
-			}
-		})
-
-		return {
-			next: () => {
-				if (tokens.length > 0) {
-					return Promise.resolve({ value: tokens.shift()!, done: false })
-				}
-				if (done) {
-					return Promise.resolve({ value: undefined as unknown as string, done: true })
-				}
-				return new Promise((resolve) => {
-					resolveNext = resolve
-				})
-			},
-		}
-	}
-
-	// Internal methods for provider
-
-	appendText(text: string): void {
-		this.#text += text
-	}
-
-	addToolCall(id: string, name: string, args: Record<string, unknown>): void {
-		this.#toolCalls.push({ id, name, arguments: args })
-	}
-
-	setFinishReason(reason: FinishReason): void {
-		this.#finishReason = reason
-	}
-
-	setUsage(usage: UsageStats): void {
-		this.#usage = usage
-	}
-
-	setError(error: Error): void {
-		this.#completed = true
-		this.#streamer.end()
-		this.#resultReject?.(error)
-		for (const callback of this.#errorCallbacks) {
-			callback(error)
-		}
-	}
-
-	setAborted(): void {
-		this.#aborted = true
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
-		}
-	}
-
-	complete(): void {
-		if (this.#completed) return
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
-		}
-	}
-
-	#buildResult(): GenerationResult {
-		const toolCalls: ToolCall[] = this.#toolCalls.map((tc) => ({
-			id: tc.id,
-			name: tc.name,
-			arguments: tc.arguments,
-		}))
-
-		return {
-			text: this.#text,
-			toolCalls,
-			finishReason: this.#finishReason,
-			...(this.#usage !== undefined && { usage: this.#usage }),
-			aborted: this.#aborted,
-		}
-	}
-}
-
-/**
- * Creates an Ollama provider adapter.
- *
- * @param options - Ollama provider options
- * @returns Provider adapter instance
- *
- * @example
- * ```ts
- * const provider = createOllamaProviderAdapter({
- *   model: 'llama3',
- * })
- *
- * const stream = provider.generate([
- *   { role: 'user', content: 'Hello!' }
- * ], {})
- *
- * for await (const token of stream) {
- *   console.log(token)
- * }
- * ```
- */
-export function createOllamaProviderAdapter(
-	options: OllamaProviderAdapterOptions,
-): ProviderAdapterInterface {
-	return new OllamaProvider(options)
 }

@@ -15,64 +15,19 @@ import type {
 import type {
 	VoyageEmbeddingAdapterOptions,
 	VoyageEmbeddingResponse,
-	AdapterErrorCode,
 } from '../../types.js'
 
 import {
-	DEFAULT_VOYAGE_BASE_URL,
-	DEFAULT_VOYAGE_EMBEDDING_MODEL,
+	DEFAULT_VOYAGE_BASE_URL, DEFAULT_VOYAGE_EMBEDDING_DIMENSIONS,
+	DEFAULT_VOYAGE_EMBEDDING_MODEL, DEFAULT_VOYAGE_EMBEDDING_MODELS_DIMENSIONS,
 } from '../../constants.js'
 
-import { createAdapterError } from '../../helpers.js'
-
-/**
- * Map HTTP status to adapter error code.
- */
-function mapStatusToErrorCode(status: number): AdapterErrorCode {
-	switch (status) {
-		case 401:
-			return 'AUTHENTICATION_ERROR'
-		case 429:
-			return 'RATE_LIMIT_ERROR'
-		case 400:
-			return 'INVALID_REQUEST_ERROR'
-		case 404:
-			return 'MODEL_NOT_FOUND_ERROR'
-		default:
-			if (status >= 500) {
-				return 'SERVICE_ERROR'
-			}
-			return 'UNKNOWN_ERROR'
-	}
-}
-
-/**
- * Get default dimensions for Voyage embedding models.
- */
-function getDefaultDimensions(model: string): number {
-	if (model.includes('voyage-3-lite')) {
-		return 512
-	}
-	if (model.includes('voyage-3') || model.includes('voyage-code-3')) {
-		return 1024
-	}
-	if (model.includes('voyage-2') || model.includes('voyage-code-2')) {
-		return 1024
-	}
-	if (model.includes('voyage-finance-2') || model.includes('voyage-law-2')) {
-		return 1024
-	}
-	if (model.includes('voyage-multilingual-2')) {
-		return 1024
-	}
-	// Default fallback
-	return 1024
-}
+import { createAdapterError, mapHttpStatusToErrorCode } from '../../helpers.js'
 
 /**
  * Voyage Embedding Adapter implementation.
  */
-class VoyageEmbedding implements EmbeddingAdapterInterface {
+export class VoyageEmbedding implements EmbeddingAdapterInterface {
 	readonly #apiKey: string
 	readonly #model: string
 	readonly #baseURL: string
@@ -126,7 +81,7 @@ class VoyageEmbedding implements EmbeddingAdapterInterface {
 		}
 
 		if (!response.ok) {
-			const errorCode = mapStatusToErrorCode(response.status)
+			const errorCode = mapHttpStatusToErrorCode(response.status)
 			let message = `Voyage API error: ${response.status}`
 			let retryAfter: number | undefined
 
@@ -165,27 +120,7 @@ class VoyageEmbedding implements EmbeddingAdapterInterface {
 		return {
 			provider: 'voyage',
 			model: this.#model,
-			dimensions: getDefaultDimensions(this.#model),
+			dimensions: DEFAULT_VOYAGE_EMBEDDING_MODELS_DIMENSIONS[this.#model] ?? DEFAULT_VOYAGE_EMBEDDING_DIMENSIONS,
 		}
 	}
-}
-
-/**
- * Create a Voyage embedding adapter.
- *
- * @example
- * ```ts
- * const embedding = createVoyageEmbeddingAdapter({
- *   apiKey: 'pa-...',
- *   model: 'voyage-3',
- *   inputType: 'document',
- * })
- *
- * const vectors = await embedding.embed(['Hello, world!'])
- * ```
- */
-export function createVoyageEmbeddingAdapter(
-	options: VoyageEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	return new VoyageEmbedding(options)
 }

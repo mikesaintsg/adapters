@@ -9,31 +9,15 @@ import type {
 	StoredDocument,
 	VectorStoreMetadata,
 } from '@mikesaintsg/core'
-import type { HTTPVectorPersistenceOptions } from '../../types.js'
+import type { HTTPVectorPersistenceOptions, StoredDocumentRecord } from '../../types.js'
 import { createAdapterError } from '../../helpers.js'
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DEFAULT_TIMEOUT = 30000
-
-// ============================================================================
-// Internal Types
-// ============================================================================
-
-interface StoredDocumentRecord {
-	readonly id: string
-	readonly content: string
-	readonly embedding: readonly number[]
-	readonly metadata?: Readonly<Record<string, unknown>> | undefined
-}
+import { DEFAULT_TIMEOUT_MS } from '../../constants.js'
 
 // ============================================================================
 // Implementation
 // ============================================================================
 
-class HTTPVectorPersistence implements VectorStorePersistenceAdapterInterface {
+export class HTTPVectorPersistence implements VectorStorePersistenceAdapterInterface {
 	#baseURL: string
 	#headers: Record<string, string>
 	#timeout: number
@@ -44,7 +28,7 @@ class HTTPVectorPersistence implements VectorStorePersistenceAdapterInterface {
 			'Content-Type': 'application/json',
 			...(options.headers ?? {}),
 		}
-		this.#timeout = options.timeout ?? DEFAULT_TIMEOUT
+		this.#timeout = options.timeout ?? DEFAULT_TIMEOUT_MS
 	}
 
 	async save(docs: StoredDocument | readonly StoredDocument[]): Promise<void> {
@@ -204,38 +188,4 @@ class HTTPVectorPersistence implements VectorStorePersistenceAdapterInterface {
 			clearTimeout(timeoutId)
 		}
 	}
-}
-
-// ============================================================================
-// Factory
-// ============================================================================
-
-/**
- * Create an HTTP vector persistence adapter.
- *
- * Persists vector store data to a remote HTTP API.
- * Expects endpoints:
- * - PUT /documents - Save documents
- * - GET /documents - Load documents
- * - DELETE /documents - Clear/remove documents
- * - PUT /metadata - Save metadata
- * - GET /metadata - Load metadata
- * - DELETE /metadata - Clear metadata
- * - GET /health - Health check
- *
- * @example
- * ```ts
- * const persistence = createHTTPVectorPersistenceAdapter({
- *   baseURL: 'https://api.example.com/vectorstore',
- *   headers: { 'Authorization': 'Bearer token' },
- * })
- *
- * await persistence.save([{ id: '1', content: 'Hello', embedding: new Float32Array([0.1, 0.2]) }])
- * const docs = await persistence.load()
- * ```
- */
-export function createHTTPVectorPersistenceAdapter(
-	options: HTTPVectorPersistenceOptions,
-): VectorStorePersistenceAdapterInterface {
-	return new HTTPVectorPersistence(options)
 }

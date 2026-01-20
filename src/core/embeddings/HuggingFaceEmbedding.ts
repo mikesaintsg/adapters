@@ -24,7 +24,7 @@ import type {
 /**
  * HuggingFace Embedding Adapter implementation.
  */
-class HuggingFaceEmbedding implements EmbeddingAdapterInterface {
+export class HuggingFaceEmbedding implements EmbeddingAdapterInterface {
 	readonly #pipeline: HuggingFaceFeatureExtractionPipeline
 	readonly #modelName: string
 	readonly #dimensions: number
@@ -73,29 +73,4 @@ class HuggingFaceEmbedding implements EmbeddingAdapterInterface {
 			dimensions: this.#dimensions,
 		}
 	}
-}
-
-/**
- * Create a HuggingFace Transformers embedding adapter.
- *
- * @example
- * ```ts
- * import { pipeline } from '@huggingface/transformers'
- * import { createHuggingFaceEmbeddingAdapter } from '@mikesaintsg/adapters'
- *
- * const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
- *
- * const embedding = createHuggingFaceEmbeddingAdapter({
- *   pipeline: extractor,
- *   modelName: 'all-MiniLM-L6-v2',
- *   dimensions: 384,
- * })
- *
- * const vectors = await embedding.embed(['Hello, world!'])
- * ```
- */
-export function createHuggingFaceEmbeddingAdapter(
-	options: HuggingFaceEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	return new HuggingFaceEmbedding(options)
 }

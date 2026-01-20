@@ -3,8 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createOpenAIProviderAdapter } from '../../../src/core/providers/OpenAIProvider.js'
-import { createStreamerAdapter } from '../../../src/core/streaming/Streamer.js'
+import { createOpenAIProviderAdapter, createStreamerAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
 
 // Helper to create mock SSE response

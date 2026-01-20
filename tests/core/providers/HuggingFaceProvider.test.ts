@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { createHuggingFaceProviderAdapter } from '../../../src/core/providers/HuggingFaceProvider.js'
+import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
-import type { HuggingFaceTextGenerationPipeline, HuggingFaceTextGenerationOutput } from '../../../src/types.js'
+import type { HuggingFaceTextGenerationPipeline, HuggingFaceTextGenerationOutput } from '@mikesaintsg/adapters'
 
 // Create mock pipeline for testing
 function createMockPipeline(

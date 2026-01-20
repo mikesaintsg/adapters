@@ -5,6 +5,7 @@
  */
 
 import type { AdapterErrorCode } from './types.js'
+import type { FramePriority } from '@mikesaintsg/core'
 
 // ============================================================================
 // Provider Defaults
@@ -131,6 +132,9 @@ export const DEFAULT_INDEXEDDB_DOCUMENTS_STORE = 'documents'
 /** Default IndexedDB metadata store name */
 export const DEFAULT_INDEXEDDB_METADATA_STORE = 'metadata'
 
+/** Default IndexedDB metadata key */
+export const DEFAULT_INDEXEDDB_METADATA_KEY = 'vectorstore_metadata'
+
 /** Default IndexedDB cache store name */
 export const DEFAULT_CACHE_STORE_NAME = 'embedding_cache'
 
@@ -143,8 +147,27 @@ export const DEFAULT_INDEXEDDB_SESSION_STORE = 'sessions'
 /** Default session TTL in ms (7 days) */
 export const DEFAULT_SESSION_TTL_MS = 604800000
 
+/** Default OPFS metadata file name */
+export const DEFAULT_OPFS_METADATA_FILE = 'metadata.json'
+
+/** Default OPFS documents file prefix */
+export const DEFAULT_OPFS_DOCUMENTS_PREFIX = 'documents_'
+
 /** Default OPFS chunk size */
 export const DEFAULT_OPFS_CHUNK_SIZE = 100
+
+// ============================================================================
+// Context Builder Defaults
+// ============================================================================
+
+/** Default priority weights for context frames */
+export const DEFAULT_PRIORITY_WEIGHTS: Readonly<Record<FramePriority, number>> = {
+	critical: 1.0,
+	high: 0.75,
+	normal: 0.5,
+	low: 0.25,
+	optional: 0.1,
+} as const
 
 // ============================================================================
 // Error Codes
@@ -160,3 +183,42 @@ export const RETRYABLE_ERROR_CODES: readonly AdapterErrorCode[] = [
 	'TIMEOUT_ERROR',
 	'SERVICE_ERROR',
 ] as const
+
+/**
+ * Get default dimensions for common Ollama embedding models.
+ */
+export const DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS = 768
+
+export const DEFAULT_OLLAMA_EMBEDDING_MODELS_DIMENSIONS: Readonly<Record<string, number>> = {
+	'nomic-embed-text': 768,
+	'mxbai-embed-large': 1024,
+	'all-minilm': 384,
+	'snowflake-arctic-embed': 1024,
+} as const
+
+/**
+ * Get default dimensions for OpenAI embedding models.
+ */
+export const DEFAULT_OPENAI_EMBEDDING_DIMENSIONS = 1536
+
+export const DEFAULT_OPENAI_EMBEDDING_MODELS_DIMENSIONS: Readonly<Record<string, number>> = {
+	'text-embedding-3-large': 3072,
+	'text-embedding-3-small': 1536,
+	'ada-002': 1536,
+} as const
+
+/**
+ * Get default dimensions for Voyage embedding models.
+ */
+export const DEFAULT_VOYAGE_EMBEDDING_DIMENSIONS = 1024
+
+export const DEFAULT_VOYAGE_EMBEDDING_MODELS_DIMENSIONS: Readonly<Record<string, number>> = {
+	'voyage-3-lite': 512,
+	'voyage-3': 1024,
+	'voyage-code-3': 1024,
+	'voyage-2': 1024,
+	'voyage-code-2': 1024,
+	'voyage-finance-2': 1024,
+	'voyage-law-2': 1024,
+	'voyage-multilingual-2': 1024,
+} as const

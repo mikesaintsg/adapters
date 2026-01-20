@@ -10,50 +10,30 @@ import type {
 	VectorStoreMetadata,
 	MinimalDatabaseAccess,
 } from '@mikesaintsg/core'
-import type { IndexedDBVectorPersistenceOptions } from '../../types.js'
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DEFAULT_DOCUMENTS_STORE = 'documents'
-const DEFAULT_METADATA_STORE = 'metadata'
-const METADATA_KEY = 'vectorstore_metadata'
-
-// ============================================================================
-// Internal Types
-// ============================================================================
-
-interface StoredDocumentRecord {
-	readonly id: string
-	readonly content: string
-	readonly embedding: readonly number[]
-	readonly metadata?: Readonly<Record<string, unknown>> | undefined
-}
-
-interface MetadataRecord {
-	readonly id: string
-	readonly dimensions: number
-	readonly model: string
-	readonly provider: string
-	readonly documentCount: number
-	readonly createdAt: number
-	readonly updatedAt: number
-}
+import type {
+	IndexedDBVectorPersistenceOptions,
+	StoredDocumentRecord,
+	VectorStoreMetadataRecord,
+} from '../../types.js'
+import {
+	DEFAULT_INDEXEDDB_DOCUMENTS_STORE,
+	DEFAULT_INDEXEDDB_METADATA_STORE,
+	DEFAULT_INDEXEDDB_METADATA_KEY,
+} from '../../constants.js'
 
 // ============================================================================
 // Implementation
 // ============================================================================
 
-class IndexedDBVectorPersistence implements VectorStorePersistenceAdapterInterface {
+export class IndexedDBVectorPersistence implements VectorStorePersistenceAdapterInterface {
 	#database: MinimalDatabaseAccess
 	#documentsStore: string
 	#metadataStore: string
 
 	constructor(options: IndexedDBVectorPersistenceOptions) {
 		this.#database = options.database
-		this.#documentsStore = options.documentsStore ?? DEFAULT_DOCUMENTS_STORE
-		this.#metadataStore = options.metadataStore ?? DEFAULT_METADATA_STORE
+		this.#documentsStore = options.documentsStore ?? DEFAULT_INDEXEDDB_DOCUMENTS_STORE
+		this.#metadataStore = options.metadataStore ?? DEFAULT_INDEXEDDB_METADATA_STORE
 	}
 
 	async save(docs: StoredDocument | readonly StoredDocument[]): Promise<void> {
@@ -89,16 +69,16 @@ class IndexedDBVectorPersistence implements VectorStorePersistenceAdapterInterfa
 	}
 
 	async saveMetadata(metadata: VectorStoreMetadata): Promise<void> {
-		const store = this.#database.store<MetadataRecord>(this.#metadataStore)
+		const store = this.#database.store<VectorStoreMetadataRecord>(this.#metadataStore)
 		await store.set({
-			id: METADATA_KEY,
+			id: DEFAULT_INDEXEDDB_METADATA_KEY,
 			...metadata,
-		}, METADATA_KEY)
+		}, DEFAULT_INDEXEDDB_METADATA_KEY)
 	}
 
 	async loadMetadata(): Promise<VectorStoreMetadata | undefined> {
-		const store = this.#database.store<MetadataRecord>(this.#metadataStore)
-		const record = await store.get(METADATA_KEY)
+		const store = this.#database.store<VectorStoreMetadataRecord>(this.#metadataStore)
+		const record = await store.get(DEFAULT_INDEXEDDB_METADATA_KEY)
 		if (!record) {
 			return undefined
 		}
@@ -124,7 +104,7 @@ class IndexedDBVectorPersistence implements VectorStorePersistenceAdapterInterfa
 
 	async clear(): Promise<void> {
 		const docsStore = this.#database.store<StoredDocumentRecord>(this.#documentsStore)
-		const metaStore = this.#database.store<MetadataRecord>(this.#metadataStore)
+		const metaStore = this.#database.store<VectorStoreMetadataRecord>(this.#metadataStore)
 		await docsStore.clear()
 		await metaStore.clear()
 	}
@@ -138,29 +118,4 @@ class IndexedDBVectorPersistence implements VectorStorePersistenceAdapterInterfa
 			return Promise.resolve(false)
 		}
 	}
-}
-
-// ============================================================================
-// Factory
-// ============================================================================
-
-/**
- * Create an IndexedDB vector persistence adapter.
- *
- * @example
- * ```ts
- * const persistence = createIndexedDBVectorPersistenceAdapter({
- *   database: myDatabaseAccess,
- *   documentsStore: 'documents',
- *   metadataStore: 'metadata',
- * })
- *
- * await persistence.save([{ id: '1', content: 'Hello', embedding: new Float32Array([0.1, 0.2]) }])
- * const docs = await persistence.load()
- * ```
- */
-export function createIndexedDBVectorPersistenceAdapter(
-	options: IndexedDBVectorPersistenceOptions,
-): VectorStorePersistenceAdapterInterface {
-	return new IndexedDBVectorPersistence(options)
 }

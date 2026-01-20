@@ -17,7 +17,7 @@ import type { TruncationAdapterOptions } from '../../types.js'
  *
  * Sorts frames by priority (lowest priority at end = removed first).
  */
-class PriorityTruncationAdapter implements TruncationAdapterInterface {
+export class PriorityTruncationAdapter implements TruncationAdapterInterface {
 	constructor(_options?: TruncationAdapterOptions) {
 		// Options reserved for future use
 	}
@@ -55,27 +55,4 @@ class PriorityTruncationAdapter implements TruncationAdapterInterface {
 		}
 		return 50
 	}
-}
-
-/**
- * Creates a Priority Truncation adapter
- *
- * @param options - Optional truncation configuration
- * @returns TruncationAdapterInterface implementation
- *
- * @example
- * ```ts
- * const truncator = createPriorityTruncationAdapter()
- *
- * // Sort frames by priority (low priority at end = removed first)
- * const sorted = truncator.sort(frames)
- *
- * // Check if a frame should be preserved
- * const preserve = truncator.shouldPreserve(frame)
- * ```
- */
-export function createPriorityTruncationAdapter(
-	options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	return new PriorityTruncationAdapter(options)
 }

@@ -17,7 +17,7 @@ import type { TruncationAdapterOptions } from '../../types.js'
  *
  * Sorts frames so oldest are at end (removed first during truncation).
  */
-class FIFOTruncationAdapter implements TruncationAdapterInterface {
+export class FIFOTruncationAdapter implements TruncationAdapterInterface {
 	constructor(_options?: TruncationAdapterOptions) {
 		// Options reserved for future use
 	}
@@ -35,24 +35,4 @@ class FIFOTruncationAdapter implements TruncationAdapterInterface {
 		}
 		return false
 	}
-}
-
-/**
- * Creates a FIFO Truncation adapter
- *
- * @param options - Optional truncation configuration
- * @returns TruncationAdapterInterface implementation
- *
- * @example
- * ```ts
- * const truncator = createFIFOTruncationAdapter()
- *
- * // Sort frames (oldest at end = removed first)
- * const sorted = truncator.sort(frames)
- * ```
- */
-export function createFIFOTruncationAdapter(
-	options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	return new FIFOTruncationAdapter(options)
 }

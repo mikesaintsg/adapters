@@ -17,7 +17,7 @@ import type { TruncationAdapterOptions } from '../../types.js'
  *
  * Sorts frames by score (lowest scored at end = removed first).
  */
-class ScoreTruncationAdapter implements TruncationAdapterInterface {
+export class ScoreTruncationAdapter implements TruncationAdapterInterface {
 	constructor(_options?: TruncationAdapterOptions) {
 		// Options reserved for future use
 	}
@@ -47,24 +47,4 @@ class ScoreTruncationAdapter implements TruncationAdapterInterface {
 		}
 		return 0
 	}
-}
-
-/**
- * Creates a Score Truncation adapter
- *
- * @param options - Optional truncation configuration
- * @returns TruncationAdapterInterface implementation
- *
- * @example
- * ```ts
- * const truncator = createScoreTruncationAdapter()
- *
- * // Sort frames by score (low score at end = removed first)
- * const sorted = truncator.sort(frames)
- * ```
- */
-export function createScoreTruncationAdapter(
-	options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	return new ScoreTruncationAdapter(options)
 }

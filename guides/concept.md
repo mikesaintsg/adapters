@@ -105,7 +105,7 @@ interface SomeAdapterInterface {
 Policy adapters have their own dedicated interfaces:
 
 ```ts
-/** Retry policy adapter - determines retry behavior */
+/** Retry policies adapter - determines retry behavior */
 interface RetryAdapterInterface {
   shouldRetry(error: unknown, attempt: number): boolean
   getDelay(attempt: number): number
@@ -248,13 +248,13 @@ async function embed(text: string): Promise<Embedding> {
     if (cached) return cached
   }
   
-  // 2. Apply rate limit policy (only if provided)
+  // 2. Apply rate limit policies (only if provided)
   if (this.#rateLimit) {
     await this.#rateLimit.acquire()
   }
   
   try {
-    // 3. Use retry policy (only if provided)
+    // 3. Use retry policies (only if provided)
     const embedding = this.#retry
       ? await this.#executeWithRetry(() => this.#embedding.embed([text]))
       : await this.#embedding.embed([text])

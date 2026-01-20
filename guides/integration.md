@@ -721,7 +721,7 @@ export async function ingestDocuments(
  * 
  * @param app - Application state
  * @param userMessage - The user's message
- * @param onToken - Callback for each token (for streaming UI)
+ * @param onToken - Callback for each token (for streamers UI)
  * @returns The complete response
  */
 export async function handleUserMessage(
@@ -794,7 +794,7 @@ export async function handleUserMessage(
 	}
 	
 	// ──────────────────────────────────────────────────────────────────────
-	// Step 6: Generate response with streaming
+	// Step 6: Generate response with streamers
 	// ──────────────────────────────────────────────────────────────────────
 	
 	// Create the tool call bridge for executing tools
@@ -821,7 +821,7 @@ export async function handleUserMessage(
 		toolChoice: 'auto',
 	})
 	
-	// Handle streaming tokens
+	// Handle streamers tokens
 	if (onToken) {
 		stream.onToken(onToken)
 	}
@@ -1125,7 +1125,7 @@ export function greet(name: string): string {
 }
 `, 'typescript')
 		
-		// Handle a user message with streaming
+		// Handle a user message with streamers
 		console.log('\n--- Conversation Start ---\n')
 		
 		const response1 = await handleUserMessage(
@@ -1698,7 +1698,7 @@ describe('Full Integration', () => {
 			(token) => tokens.push(token)
 		)
 		
-		// Verify streaming worked
+		// Verify streamers worked
 		expect(tokens.length).toBeGreaterThan(0)
 		
 		// Verify response mentions Paris
@@ -1730,7 +1730,7 @@ test('chat interface', async ({ page }) => {
 	await page.fill('[data-testid="chat-input"]', 'Hello!')
 	await page.click('[data-testid="send-button"]')
 	
-	// Wait for streaming response
+	// Wait for streamers response
 	await expect(page.locator('[data-testid="message-assistant"]')).toBeVisible()
 	
 	// Verify response is not empty
@@ -2057,3 +2057,1038 @@ window.addEventListener('beforeunload', () => {
 | Onboarding flows               | Valid transitions, step validation           |
 | Form wizard guidance           | Micro-transitions, predictions               |
 | Content recommendation         | Learned weights, confidence scores           |
+
+## Appendix: LLM-Powered ActionLoop Applications
+
+This section describes how to build intelligent applications that combine ActionLoop's predictive workflow capabilities with local and remote LLM inference for contextual assistance.
+
+### Overview
+
+The integration enables:
+- **Predictive UI**: ActionLoop predictions displayed as confidence-ranked action buttons
+- **Prompt Refinement**: Local small model parses ambiguous input into structured queries
+- **Contextual Assistance**: LLM receives ActionLoop state (predictions, events, patterns) for informed responses
+- **Tool Automation**: LLM executes tools via ContextProtocol, transitions recorded in ActionLoop
+- **Cross-Tab Sync**: Broadcast synchronizes state and predictions across browser tabs
+
+### Architecture
+
+```markdown
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Application                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│  UI Layer                                                               │
+│  ├── Recommended Actions (from ActionLoop predictions)                  │
+│  ├── Input Field (search/prompt)                                        │
+│  ├── Refined Prompt Display (from local model)                          │
+│  └── Results + Insights (from LLM + tools)                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Integration Layer                                                      │
+│  ├── ActionLoopContextFormatter (predictions → LLM context)             │
+│  ├── ModelOrchestrator (fast/balanced/powerful tier selection)          │
+│  └── AccountAssistant (orchestrates the full flow)                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Core Packages                                                          │
+│  ├── @mikesaintsg/actionloop (workflow + predictions)                   │
+│  ├── @mikesaintsg/inference (LLM generation + streaming)                │
+│  ├── @mikesaintsg/vectorstore (RAG for documentation)                   │
+│  ├── @mikesaintsg/contextbuilder (context assembly + budget)            │
+│  ├── @mikesaintsg/contextprotocol (tool schemas + execution)            │
+│  ├── @mikesaintsg/indexeddb (persistence)                               │
+│  └── @mikesaintsg/broadcast (cross-tab sync)                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Adapter Layer                                                          │
+│  ├── HuggingFace Provider Adapter (local models)                        │
+│  ├── OpenAI/Anthropic Provider Adapter (API models)                     │
+│  ├── HuggingFace Embedding Adapter (local embeddings)                   │
+│  ├── IndexedDB Persistence Adapters (weights, events, vectors)          │
+│  └── OpenAI Tool Format Adapter (tool calling)                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+```markdown
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Application Layer                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │                    Account Management UI                               │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  🔮 Recommended Actions (ActionLoop predictions)                 │  │ │
+│  │  │  [Billing 85%] [Settings 62%] [Profile 41%] [Support 23%]       │  │ │
+│  │  └─────────────────────────────────────────────────────────────────┘  │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  🔍 User Input                                                   │  │ │
+│  │  │  "show me accounts with failed payments this month"              │  │ │
+│  │  └─────────────────────────────────────────────────────────────────┘  │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  ✨ Refined Prompt (local model)                                 │  │ │
+│  │  │  Query: payment_status='failed' AND date >= 2025-01-01           │  │ │
+│  │  │  [Execute] [Use API Model] [Edit]                                │  │ │
+│  │  └─────────────────────────────────────────────────────────────────┘  │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  📋 Results + AI Insights                                        │  │ │
+│  │  │  3 accounts, $23,750 total.  Acme Corp highest - prioritize.       │  │ │
+│  │  └─────────────────────────────────────────────────────────────────┘  │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                        Integration Layer                                     │
+│                                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
+│  │ ActionLoop      │  │ Model           │  │ Context         │             │
+│  │ Context         │  │ Orchestrator    │  │ Builder         │             │
+│  │ Formatter       │  │                 │  │                 │             │
+│  │                 │  │ • Fast (360M)   │  │ • Token budget  │             │
+│  │ • Predictions   │  │ • Balanced (1.5B)│ │ • Deduplication │             │
+│  │ • Events        │  │ • Powerful (API)│  │ • RAG frames    │             │
+│  │ • Patterns      │  │                 │  │                 │             │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘             │
+│           │                    │                    │                       │
+│           └────────────────────┼────────────────────┘                       │
+│                                │                                            │
+├────────────────────────────────┼────────────────────────────────────────────┤
+│                        Core Packages                                         │
+│                                │                                            │
+│  ┌─────────────┐  ┌────────────┴───────────┐  ┌─────────────┐              │
+│  │ actionloop  │  │      inference         │  │ vectorstore │              │
+│  │             │  │                        │  │             │              │
+│  │ • Procedural│  │ • Engine               │  │ • Embeddings│              │
+│  │ • Predictive│  │ • Session              │  │ • Search    │              │
+│  │ • Engine    │  │ • Streaming            │  │ • RAG       │              │
+│  │ • Activity  │  │ • Token batching       │  │             │              │
+│  └─────────────┘  └────────────────────────┘  └─────────────┘              │
+│                                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │contextproto-│  │contextbuilder│ │  indexeddb  │  │  broadcast  │        │
+│  │   col       │  │             │  │             │  │             │        │
+│  │ • Tools     │  │ • Frames    │  │ • Weights   │  │ • Cross-tab │        │
+│  │ • Validation│  │ • Budget    │  │ • Events    │  │ • Leader    │        │
+│  │ • Execution │  │ • Sliding   │  │ • Sessions  │  │ • Sync      │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                        Adapter Layer                                         │
+│                                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │ HuggingFace │  │ OpenAI      │  │ IndexedDB   │  │ OpenAI Tool │        │
+│  │ Provider    │  │ Provider    │  │ Persistence │  │ Format      │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                         │
+│  │ HuggingFace │  │ Voyage      │  │ Event Store │                         │
+│  │ Embedding   │  │ Embedding   │  │ Persistence │                         │
+│  └─────────────┘  └─────────────┘  └─────────────┘                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+```markdown
+User Input
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. Prompt Refinement (Fast Model)                               │
+│    "show failed payments" → { intent: 'search', query: {... } }  │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. Context Assembly (ContextBuilder)                            │
+│    • ActionLoop predictions + confidence                        │
+│    • Recent events + engagement                                 │
+│    • RAG results from VectorStore (if needed)                   │
+│    • Tool schemas from ContextProtocol                          │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. Generation (Balanced/Powerful Model)                         │
+│    • Structured response with tool calls                        │
+│    • Insights based on ActionLoop patterns                      │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. Tool Execution (ContextProtocol)                             │
+│    • Execute search_accounts, get_account_details, etc.         │
+│    • Record transition in ActionLoop                            │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. Response + Updated Predictions                               │
+│    • Display results                                            │
+│    • Update recommended actions from ActionLoop                 │
+│    • Cross-tab sync via Broadcast                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Model Selection
+
+| Tier     | Model                                  | Size   | Purpose                                  |
+|----------|----------------------------------------|--------|------------------------------------------|
+| Fast     | `HuggingFaceTB/SmolLM2-360M-Instruct`  | ~200MB | Instant intent detection, prompt parsing |
+| Balanced | `Qwen/Qwen2.5-1.5B-Instruct`           | ~900MB | General assistance, insights             |
+| Powerful | `microsoft/Phi-4-mini-instruct` or API | ~2.2GB | Complex reasoning, graph building        |
+
+Progressive loading ensures immediate responsiveness:
+1. Fast model loads first (~2-5s)
+2. Balanced model loads in background (~10-20s)
+3. Powerful model loaded on-demand or via API
+
+### Setup
+
+#### 1. Database Schema
+
+```ts
+import { createDatabase } from '@mikesaintsg/indexeddb'
+
+interface AppSchema {
+	accounts: Account
+	sessions: SessionRecord
+	events: TransitionEvent
+	weights: ExportedWeight
+	vectors: StoredDocument
+}
+
+const database = await createDatabase<AppSchema>({
+	name: 'account-manager',
+	version: 1,
+	stores: {
+		accounts: {
+			keyPath: 'id',
+			indexes: [
+				{ name: 'status', keyPath: 'status' },
+				{ name: 'paymentStatus', keyPath: 'paymentStatus' },
+			],
+		},
+		sessions:  { keyPath: 'id' },
+		events: {
+			keyPath: 'id',
+			indexes: [
+				{ name: 'sessionId', keyPath: 'sessionId' },
+				{ name:  'timestamp', keyPath: 'timestamp' },
+			],
+		},
+		weights: { keyPath: ['from', 'to', 'actor'] },
+		vectors: { keyPath: 'id' },
+	},
+})
+```
+
+#### 2. ActionLoop Setup
+
+```ts
+import {
+	createProceduralGraph,
+	createPredictiveGraph,
+	createWorkflowEngine,
+	createActivityTracker,
+} from '@mikesaintsg/actionloop'
+import {
+	createIndexedDBEventPersistenceAdapter,
+	createIndexedDBWeightPersistenceAdapter,
+} from '@mikesaintsg/adapters'
+
+// Define workflow transitions
+const transitions = [
+	{ from: 'dashboard', to: 'accounts', weight: 1, actor: 'user' },
+	{ from: 'dashboard', to: 'billing', weight: 1, actor:  'user' },
+	{ from: 'dashboard', to:  'settings', weight: 1, actor: 'user' },
+	{ from: 'accounts', to: 'account-detail', weight: 1, actor:  'user' },
+	{ from: 'accounts', to:  'dashboard', weight: 1, actor:  'user' },
+	{ from: 'account-detail', to: 'accounts', weight: 1, actor:  'user' },
+	{ from: 'account-detail', to: 'send-notification', weight: 1, actor:  'user' },
+	{ from: 'billing', to: 'dashboard', weight: 1, actor: 'user' },
+	{ from:  'settings', to: 'dashboard', weight: 1, actor: 'user' },
+] as const
+
+// Create graphs
+const procedural = createProceduralGraph({ transitions })
+
+const weightPersistence = createIndexedDBWeightPersistenceAdapter({
+	database,
+	storeName: 'weights',
+})
+
+const predictive = createPredictiveGraph(procedural, {
+	persistence: weightPersistence,
+	decayAlgorithm: 'ewma',
+	decayFactor: 0.9,
+	coldStart: {
+		strategy: 'procedural-weight',
+		warmupThreshold: 50,
+	},
+})
+
+// Load existing weights on startup
+await predictive.loadWeights()
+
+// Create activity tracker
+const activity = createActivityTracker({
+	idleThreshold: 30000,
+	awayThreshold: 300000,
+})
+
+// Create event persistence
+const eventPersistence = createIndexedDBEventPersistenceAdapter({
+	database,
+	storeName: 'events',
+})
+
+// Create engine
+const engine = createWorkflowEngine(procedural, predictive, {
+	activity,
+	eventPersistence,
+	validateTransitions: true,
+	trackSessions: true,
+})
+```
+
+#### 3. VectorStore for RAG
+
+```ts
+import { createVectorStore } from '@mikesaintsg/vectorstore'
+import {
+	createHuggingFaceEmbeddingAdapter,
+	createIndexedDBVectorPersistenceAdapter,
+} from '@mikesaintsg/adapters'
+
+// Small, fast embedding model
+const embeddingAdapter = createHuggingFaceEmbeddingAdapter({
+	model: 'Xenova/all-MiniLM-L6-v2',
+})
+
+const vectorPersistence = createIndexedDBVectorPersistenceAdapter({
+	database,
+	storeName:  'vectors',
+})
+
+const vectorStore = await createVectorStore(embeddingAdapter, {
+	persistence: vectorPersistence,
+})
+
+// Load persisted vectors
+await vectorStore.load()
+
+// Index help documentation (do once or on updates)
+await vectorStore.upsertDocument([
+	{
+		id: 'help-search',
+		content: 'To search accounts, use filters like status, payment status, date range.. .',
+		metadata: { category: 'help', topic: 'search' },
+	},
+	{
+		id: 'help-notifications',
+		content: 'Send notifications to accounts via email, SMS, or push.. .',
+		metadata: { category: 'help', topic: 'notifications' },
+	},
+])
+```
+
+#### 4. Tool Registry
+
+```ts
+import { createToolRegistry } from '@mikesaintsg/contextprotocol'
+import { createOpenAIToolFormatAdapter } from '@mikesaintsg/adapters'
+
+const formatAdapter = createOpenAIToolFormatAdapter()
+const tools = createToolRegistry(formatAdapter)
+
+// Search accounts tool
+tools.register(
+	{
+		name: 'search_accounts',
+		description: 'Search for accounts matching criteria',
+		parameters: {
+			type: 'object',
+			properties: {
+				query:  { type: 'string', description: 'Free-text search' },
+				status: { type: 'string', enum: ['active', 'inactive', 'suspended'] },
+				paymentStatus:  { type: 'string', enum: ['current', 'overdue', 'failed'] },
+				limit: { type: 'number', default: 10 },
+			},
+		},
+	},
+	async (params) => {
+		// Query IndexedDB
+		let query = database.store('accounts').query()
+		
+		if (params.status) {
+			query = query.where('status').equals(params.status)
+		}
+		if (params.paymentStatus) {
+			query = query.where('paymentStatus').equals(params.paymentStatus)
+		}
+		
+		const accounts = await query.limit(params. limit ??  10).toArray()
+		return { accounts, count: accounts.length }
+	}
+)
+
+// Get account details tool
+tools.register(
+	{
+		name: 'get_account_details',
+		description:  'Get full details for a specific account',
+		parameters: {
+			type: 'object',
+			properties: {
+				accountId: { type: 'string', description: 'Account ID' },
+			},
+			required: ['accountId'],
+		},
+	},
+	async (params) => {
+		const account = await database.store('accounts').get(params.accountId)
+		if (!account) {
+			return { error: 'Account not found' }
+		}
+		return { account }
+	}
+)
+
+// Send notification tool
+tools.register(
+	{
+		name: 'send_notification',
+		description:  'Send a notification to an account.  Requires confirmation.',
+		parameters: {
+			type: 'object',
+			properties: {
+				accountId:  { type: 'string' },
+				type: { type: 'string', enum: ['email', 'sms', 'push'] },
+				template: { type: 'string' },
+				variables: { type: 'object' },
+			},
+			required:  ['accountId', 'type', 'template'],
+		},
+	},
+	async (params) => {
+		// Implementation would send actual notification
+		return { success: true, notificationId: crypto.randomUUID() }
+	}
+)
+```
+
+#### 5. Model Orchestrator
+
+```ts
+import { createEngine } from '@mikesaintsg/inference'
+import { createHuggingFaceProviderAdapter, createOpenAIProviderAdapter } from '@mikesaintsg/adapters'
+
+// Create provider adapters
+const fastProvider = createHuggingFaceProviderAdapter({
+	model:  'HuggingFaceTB/SmolLM2-360M-Instruct',
+	quantization: 'q4',
+})
+
+const balancedProvider = createHuggingFaceProviderAdapter({
+	model: 'Qwen/Qwen2.5-1.5B-Instruct',
+	quantization:  'q4',
+})
+
+const powerfulProvider = createOpenAIProviderAdapter({
+	apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+	model: 'gpt-4o-mini',
+})
+
+// Model orchestrator manages tier selection
+interface ModelOrchestrator {
+	readonly fast: ReturnType<typeof createEngine> | undefined
+	readonly balanced: ReturnType<typeof createEngine> | undefined
+	readonly powerful: ReturnType<typeof createEngine> | undefined
+	isReady(tier: 'fast' | 'balanced' | 'powerful'): boolean
+	generate(prompt: string, options?: { tier?: 'fast' | 'balanced' | 'powerful' }): Promise<string>
+}
+
+function createModelOrchestrator(): ModelOrchestrator {
+	const engines = {
+		fast: undefined as ReturnType<typeof createEngine> | undefined,
+		balanced: undefined as ReturnType<typeof createEngine> | undefined,
+		powerful:  undefined as ReturnType<typeof createEngine> | undefined,
+	}
+	
+	const ready = { fast: false, balanced: false, powerful: false }
+	
+	// Load fast model immediately
+	;(async () => {
+		engines.fast = createEngine(fastProvider)
+		// Warm up with minimal generation
+		await engines.fast. generate([{ id: '1', role: 'user', content: 'Hi' }], { maxTokens: 1 })
+		ready.fast = true
+	})()
+	
+	// Load balanced model in background
+	;(async () => {
+		engines.balanced = createEngine(balancedProvider)
+		await engines.balanced.generate([{ id: '1', role: 'user', content: 'Hi' }], { maxTokens: 1 })
+		ready.balanced = true
+	})()
+	
+	// Powerful model is API-based, always ready
+	engines.powerful = createEngine(powerfulProvider)
+	ready.powerful = true
+	
+	return {
+		get fast() { return engines.fast },
+		get balanced() { return engines.balanced },
+		get powerful() { return engines.powerful },
+		
+		isReady(tier) { return ready[tier] },
+		
+		async generate(prompt, options) {
+			const tier = options?.tier ??  (ready.balanced ? 'balanced' : ready.fast ? 'fast' :  'powerful')
+			const engine = engines[tier]
+			
+			if (!engine) {
+				throw new Error(`No engine available for tier: ${tier}`)
+			}
+			
+			const result = await engine.generate([
+				{ id: crypto.randomUUID(), role: 'user', content: prompt },
+			])
+			
+			return result. text
+		},
+	}
+}
+
+const orchestrator = createModelOrchestrator()
+```
+
+#### 6. ActionLoop Context Formatter
+
+```ts
+import type { DetailedPrediction, TransitionEvent } from '@mikesaintsg/actionloop'
+
+interface FormattedActionLoopContext {
+	currentNode: string
+	predictions: Array<{
+		nodeId: string
+		label: string
+		confidencePercent: number
+		reasoning: string
+	}>
+	warmupComplete: boolean
+	recentActivity: Array<{
+		from: string
+		to: string
+		timestamp: number
+	}>
+	engagement: string
+}
+
+function formatActionLoopContext(
+	predictions: DetailedPrediction,
+	events: readonly TransitionEvent[],
+	getLabel: (nodeId: string) => string = (id) => id
+): FormattedActionLoopContext {
+	return {
+		currentNode: predictions. currentNode,
+		predictions:  predictions.predictions.slice(0, 5).map((p) => ({
+			nodeId: p.nodeId,
+			label: getLabel(p.nodeId),
+			confidencePercent: Math.round(p.confidence * 100),
+			reasoning: formatReasoning(p.factors),
+		})),
+		warmupComplete: predictions.warmupComplete,
+		recentActivity: events.slice(-10).map((e) => ({
+			from: e.from,
+			to: e.to,
+			timestamp: e.timestamp,
+		})),
+		engagement: events[events.length - 1]?.engagement ??  'unknown',
+	}
+}
+
+function formatReasoning(factors: { frequency: number; recency: number; engagement: number; sampleSize: number }): string {
+	const parts:  string[] = []
+	if (factors.frequency > 0.7) parts.push('frequently visited')
+	if (factors.recency > 0.7) parts.push('recently accessed')
+	if (factors.engagement > 0.7) parts.push('high engagement')
+	if (factors.sampleSize > 0.7) parts.push('strong pattern')
+	return parts.length > 0 ? parts.join(', ') : 'based on workflow structure'
+}
+
+function contextToNaturalLanguage(context: FormattedActionLoopContext): string {
+	const lines: string[] = []
+	
+	lines.push(`Current location: ${context.currentNode}`)
+	lines.push(`User engagement: ${context.engagement}`)
+	
+	if (context.warmupComplete && context.predictions.length > 0) {
+		lines.push('')
+		lines.push('Predicted next actions (based on learned patterns):')
+		for (const p of context.predictions. slice(0, 3)) {
+			lines.push(`  - ${p.label}: ${p.confidencePercent}% likely (${p.reasoning})`)
+		}
+	} else if (! context.warmupComplete) {
+		lines.push('')
+		lines.push('Note:  Predictions will improve with more usage data.')
+	}
+	
+	return lines.join('\n')
+}
+```
+
+#### 7. Context Builder Integration
+
+```ts
+import { createContextBuilder, createTokenCounter } from '@mikesaintsg/contextbuilder'
+
+const tokenCounter = createTokenCounter()
+
+async function buildAssistantContext(
+	userInput: string,
+	actionLoopContext: FormattedActionLoopContext,
+	ragQuery?:  string
+): Promise<BuiltContext> {
+	const builder = createContextBuilder(tokenCounter, {
+		budget: { maxTokens: 4000, reservedTokens: 1000 },
+	})
+	
+	// System prompt
+	builder.addFrame({
+		id: 'system',
+		type: 'system',
+		priority: 'critical',
+		content: `You are an intelligent account management assistant. 
+
+Your capabilities:
+- Search and filter accounts using search_accounts
+- Get detailed account information using get_account_details
+- Send notifications using send_notification (requires confirmation)
+
+Guidelines:
+- Be concise and actionable
+- Use structured queries when searching
+- Confirm before destructive actions
+- Leverage the user's behavioral context for personalization`,
+	})
+	
+	// ActionLoop context
+	builder.addFrame({
+		id: 'actionloop-context',
+		type: 'context',
+		priority: 'high',
+		content: contextToNaturalLanguage(actionLoopContext),
+		metadata: { source: 'actionloop' },
+	})
+	
+	// RAG results if query provided
+	if (ragQuery) {
+		const results = await vectorStore.similaritySearch(ragQuery, { limit: 3 })
+		for (const result of results) {
+			builder.addFrame({
+				id: `rag-${result. document.id}`,
+				type: 'retrieval',
+				priority: 'medium',
+				content: result.document.content,
+				metadata: { score: result.score },
+			})
+		}
+	}
+	
+	// Tool schemas
+	builder.addFrame({
+		id: 'tools',
+		type: 'tools',
+		priority: 'high',
+		content: JSON.stringify(tools.getSchemas(), null, 2),
+	})
+	
+	// User input
+	builder.addFrame({
+		id: 'user-input',
+		type: 'user',
+		priority: 'critical',
+		content: userInput,
+	})
+	
+	return builder.build()
+}
+```
+
+#### 8. Complete Assistant Flow
+
+```ts
+import { createSession } from '@mikesaintsg/inference'
+
+interface AssistantResult {
+	refinedPrompt: string
+	response: string
+	toolsExecuted: Array<{ name: string; result: unknown }>
+	recommendations: Array<{ nodeId: string; label: string; confidence: number }>
+}
+
+async function processUserInput(
+	input: string,
+	currentNode: string,
+	sessionId: string
+): Promise<AssistantResult> {
+	// 1. Get ActionLoop predictions
+	const predictions = engine.predictNextDetailed(currentNode, {
+		actor: 'user',
+		sessionId,
+		path: window.location.pathname,
+		count: 5,
+	})
+	
+	// 2. Get recent events
+	const recentEvents = await engine.getEvents({
+		sessionId,
+		limit: 20,
+	})
+	
+	// 3. Format ActionLoop context
+	const actionLoopContext = formatActionLoopContext(
+		predictions,
+		recentEvents,
+		(nodeId) => procedural.getNode(nodeId)?.label ??  nodeId
+	)
+	
+	// 4. Refine prompt with fast model
+	const refinedPrompt = await refinePrompt(input)
+	
+	// 5. Build context
+	const builtContext = await buildAssistantContext(
+		refinedPrompt,
+		actionLoopContext,
+		refinedPrompt // Use refined prompt for RAG
+	)
+	
+	// 6. Generate response with tools
+	const session = orchestrator.balanced?. createSession({
+		system: builtContext.system,
+	})
+	
+	if (!session) {
+		throw new Error('No model available')
+	}
+	
+	for (const frame of builtContext.frames. filter((f) => f.type !== 'system')) {
+		session.addMessage('user', frame.content)
+	}
+	
+	const result = await session.generate({
+		tools: tools.getFormattedSchemas(),
+		toolChoice: 'auto',
+	})
+	
+	// 7. Execute tool calls
+	const toolsExecuted:  Array<{ name: string; result: unknown }> = []
+	
+	if (result.toolCalls && result.toolCalls.length > 0) {
+		for (const call of result.toolCalls) {
+			const toolResult = await tools.execute(call)
+			toolsExecuted.push({ name: call.name, result: toolResult. result })
+			session.addToolResult(call.id, call.name, toolResult.result)
+		}
+		
+		// Get final response after tool execution
+		const finalResult = await session.generate()
+		
+		return {
+			refinedPrompt,
+			response: finalResult.text,
+			toolsExecuted,
+			recommendations: actionLoopContext.predictions.map((p) => ({
+				nodeId: p.nodeId,
+				label: p.label,
+				confidence: p.confidencePercent,
+			})),
+		}
+	}
+	
+	return {
+		refinedPrompt,
+		response: result.text,
+		toolsExecuted:  [],
+		recommendations: actionLoopContext.predictions.map((p) => ({
+			nodeId: p. nodeId,
+			label: p.label,
+			confidence: p.confidencePercent,
+		})),
+	}
+}
+
+async function refinePrompt(input: string): Promise<string> {
+	if (!orchestrator.isReady('fast')) {
+		return input // Fall back to raw input if fast model not ready
+	}
+	
+	const result = await orchestrator.generate(
+		`Analyze and refine this user input for an account management system. 
+Input: "${input}"
+
+Respond with a clear, structured version of the request.
+If it's a search, specify the filters clearly.
+If it's an action, specify what should be done.
+Keep it concise. `,
+		{ tier: 'fast' }
+	)
+	
+	return result.trim()
+}
+```
+
+#### 9. Recording Transitions
+
+```ts
+// When user navigates or takes action
+function handleNavigation(from: string, to: string): void {
+	const session = engine.getActiveSession('user') ??  engine.startSession('user')
+	
+	engine.recordTransition(from, to, {
+		actor:  'user',
+		sessionId: session.id,
+		path: window.location.pathname,
+	})
+}
+
+// When tool is executed, record as system transition
+function handleToolExecution(toolName: string): void {
+	const session = engine.getActiveSession('user')
+	if (! session) return
+	
+	const currentNode = session.nodeHistory? .[session.nodeHistory.length - 1] ?? 'dashboard'
+	const toolNode = `tool: ${toolName}`
+	
+	// Record as automation actor
+	engine.recordTransition(currentNode, toolNode, {
+		actor: 'automation',
+		sessionId: session.id,
+		path: window.location. pathname,
+		metadata: { toolName },
+	})
+}
+```
+
+#### 10. Cross-Tab Synchronization
+
+```ts
+import { createBroadcast } from '@mikesaintsg/broadcast'
+
+interface AppState {
+	currentNode: string
+	predictions: Array<{ nodeId: string; confidence: number }>
+	sessionId: string
+}
+
+const broadcast = createBroadcast<AppState, { type: 'navigation'; to: string }>({
+	channel: 'account-manager',
+	state: {
+		currentNode: 'dashboard',
+		predictions: [],
+		sessionId: '',
+	},
+})
+
+// Update state when predictions change
+engine.onTransition((from, to, context) => {
+	const predictions = engine.predictNextDetailed(to, {
+		actor: 'user',
+		sessionId: context.sessionId,
+		path: context.path,
+		count: 5,
+	})
+	
+	broadcast.setState({
+		currentNode: to,
+		predictions:  predictions. predictions.map((p) => ({
+			nodeId: p.nodeId,
+			confidence: p.confidence,
+		})),
+		sessionId: context.sessionId,
+	})
+})
+
+// Listen for changes from other tabs
+broadcast.onStateChange((state, source) => {
+	if (source === 'remote') {
+		updateUIWithPredictions(state.predictions)
+	}
+})
+
+// Leader tab handles weight persistence
+broadcast.onLeaderChange((isLeader) => {
+	if (isLeader) {
+		// Auto-save weights periodically
+		setInterval(() => {
+			predictive.saveWeights()
+		}, 60000)
+	}
+})
+```
+
+#### 11. UI Integration
+
+```ts
+// Recommended actions component
+function RecommendedActions(): HTMLElement {
+	const container = document.createElement('div')
+	container.className = 'recommended-actions'
+	
+	function render(predictions: Array<{ nodeId: string; label: string; confidence: number }>): void {
+		container.innerHTML = ''
+		
+		const heading = document.createElement('h3')
+		heading.textContent = '🔮 Recommended Actions'
+		container.appendChild(heading)
+		
+		const buttons = document.createElement('div')
+		buttons.className = 'action-buttons'
+		
+		for (const p of predictions) {
+			const button = document.createElement('button')
+			button.className = 'action-button'
+			button.innerHTML = `${p.label} <span class="confidence">${p. confidence}%</span>`
+			button.onclick = () => handleNavigation(getCurrentNode(), p.nodeId)
+			buttons.appendChild(button)
+		}
+		
+		container. appendChild(buttons)
+	}
+	
+	// Subscribe to prediction updates
+	broadcast.onStateChange((state) => {
+		const predictions = state.predictions. map((p) => ({
+			...p,
+			label: procedural.getNode(p.nodeId)?.label ?? p.nodeId,
+		}))
+		render(predictions)
+	})
+	
+	return container
+}
+
+// Input with refinement display
+function AssistantInput(): HTMLElement {
+	const container = document.createElement('div')
+	container.className = 'assistant-input'
+	
+	const input = document.createElement('input')
+	input.type = 'text'
+	input.placeholder = 'Search accounts or ask a question...'
+	
+	const refinedDisplay = document.createElement('div')
+	refinedDisplay.className = 'refined-prompt'
+	refinedDisplay.style.display = 'none'
+	
+	const responseDisplay = document.createElement('div')
+	responseDisplay.className = 'response'
+	
+	input.onkeydown = async (e) => {
+		if (e.key !== 'Enter') return
+		
+		const userInput = input.value.trim()
+		if (!userInput) return
+		
+		// Show loading state
+		refinedDisplay.textContent = 'Refining.. .'
+		refinedDisplay.style.display = 'block'
+		
+		try {
+			const session = engine.getActiveSession('user') ?? engine.startSession('user')
+			const currentNode = broadcast.getState().currentNode
+			
+			const result = await processUserInput(userInput, currentNode, session.id)
+			
+			refinedDisplay.textContent = `✨ ${result.refinedPrompt}`
+			responseDisplay.innerHTML = formatResponse(result)
+		} catch (error) {
+			responseDisplay.textContent = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+		}
+	}
+	
+	container.appendChild(input)
+	container.appendChild(refinedDisplay)
+	container.appendChild(responseDisplay)
+	
+	return container
+}
+
+function formatResponse(result: AssistantResult): string {
+	let html = `<p>${result.response}</p>`
+	
+	if (result.toolsExecuted.length > 0) {
+		html += '<div class="tools-executed">'
+		html += '<strong>Actions taken:</strong><ul>'
+		for (const tool of result.toolsExecuted) {
+			html += `<li>${tool.name}</li>`
+		}
+		html += '</ul></div>'
+	}
+	
+	return html
+}
+```
+
+### Performance Considerations
+
+1. **Progressive Model Loading**: Load smallest model first for instant responsiveness
+2. **Token Batching**: Use `TokenBatcher` from inference for smooth streaming UI
+3. **Debounce Input**: Debounce prompt refinement to avoid excessive model calls
+4. **Cache Embeddings**: VectorStore persistence avoids re-embedding on reload
+5. **Weight Persistence**: Auto-save ActionLoop weights to avoid cold-start on refresh
+6. **Leader Election**: Use Broadcast leader to coordinate background tasks
+
+### Error Handling
+
+```ts
+import { isActionLoopError } from '@mikesaintsg/actionloop'
+import { isInferenceError } from '@mikesaintsg/inference'
+import { isVectorStoreError } from '@mikesaintsg/vectorstore'
+
+async function safeProcessInput(input: string): Promise<AssistantResult | null> {
+	try {
+		return await processUserInput(input, getCurrentNode(), getSessionId())
+	} catch (error) {
+		if (isActionLoopError(error)) {
+			console.error(`ActionLoop error [${error.code}]: ${error.message}`)
+			// Handle specific ActionLoop errors
+		} else if (isInferenceError(error)) {
+			console.error(`Inference error [${error.code}]: ${error. message}`)
+			// Retry with different tier or show user message
+		} else if (isVectorStoreError(error)) {
+			console.error(`VectorStore error [${error.code}]: ${error.message}`)
+			// Continue without RAG
+		}
+		return null
+	}
+}
+```
+
+### Cleanup
+
+```ts
+function cleanup(): void {
+	// Save weights before closing
+	predictive.saveWeights()
+	
+	// Destroy all components
+	engine.destroy()
+	activity.destroy()
+	vectorStore.destroy()
+	tools.destroy()
+	broadcast.destroy()
+	database.close()
+}
+
+window.addEventListener('beforeunload', cleanup)
+```
+
+### Use Cases
+
+| Use Case               | ActionLoop Role                      | LLM Role                                   |
+|------------------------|--------------------------------------|--------------------------------------------|
+| Navigation suggestions | Predict next actions with confidence | Explain reasoning                          |
+| Account search         | Record search patterns               | Parse natural language to structured query |
+| Insight generation     | Provide behavioral patterns          | Synthesize insights from patterns          |
+| Task automation        | Track automation transitions         | Determine when to trigger tools            |
+| Cross-tab coordination | Sync predictions                     | Share context                              |
+| Cold-start handling    | Use procedural weights               | Provide onboarding guidance                |

@@ -15,58 +15,19 @@ import type {
 import type {
 	OpenAIEmbeddingAdapterOptions,
 	OpenAIEmbeddingResponse,
-	AdapterErrorCode,
 } from '../../types.js'
 
 import {
-	DEFAULT_OPENAI_BASE_URL,
-	DEFAULT_OPENAI_EMBEDDING_MODEL,
+	DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_EMBEDDING_DIMENSIONS,
+	DEFAULT_OPENAI_EMBEDDING_MODEL, DEFAULT_OPENAI_EMBEDDING_MODELS_DIMENSIONS,
 } from '../../constants.js'
 
-import { createAdapterError } from '../../helpers.js'
-
-/**
- * Map HTTP status to adapter error code.
- */
-function mapStatusToErrorCode(status: number): AdapterErrorCode {
-	switch (status) {
-		case 401:
-			return 'AUTHENTICATION_ERROR'
-		case 429:
-			return 'RATE_LIMIT_ERROR'
-		case 400:
-			return 'INVALID_REQUEST_ERROR'
-		case 404:
-			return 'MODEL_NOT_FOUND_ERROR'
-		default:
-			if (status >= 500) {
-				return 'SERVICE_ERROR'
-			}
-			return 'UNKNOWN_ERROR'
-	}
-}
-
-/**
- * Get default dimensions for OpenAI embedding models.
- */
-function getDefaultDimensions(model: string): number {
-	if (model.includes('text-embedding-3-large')) {
-		return 3072
-	}
-	if (model.includes('text-embedding-3-small')) {
-		return 1536
-	}
-	if (model.includes('ada-002')) {
-		return 1536
-	}
-	// Default fallback
-	return 1536
-}
+import { createAdapterError, mapHttpStatusToErrorCode } from '../../helpers.js'
 
 /**
  * OpenAI Embedding Adapter implementation.
  */
-class OpenAIEmbedding implements EmbeddingAdapterInterface {
+export class OpenAIEmbedding implements EmbeddingAdapterInterface {
 	readonly #apiKey: string
 	readonly #model: string
 	readonly #baseURL: string
@@ -120,7 +81,7 @@ class OpenAIEmbedding implements EmbeddingAdapterInterface {
 		}
 
 		if (!response.ok) {
-			const errorCode = mapStatusToErrorCode(response.status)
+			const errorCode = mapHttpStatusToErrorCode(response.status)
 			let message = `OpenAI API error: ${response.status}`
 			let retryAfter: number | undefined
 
@@ -156,7 +117,7 @@ class OpenAIEmbedding implements EmbeddingAdapterInterface {
 	}
 
 	getModelMetadata(): EmbeddingModelMetadata {
-		const dimensions = this.#dimensions ?? getDefaultDimensions(this.#model)
+		const dimensions = this.#dimensions ?? (DEFAULT_OPENAI_EMBEDDING_MODELS_DIMENSIONS[this.#model] ?? DEFAULT_OPENAI_EMBEDDING_DIMENSIONS)
 
 		return {
 			provider: 'openai',
@@ -164,23 +125,4 @@ class OpenAIEmbedding implements EmbeddingAdapterInterface {
 			dimensions,
 		}
 	}
-}
-
-/**
- * Create an OpenAI embedding adapter.
- *
- * @example
- * ```ts
- * const embedding = createOpenAIEmbeddingAdapter({
- *   apiKey: 'sk-...',
- *   model: 'text-embedding-3-small',
- * })
- *
- * const vectors = await embedding.embed(['Hello, world!'])
- * ```
- */
-export function createOpenAIEmbeddingAdapter(
-	options: OpenAIEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	return new OpenAIEmbedding(options)
 }

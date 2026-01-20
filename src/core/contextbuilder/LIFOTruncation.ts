@@ -17,7 +17,7 @@ import type { TruncationAdapterOptions } from '../../types.js'
  *
  * Sorts frames so newest are at end (removed first during truncation).
  */
-class LIFOTruncationAdapter implements TruncationAdapterInterface {
+export class LIFOTruncationAdapter implements TruncationAdapterInterface {
 	constructor(_options?: TruncationAdapterOptions) {
 		// Options reserved for future use
 	}
@@ -35,24 +35,4 @@ class LIFOTruncationAdapter implements TruncationAdapterInterface {
 		}
 		return false
 	}
-}
-
-/**
- * Creates a LIFO Truncation adapter
- *
- * @param options - Optional truncation configuration
- * @returns TruncationAdapterInterface implementation
- *
- * @example
- * ```ts
- * const truncator = createLIFOTruncationAdapter()
- *
- * // Sort frames (newest at end = removed first)
- * const sorted = truncator.sort(frames)
- * ```
- */
-export function createLIFOTruncationAdapter(
-	options?: TruncationAdapterOptions,
-): TruncationAdapterInterface {
-	return new LIFOTruncationAdapter(options)
 }

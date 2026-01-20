@@ -11,32 +11,25 @@ import type {
 } from '@mikesaintsg/core'
 
 import type { PriorityAdapterOptions } from '../../types.js'
-
-const DEFAULT_WEIGHTS: Record<FramePriority, number> = {
-	critical: 1.0,
-	high: 0.75,
-	normal: 0.5,
-	low: 0.25,
-	optional: 0.1,
-}
+import { DEFAULT_PRIORITY_WEIGHTS } from '../../constants.js'
 
 /**
  * Priority adapter implementation
  *
  * Scores and compares context frames based on their priority level.
  */
-class PriorityAdapter implements PriorityAdapterInterface {
+export class PriorityAdapter implements PriorityAdapterInterface {
 	#weights: Record<FramePriority, number>
 
 	constructor(options?: PriorityAdapterOptions) {
 		this.#weights = {
-			...DEFAULT_WEIGHTS,
+			...DEFAULT_PRIORITY_WEIGHTS,
 			...options?.weights,
 		}
 	}
 
 	getWeight(priority: FramePriority): number {
-		return this.#weights[priority] ?? DEFAULT_WEIGHTS.normal
+		return this.#weights[priority] ?? DEFAULT_PRIORITY_WEIGHTS.normal
 	}
 
 	compare(a: ContextFrame, b: ContextFrame): number {
@@ -57,32 +50,4 @@ class PriorityAdapter implements PriorityAdapterInterface {
 		}
 		return 'normal'
 	}
-}
-
-/**
- * Creates a Priority adapter
- *
- * @param options - Optional priority configuration
- * @returns PriorityAdapterInterface implementation
- *
- * @example
- * ```ts
- * const priority = createPriorityAdapter({
- *   weights: {
- *     critical: 1.0,
- *     high: 0.8,
- *     normal: 0.5,
- *     low: 0.2,
- *     optional: 0.1,
- *   },
- * })
- *
- * const weight = priority.getWeight('high')
- * const comparison = priority.compare(frameA, frameB)
- * ```
- */
-export function createPriorityAdapter(
-	options?: PriorityAdapterOptions,
-): PriorityAdapterInterface {
-	return new PriorityAdapter(options)
 }

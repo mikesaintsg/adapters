@@ -23,7 +23,7 @@ import type {
 /**
  * node-llama-cpp Embedding Adapter implementation.
  */
-class NodeLlamaCppEmbedding implements EmbeddingAdapterInterface {
+export class NodeLlamaCppEmbedding implements EmbeddingAdapterInterface {
 	readonly #embeddingContext: NodeLlamaCppEmbeddingContext
 	readonly #modelName: string
 	#dimensions: number | undefined
@@ -71,30 +71,4 @@ class NodeLlamaCppEmbedding implements EmbeddingAdapterInterface {
 			dimensions: this.#dimensions ?? 0, // Will be populated after first embed
 		}
 	}
-}
-
-/**
- * Create a node-llama-cpp embedding adapter.
- *
- * @example
- * ```ts
- * import { getLlama } from 'node-llama-cpp'
- * import { createNodeLlamaCppEmbeddingAdapter } from '@mikesaintsg/adapters'
- *
- * const llama = await getLlama()
- * const model = await llama.loadModel({ modelPath: './nomic-embed-text.gguf' })
- * const embeddingContext = await model.createEmbeddingContext()
- *
- * const embedding = createNodeLlamaCppEmbeddingAdapter({
- *   embeddingContext,
- *   modelName: 'nomic-embed-text',
- * })
- *
- * const vectors = await embedding.embed(['Hello, world!'])
- * ```
- */
-export function createNodeLlamaCppEmbeddingAdapter(
-	options: NodeLlamaCppEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	return new NodeLlamaCppEmbedding(options)
 }

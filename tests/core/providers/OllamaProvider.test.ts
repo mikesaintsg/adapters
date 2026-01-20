@@ -1,9 +1,5 @@
-/**
- * Ollama Provider Tests
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createOllamaProviderAdapter } from '../../../src/core/providers/OllamaProvider.js'
+import { createOllamaProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
 
 // Helper to create mock NDJSON response for Ollama
