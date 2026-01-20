@@ -5,19 +5,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
-import type { HuggingFaceTextGenerationPipeline, HuggingFaceTextGenerationOutput } from '@mikesaintsg/adapters'
-
-// Create mock pipeline for testing
-function createMockPipeline(
-	outputs: readonly HuggingFaceTextGenerationOutput[],
-): HuggingFaceTextGenerationPipeline {
-	return vi.fn().mockResolvedValue(outputs) as unknown as HuggingFaceTextGenerationPipeline
-}
+import type { HuggingFaceTextGenerationPipeline } from '@mikesaintsg/adapters'
+import { createMockTextGenerationPipeline } from '../../setup.js'
 
 describe('HuggingFaceProvider', () => {
 	describe('createHuggingFaceProviderAdapter', () => {
 		it('creates a provider adapter', () => {
-			const mockPipeline = createMockPipeline([{ generated_text: 'Hello' }])
+			const mockPipeline = createMockTextGenerationPipeline([{ generated_text: 'Hello' }])
 
 			const provider = createHuggingFaceProviderAdapter({
 				pipeline: mockPipeline,
@@ -33,7 +27,7 @@ describe('HuggingFaceProvider', () => {
 		})
 
 		it('generates unique IDs', () => {
-			const mockPipeline = createMockPipeline([{ generated_text: 'Hello' }])
+			const mockPipeline = createMockTextGenerationPipeline([{ generated_text: 'Hello' }])
 
 			const provider1 = createHuggingFaceProviderAdapter({ pipeline: mockPipeline, modelName: 'gpt2' })
 			const provider2 = createHuggingFaceProviderAdapter({ pipeline: mockPipeline, modelName: 'gpt2' })
@@ -44,7 +38,7 @@ describe('HuggingFaceProvider', () => {
 
 	describe('getCapabilities', () => {
 		it('returns capabilities', () => {
-			const mockPipeline = createMockPipeline([{ generated_text: 'Hello' }])
+			const mockPipeline = createMockTextGenerationPipeline([{ generated_text: 'Hello' }])
 
 			const provider = createHuggingFaceProviderAdapter({
 				pipeline: mockPipeline,
@@ -63,7 +57,7 @@ describe('HuggingFaceProvider', () => {
 
 	describe('supportsTools', () => {
 		it('returns false', () => {
-			const mockPipeline = createMockPipeline([{ generated_text: 'Hello' }])
+			const mockPipeline = createMockTextGenerationPipeline([{ generated_text: 'Hello' }])
 
 			const provider = createHuggingFaceProviderAdapter({
 				pipeline: mockPipeline,
@@ -76,7 +70,7 @@ describe('HuggingFaceProvider', () => {
 
 	describe('generate', () => {
 		it('generates text using pipeline', async() => {
-			const mockPipeline = createMockPipeline([{ generated_text: 'Hello world!' }])
+			const mockPipeline = createMockTextGenerationPipeline([{ generated_text: 'Hello world!' }])
 
 			const provider = createHuggingFaceProviderAdapter({
 				pipeline: mockPipeline,
@@ -105,7 +99,7 @@ describe('HuggingFaceProvider', () => {
 		})
 
 		it('handles abort', async() => {
-			const mockPipeline = createMockPipeline([{ generated_text: 'Hello' }])
+			const mockPipeline = createMockTextGenerationPipeline([{ generated_text: 'Hello' }])
 
 			const provider = createHuggingFaceProviderAdapter({
 				pipeline: mockPipeline,
@@ -131,7 +125,7 @@ describe('HuggingFaceProvider', () => {
 		})
 
 		it('returns empty tool calls', async() => {
-			const mockPipeline = createMockPipeline([{ generated_text: 'Hello' }])
+			const mockPipeline = createMockTextGenerationPipeline([{ generated_text: 'Hello' }])
 
 			const provider = createHuggingFaceProviderAdapter({
 				pipeline: mockPipeline,
@@ -154,7 +148,7 @@ describe('HuggingFaceProvider', () => {
 		})
 
 		it('handles multiple outputs', async() => {
-			const mockPipeline = createMockPipeline([
+			const mockPipeline = createMockTextGenerationPipeline([
 				{ generated_text: 'First ' },
 				{ generated_text: 'Second' },
 			])

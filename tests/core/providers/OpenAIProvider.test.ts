@@ -5,36 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createOpenAIProviderAdapter, createStreamerAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
-
-// Helper to create mock SSE response
-function createSSEResponse(chunks: string[]): Response {
-	const encoder = new TextEncoder()
-	let chunkIndex = 0
-
-	const stream = new ReadableStream({
-		pull(controller) {
-			if (chunkIndex < chunks.length) {
-				controller.enqueue(encoder.encode(chunks[chunkIndex]))
-				chunkIndex++
-			} else {
-				controller.close()
-			}
-		},
-	})
-
-	return new Response(stream, {
-		status: 200,
-		headers: { 'Content-Type': 'text/event-stream' },
-	})
-}
-
-// Helper to create mock error response
-function createErrorResponse(status: number, errorBody: unknown): Response {
-	return new Response(JSON.stringify(errorBody), {
-		status,
-		headers: { 'Content-Type': 'application/json' },
-	})
-}
+import { createSSEResponse, createErrorResponse } from '../../setup.js'
 
 describe('OpenAIProvider', () => {
 	beforeEach(() => {

@@ -7,29 +7,15 @@
 import { describe, it, expect } from 'vitest'
 import { createLIFOTruncationAdapter } from '@mikesaintsg/adapters'
 import type { ContextFrame } from '@mikesaintsg/core'
-
-function createFrame(id: string, content: string, priority?: string): ContextFrame {
-	return {
-		id,
-		type: 'retrieval',
-		source: 'test',
-		content,
-		contentHash: `hash-${content}`,
-		priority: (priority ?? 'normal') as ContextFrame['priority'],
-		tokenCount: content.length / 4,
-		tokenEstimate: content.length / 4,
-		createdAt: Date.now(),
-		metadata: { priority },
-	} as unknown as ContextFrame
-}
+import { createContextFrame } from '../../setup.js'
 
 describe('LIFOTruncationAdapter', () => {
 	describe('sort', () => {
 		it('preserves order (newest at end for removal)', () => {
 			const truncator = createLIFOTruncationAdapter()
-			const first = createFrame('1', 'first')
-			const second = createFrame('2', 'second')
-			const third = createFrame('3', 'third')
+			const first = createContextFrame('1', 'first')
+			const second = createContextFrame('2', 'second')
+			const third = createContextFrame('3', 'third')
 
 			const sorted = truncator.sort([first, second, third])
 
@@ -48,7 +34,7 @@ describe('LIFOTruncationAdapter', () => {
 
 		it('handles single frame', () => {
 			const truncator = createLIFOTruncationAdapter()
-			const frame = createFrame('1', 'only')
+			const frame = createContextFrame('1', 'only')
 
 			const sorted = truncator.sort([frame])
 
@@ -59,8 +45,8 @@ describe('LIFOTruncationAdapter', () => {
 		it('does not mutate original array', () => {
 			const truncator = createLIFOTruncationAdapter()
 			const frames = [
-				createFrame('1', 'first'),
-				createFrame('2', 'second'),
+				createContextFrame('1', 'first'),
+				createContextFrame('2', 'second'),
 			]
 			const originalFirst = frames[0]
 
@@ -72,7 +58,7 @@ describe('LIFOTruncationAdapter', () => {
 		it('handles many frames', () => {
 			const truncator = createLIFOTruncationAdapter()
 			const frames = Array.from({ length: 100 }, (_, i) =>
-				createFrame(`${i}`, `content-${i}`),
+				createContextFrame(`${i}`, `content-${i}`),
 			)
 
 			const sorted = truncator.sort(frames)
@@ -88,35 +74,35 @@ describe('LIFOTruncationAdapter', () => {
 	describe('shouldPreserve', () => {
 		it('preserves critical frames', () => {
 			const truncator = createLIFOTruncationAdapter()
-			const frame = createFrame('1', 'critical content', 'critical')
+			const frame = createContextFrame('1', 'critical content', 'critical')
 
 			expect(truncator.shouldPreserve(frame)).toBe(true)
 		})
 
 		it('does not preserve high priority frames', () => {
 			const truncator = createLIFOTruncationAdapter()
-			const frame = createFrame('1', 'high priority', 'high')
+			const frame = createContextFrame('1', 'high priority', 'high')
 
 			expect(truncator.shouldPreserve(frame)).toBe(false)
 		})
 
 		it('does not preserve normal priority frames', () => {
 			const truncator = createLIFOTruncationAdapter()
-			const frame = createFrame('1', 'normal', 'normal')
+			const frame = createContextFrame('1', 'normal', 'normal')
 
 			expect(truncator.shouldPreserve(frame)).toBe(false)
 		})
 
 		it('does not preserve low priority frames', () => {
 			const truncator = createLIFOTruncationAdapter()
-			const frame = createFrame('1', 'low', 'low')
+			const frame = createContextFrame('1', 'low', 'low')
 
 			expect(truncator.shouldPreserve(frame)).toBe(false)
 		})
 
 		it('does not preserve optional priority frames', () => {
 			const truncator = createLIFOTruncationAdapter()
-			const frame = createFrame('1', 'optional', 'optional')
+			const frame = createContextFrame('1', 'optional', 'optional')
 
 			expect(truncator.shouldPreserve(frame)).toBe(false)
 		})

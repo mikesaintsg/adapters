@@ -4,47 +4,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createIndexedDBVectorPersistenceAdapter } from '@mikesaintsg/adapters'
-import type { MinimalDatabaseAccess, MinimalStoreAccess } from '@mikesaintsg/core'
-
-// Mock database implementation for testing
-function createMockDatabase(): MinimalDatabaseAccess {
-	const stores = new Map<string, Map<IDBValidKey, unknown>>()
-
-	function getStore<T>(name: string): MinimalStoreAccess<T> {
-		if (!stores.has(name)) {
-			stores.set(name, new Map())
-		}
-		const storeData = stores.get(name)!
-
-		return {
-			get(key: IDBValidKey): Promise<T | undefined> {
-				return Promise.resolve(storeData.get(key) as T | undefined)
-			},
-			set(value: T, key?: IDBValidKey): Promise<IDBValidKey> {
-				const k = key ?? (value as { id?: IDBValidKey }).id ?? Date.now()
-				storeData.set(k, value)
-				return Promise.resolve(k)
-			},
-			remove(key: IDBValidKey): Promise<void> {
-				storeData.delete(key)
-				return Promise.resolve()
-			},
-			all(): Promise<readonly T[]> {
-				return Promise.resolve(Array.from(storeData.values()) as T[])
-			},
-			clear(): Promise<void> {
-				storeData.clear()
-				return Promise.resolve()
-			},
-		}
-	}
-
-	return {
-		store<S>(name: string): MinimalStoreAccess<S> {
-			return getStore<S>(name)
-		},
-	}
-}
+import type { MinimalDatabaseAccess } from '@mikesaintsg/core'
+import { createMockDatabase } from '../../setup.js'
 
 describe('IndexedDBVectorPersistence', () => {
 	let database: MinimalDatabaseAccess

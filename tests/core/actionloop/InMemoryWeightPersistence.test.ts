@@ -7,17 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createInMemoryWeightPersistenceAdapter } from '@mikesaintsg/adapters'
 import type { ExportedPredictiveGraph } from '@mikesaintsg/core'
-
-function createWeights(modelId: string): ExportedPredictiveGraph {
-	return {
-		version: 1,
-		exportedAt: Date.now(),
-		modelId,
-		weights: [],
-		decayConfig: { algorithm: 'exponential', halfLifeMs: 604800000, minWeight: 0.01 },
-		transitionCount: 0,
-	} as unknown as ExportedPredictiveGraph
-}
+import { createMockWeights } from '../../setup.js'
 
 describe('InMemoryWeightPersistence', () => {
 	let adapter: ReturnType<typeof createInMemoryWeightPersistenceAdapter>
@@ -35,7 +25,7 @@ describe('InMemoryWeightPersistence', () => {
 
 	describe('save', () => {
 		it('saves weights', async() => {
-			const weights = createWeights('model-1')
+			const weights = createMockWeights('model-1')
 
 			await adapter.save(weights)
 
@@ -45,8 +35,8 @@ describe('InMemoryWeightPersistence', () => {
 		})
 
 		it('overwrites existing weights', async() => {
-			const weights1 = createWeights('model-1')
-			const weights2 = { ...createWeights('model-1'), transitionCount: 100 }
+			const weights1 = createMockWeights('model-1')
+			const weights2 = { ...createMockWeights('model-1'), transitionCount: 100 }
 
 			await adapter.save(weights1)
 			await adapter.save(weights2 as ExportedPredictiveGraph)
@@ -63,7 +53,7 @@ describe('InMemoryWeightPersistence', () => {
 		})
 
 		it('returns weights for existing model', async() => {
-			const weights = createWeights('model-1')
+			const weights = createMockWeights('model-1')
 			await adapter.save(weights)
 
 			const loaded = await adapter.load('model-1')
@@ -80,7 +70,7 @@ describe('InMemoryWeightPersistence', () => {
 		})
 
 		it('returns true for existing model', async() => {
-			await adapter.save(createWeights('model-1'))
+			await adapter.save(createMockWeights('model-1'))
 
 			const result = await adapter.has('model-1')
 			expect(result).toBe(true)
@@ -89,7 +79,7 @@ describe('InMemoryWeightPersistence', () => {
 
 	describe('delete', () => {
 		it('deletes existing weights', async() => {
-			await adapter.save(createWeights('model-1'))
+			await adapter.save(createMockWeights('model-1'))
 
 			await adapter.delete('model-1')
 
@@ -109,9 +99,9 @@ describe('InMemoryWeightPersistence', () => {
 		})
 
 		it('returns all model IDs', async() => {
-			await adapter.save(createWeights('model-1'))
-			await adapter.save(createWeights('model-2'))
-			await adapter.save(createWeights('model-3'))
+			await adapter.save(createMockWeights('model-1'))
+			await adapter.save(createMockWeights('model-2'))
+			await adapter.save(createMockWeights('model-3'))
 
 			const list = await adapter.list()
 
@@ -124,8 +114,8 @@ describe('InMemoryWeightPersistence', () => {
 
 	describe('clear', () => {
 		it('clears all weights', async() => {
-			await adapter.save(createWeights('model-1'))
-			await adapter.save(createWeights('model-2'))
+			await adapter.save(createMockWeights('model-1'))
+			await adapter.save(createMockWeights('model-2'))
 
 			await adapter.clear()
 

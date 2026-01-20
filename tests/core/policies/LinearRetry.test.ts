@@ -4,8 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 
-import { createLinearRetryAdapter } from '@mikesaintsg/adapters'
-import { createAdapterError } from '../../../src/helpers.js'
+import { createLinearRetryAdapter, createAdapterError } from '@mikesaintsg/adapters'
 
 describe('LinearRetry', () => {
 	describe('createLinearRetryAdapter', () => {

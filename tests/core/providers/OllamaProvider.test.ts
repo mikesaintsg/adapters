@@ -1,36 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createOllamaProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
-
-// Helper to create mock NDJSON response for Ollama
-function createNDJSONResponse(chunks: object[]): Response {
-	const encoder = new TextEncoder()
-	let chunkIndex = 0
-
-	const stream = new ReadableStream({
-		pull(controller) {
-			if (chunkIndex < chunks.length) {
-				controller.enqueue(encoder.encode(JSON.stringify(chunks[chunkIndex]) + '\n'))
-				chunkIndex++
-			} else {
-				controller.close()
-			}
-		},
-	})
-
-	return new Response(stream, {
-		status: 200,
-		headers: { 'Content-Type': 'application/x-ndjson' },
-	})
-}
-
-// Helper to create mock error response
-function createErrorResponse(status: number, errorBody: unknown): Response {
-	return new Response(JSON.stringify(errorBody), {
-		status,
-		headers: { 'Content-Type': 'application/json' },
-	})
-}
+import { createNDJSONResponse, createErrorResponse } from '../../setup.js'
 
 describe('OllamaProvider', () => {
 	beforeEach(() => {

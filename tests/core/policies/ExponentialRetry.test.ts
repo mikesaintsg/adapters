@@ -4,8 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 
-import { createExponentialRetryAdapter } from '@mikesaintsg/adapters'
-import { createAdapterError } from '../../../src/helpers.js'
+import { createExponentialRetryAdapter, createAdapterError } from '@mikesaintsg/adapters'
 
 describe('ExponentialRetry', () => {
 	describe('createExponentialRetryAdapter', () => {

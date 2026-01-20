@@ -4,22 +4,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { createPriorityAdapter } from '@mikesaintsg/adapters'
-import type { ContextFrame } from '@mikesaintsg/core'
-
-function createFrame(id: string, content: string, priority?: string): ContextFrame {
-	return {
-		id,
-		type: 'retrieval',
-		source: 'test',
-		content,
-		contentHash: `hash-${content}`,
-		priority: (priority ?? 'normal') as ContextFrame['priority'],
-		tokenCount: content.length / 4,
-		tokenEstimate: content.length / 4,
-		createdAt: Date.now(),
-		metadata: priority ? { priority } : {},
-	} as unknown as ContextFrame
-}
+import { createContextFrame } from '../../setup.js'
 
 describe('PriorityAdapter', () => {
 	describe('getWeight', () => {
@@ -71,8 +56,8 @@ describe('PriorityAdapter', () => {
 	describe('compare', () => {
 		it('returns negative for higher priority first', () => {
 			const priority = createPriorityAdapter()
-			const high = createFrame('1', 'high', 'high')
-			const low = createFrame('2', 'low', 'low')
+			const high = createContextFrame('1', 'high', 'high')
+			const low = createContextFrame('2', 'low', 'low')
 
 			// Negative means 'a' (high) comes before 'b' (low)
 			expect(priority.compare(high, low)).toBeLessThan(0)
@@ -80,8 +65,8 @@ describe('PriorityAdapter', () => {
 
 		it('returns positive for lower priority first', () => {
 			const priority = createPriorityAdapter()
-			const high = createFrame('1', 'high', 'high')
-			const low = createFrame('2', 'low', 'low')
+			const high = createContextFrame('1', 'high', 'high')
+			const low = createContextFrame('2', 'low', 'low')
 
 			// Positive means 'a' (low) comes after 'b' (high)
 			expect(priority.compare(low, high)).toBeGreaterThan(0)
@@ -89,16 +74,16 @@ describe('PriorityAdapter', () => {
 
 		it('returns zero for equal priority', () => {
 			const priority = createPriorityAdapter()
-			const first = createFrame('1', 'first', 'normal')
-			const second = createFrame('2', 'second', 'normal')
+			const first = createContextFrame('1', 'first', 'normal')
+			const second = createContextFrame('2', 'second', 'normal')
 
 			expect(priority.compare(first, second)).toBe(0)
 		})
 
 		it('treats missing priority as normal', () => {
 			const priority = createPriorityAdapter()
-			const normal = createFrame('1', 'normal', 'normal')
-			const missing = createFrame('2', 'missing')
+			const normal = createContextFrame('1', 'normal', 'normal')
+			const missing = createContextFrame('2', 'missing')
 
 			expect(priority.compare(normal, missing)).toBe(0)
 		})

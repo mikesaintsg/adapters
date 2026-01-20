@@ -2,50 +2,15 @@
  * NodeLlamaCpp Provider Tests
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { createNodeLlamaCppProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
-import type { NodeLlamaCppContext, NodeLlamaCppContextSequence, NodeLlamaCppModel } from '@mikesaintsg/adapters'
-
-// Create mock context for testing
-function createMockContext(tokens: number[]): NodeLlamaCppContext {
-	const mockSequence: NodeLlamaCppContextSequence = {
-		// eslint-disable-next-line @typescript-eslint/require-await
-		async *evaluate(): AsyncGenerator<number, void, unknown> {
-			for (const token of tokens) {
-				yield token
-			}
-		},
-	}
-
-	const mockModel: NodeLlamaCppModel = {
-		tokenize: vi.fn().mockReturnValue([1, 2, 3]),
-		detokenize: vi.fn().mockImplementation((ids: readonly number[]) => {
-			// Return text based on token ID
-			return ids.map((id) => {
-				if (id === 1) return 'Hello'
-				if (id === 2) return ' '
-				if (id === 3) return 'world'
-				if (id === 999) return ''
-				return String(id)
-			}).join('')
-		}),
-		tokens: {
-			bos: 0,
-			eos: 999,
-		},
-	}
-
-	return {
-		getSequence: vi.fn().mockReturnValue(mockSequence),
-		model: mockModel,
-	}
-}
+import { createMockNodeLlamaCppContext } from '../../setup.js'
 
 describe('NodeLlamaCppProvider', () => {
 	describe('createNodeLlamaCppProviderAdapter', () => {
 		it('creates a provider adapter', () => {
-			const mockContext = createMockContext([1, 2, 3])
+			const mockContext = createMockNodeLlamaCppContext([1, 2, 3])
 
 			const provider = createNodeLlamaCppProviderAdapter({
 				context: mockContext,
@@ -60,8 +25,8 @@ describe('NodeLlamaCppProvider', () => {
 		})
 
 		it('generates unique IDs', () => {
-			const mockContext1 = createMockContext([])
-			const mockContext2 = createMockContext([])
+			const mockContext1 = createMockNodeLlamaCppContext([])
+			const mockContext2 = createMockNodeLlamaCppContext([])
 
 			const provider1 = createNodeLlamaCppProviderAdapter({ context: mockContext1 })
 			const provider2 = createNodeLlamaCppProviderAdapter({ context: mockContext2 })
@@ -72,7 +37,7 @@ describe('NodeLlamaCppProvider', () => {
 
 	describe('getCapabilities', () => {
 		it('returns capabilities', () => {
-			const mockContext = createMockContext([])
+			const mockContext = createMockNodeLlamaCppContext([])
 
 			const provider = createNodeLlamaCppProviderAdapter({
 				context: mockContext,
@@ -91,7 +56,7 @@ describe('NodeLlamaCppProvider', () => {
 
 	describe('supportsTools', () => {
 		it('returns false', () => {
-			const mockContext = createMockContext([])
+			const mockContext = createMockNodeLlamaCppContext([])
 
 			const provider = createNodeLlamaCppProviderAdapter({
 				context: mockContext,
@@ -104,7 +69,7 @@ describe('NodeLlamaCppProvider', () => {
 	describe('generate', () => {
 		it('streams tokens from context', async() => {
 			// Mock sequence that returns tokens
-			const mockContext = createMockContext([1, 2, 3, 999])
+			const mockContext = createMockNodeLlamaCppContext([1, 2, 3, 999])
 
 			const provider = createNodeLlamaCppProviderAdapter({
 				context: mockContext,
@@ -132,7 +97,7 @@ describe('NodeLlamaCppProvider', () => {
 		})
 
 		it('handles abort', async() => {
-			const mockContext = createMockContext([1, 2, 3])
+			const mockContext = createMockNodeLlamaCppContext([1, 2, 3])
 
 			const provider = createNodeLlamaCppProviderAdapter({
 				context: mockContext,
@@ -157,7 +122,7 @@ describe('NodeLlamaCppProvider', () => {
 		})
 
 		it('returns empty tool calls', async() => {
-			const mockContext = createMockContext([1, 999])
+			const mockContext = createMockNodeLlamaCppContext([1, 999])
 
 			const provider = createNodeLlamaCppProviderAdapter({
 				context: mockContext,
