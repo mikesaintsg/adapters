@@ -37,9 +37,11 @@ import type {
  * Creates a mock HuggingFace tensor for testing embedding adapters.
  */
 export function createMockTensor(data: number[][]): HuggingFaceTensor {
+	const firstRow = data[0]
+	const dims = firstRow ? [data.length, firstRow.length] : [0, 0]
 	return {
 		data: new Float32Array(data.flat()),
-		dims: [data.length, data[0]!.length],
+		dims,
 		type: 'float32',
 		size: data.flat().length,
 		tolist: () => data,
@@ -179,6 +181,9 @@ export function createMockStore<T>(): MinimalStoreAccess<T> & { data: Map<string
 	function keyToString(key: IDBValidKey): string {
 		if (typeof key === 'string') return key
 		if (typeof key === 'number') return String(key)
+		if (key instanceof Date) return `date:${key.getTime()}`
+		if (key instanceof ArrayBuffer) return `buffer:${Array.from(new Uint8Array(key)).join(',')}`
+		if (Array.isArray(key)) return `array:${JSON.stringify(key)}`
 		return JSON.stringify(key)
 	}
 
@@ -212,20 +217,29 @@ export function createMockStore<T>(): MinimalStoreAccess<T> & { data: Map<string
 export function createMockDatabase(): MinimalDatabaseAccess & { stores: Map<string, MinimalStoreAccess<unknown>> } {
 	const stores = new Map<string, MinimalStoreAccess<unknown>>()
 
+	function keyToString(key: IDBValidKey): string {
+		if (typeof key === 'string') return key
+		if (typeof key === 'number') return String(key)
+		if (key instanceof Date) return `date:${key.getTime()}`
+		if (key instanceof ArrayBuffer) return `buffer:${Array.from(new Uint8Array(key)).join(',')}`
+		if (Array.isArray(key)) return `array:${JSON.stringify(key)}`
+		return JSON.stringify(key)
+	}
+
 	function getStore<T>(name: string): MinimalStoreAccess<T> {
 		if (!stores.has(name)) {
-			const storeData = new Map<IDBValidKey, unknown>()
+			const storeData = new Map<string, unknown>()
 			stores.set(name, {
 				get(key: IDBValidKey): Promise<T | undefined> {
-					return Promise.resolve(storeData.get(key) as T | undefined)
+					return Promise.resolve(storeData.get(keyToString(key)) as T | undefined)
 				},
 				set(value: T, key?: IDBValidKey): Promise<IDBValidKey> {
 					const k = key ?? (value as { id?: IDBValidKey }).id ?? Date.now()
-					storeData.set(k, value)
+					storeData.set(keyToString(k), value)
 					return Promise.resolve(k)
 				},
 				remove(key: IDBValidKey): Promise<void> {
-					storeData.delete(key)
+					storeData.delete(keyToString(key))
 					return Promise.resolve()
 				},
 				all(): Promise<readonly T[]> {
