@@ -4,27 +4,12 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { createHuggingFaceEmbeddingAdapter } from '@mikesaintsg/adapters'
-import type { HuggingFaceFeatureExtractionPipeline, HuggingFaceTensor } from '@mikesaintsg/adapters'
+import { createMockTensor, createMockFeatureExtractionPipeline } from '../../setup.js'
 
 describe('HuggingFaceEmbedding', () => {
-	function createMockTensor(data: number[][]): HuggingFaceTensor {
-		return {
-			data: new Float32Array(data.flat()),
-			dims: [data.length, data[0]!.length],
-			type: 'float32',
-			size: data.flat().length,
-			tolist: () => data,
-			dispose: vi.fn(),
-		}
-	}
-
-	function createMockPipeline(): HuggingFaceFeatureExtractionPipeline {
-		return vi.fn() as unknown as HuggingFaceFeatureExtractionPipeline
-	}
-
 	describe('embed', () => {
 		it('returns empty array for empty input', async() => {
-			const mockPipeline = createMockPipeline()
+			const mockPipeline = createMockFeatureExtractionPipeline()
 			const adapter = createHuggingFaceEmbeddingAdapter({
 				pipeline: mockPipeline,
 				modelName: 'all-MiniLM-L6-v2',
@@ -37,7 +22,7 @@ describe('HuggingFaceEmbedding', () => {
 
 		it('embeds single text and returns Float32Array', async() => {
 			const mockEmbedding = [[0.1, 0.2, 0.3, 0.4, 0.5]]
-			const mockPipeline = createMockPipeline()
+			const mockPipeline = createMockFeatureExtractionPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(createMockTensor(mockEmbedding))
 
 			const adapter = createHuggingFaceEmbeddingAdapter({
@@ -59,7 +44,7 @@ describe('HuggingFaceEmbedding', () => {
 				[0.4, 0.5, 0.6],
 				[0.7, 0.8, 0.9],
 			]
-			const mockPipeline = createMockPipeline()
+			const mockPipeline = createMockFeatureExtractionPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(createMockTensor(mockEmbeddings))
 
 			const adapter = createHuggingFaceEmbeddingAdapter({
@@ -77,7 +62,7 @@ describe('HuggingFaceEmbedding', () => {
 		})
 
 		it('passes pooling and normalize options to pipeline', async() => {
-			const mockPipeline = createMockPipeline()
+			const mockPipeline = createMockFeatureExtractionPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(createMockTensor([[0.1, 0.2, 0.3]]))
 
 			const adapter = createHuggingFaceEmbeddingAdapter({
@@ -97,7 +82,7 @@ describe('HuggingFaceEmbedding', () => {
 		})
 
 		it('uses default pooling and normalize values', async() => {
-			const mockPipeline = createMockPipeline()
+			const mockPipeline = createMockFeatureExtractionPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(createMockTensor([[0.1, 0.2, 0.3]]))
 
 			const adapter = createHuggingFaceEmbeddingAdapter({
@@ -116,7 +101,7 @@ describe('HuggingFaceEmbedding', () => {
 
 		it('disposes tensor after use', async() => {
 			const mockTensor = createMockTensor([[0.1, 0.2, 0.3]])
-			const mockPipeline = createMockPipeline()
+			const mockPipeline = createMockFeatureExtractionPipeline()
 			vi.mocked(mockPipeline).mockResolvedValue(mockTensor)
 
 			const adapter = createHuggingFaceEmbeddingAdapter({
@@ -133,7 +118,7 @@ describe('HuggingFaceEmbedding', () => {
 
 	describe('getModelMetadata', () => {
 		it('returns correct metadata', () => {
-			const mockPipeline = createMockPipeline()
+			const mockPipeline = createMockFeatureExtractionPipeline()
 			const adapter = createHuggingFaceEmbeddingAdapter({
 				pipeline: mockPipeline,
 				modelName: 'all-MiniLM-L6-v2',

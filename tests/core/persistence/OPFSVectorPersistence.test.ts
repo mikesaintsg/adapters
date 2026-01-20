@@ -4,59 +4,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createOPFSVectorPersistenceAdapter } from '@mikesaintsg/adapters'
-import type { MinimalDirectoryAccess, MinimalFileAccess } from '@mikesaintsg/core'
-
-// Mock directory implementation for testing
-function createMockDirectory(): MinimalDirectoryAccess {
-	const files = new Map<string, string>()
-
-	function createFileAccess(name: string): MinimalFileAccess {
-		return {
-			getName: () => name,
-			getText: () => {
-				const content = files.get(name)
-				if (content === undefined) return Promise.reject(new Error('File not found'))
-				return Promise.resolve(content)
-			},
-			getArrayBuffer: () => {
-				const content = files.get(name)
-				if (content === undefined) return Promise.reject(new Error('File not found'))
-				return Promise.resolve(new TextEncoder().encode(content).buffer)
-			},
-			write: (data: string | ArrayBuffer) => {
-				if (typeof data === 'string') {
-					files.set(name, data)
-				} else {
-					files.set(name, new TextDecoder().decode(data))
-				}
-				return Promise.resolve()
-			},
-		}
-	}
-
-	return {
-		getFile(name: string): Promise<MinimalFileAccess | undefined> {
-			if (files.has(name)) {
-				return Promise.resolve(createFileAccess(name))
-			}
-			return Promise.resolve(undefined)
-		},
-		createFile(name: string): Promise<MinimalFileAccess> {
-			files.set(name, '')
-			return Promise.resolve(createFileAccess(name))
-		},
-		hasFile(name: string): Promise<boolean> {
-			return Promise.resolve(files.has(name))
-		},
-		removeFile(name: string): Promise<void> {
-			files.delete(name)
-			return Promise.resolve()
-		},
-		listFiles(): Promise<readonly MinimalFileAccess[]> {
-			return Promise.resolve(Array.from(files.keys()).map(createFileAccess))
-		},
-	}
-}
+import type { MinimalDirectoryAccess } from '@mikesaintsg/core'
+import { createMockDirectory } from '../../setup.js'
 
 describe('OPFSVectorPersistence', () => {
 	let directory: MinimalDirectoryAccess

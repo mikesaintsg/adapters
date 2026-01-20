@@ -4,14 +4,9 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { createNodeLlamaCppEmbeddingAdapter } from '@mikesaintsg/adapters'
-import type { NodeLlamaCppEmbeddingContext } from '@mikesaintsg/adapters'
+import { createMockEmbeddingContext } from '../../setup.js'
 
 describe('NodeLlamaCppEmbedding', () => {
-	function createMockEmbeddingContext(): NodeLlamaCppEmbeddingContext {
-		return {
-			getEmbeddingFor: vi.fn(),
-		}
-	}
 
 	describe('embed', () => {
 		it('returns empty array for empty input', async() => {

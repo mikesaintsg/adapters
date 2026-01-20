@@ -7,24 +7,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { createIndexedDBSessionPersistenceAdapter } from '@mikesaintsg/adapters'
-import type { SerializableSession, SerializedSessionMetadata, SerializedMessage } from '@mikesaintsg/core'
-
-// Create a mock session that implements SerializableSession
-function createMockSession(data: object): SerializableSession {
-	return {
-		getMessages(): readonly SerializedMessage[] {
-			return []
-		},
-		getMetadata(): SerializedSessionMetadata {
-			return data as SerializedSessionMetadata
-		},
-	}
-}
-
-// Helper to generate unique database name per test
-function uniqueDbName(): string {
-	return `test-sessions-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
+import { createMockSession, uniqueDbName } from '../../setup.js'
 
 describe('IndexedDBSessionPersistence', () => {
 	describe('save and load', () => {

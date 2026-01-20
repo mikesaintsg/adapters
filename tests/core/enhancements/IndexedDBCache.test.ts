@@ -6,47 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createIndexedDBCacheAdapter } from '@mikesaintsg/adapters'
-import type { MinimalDatabaseAccess, MinimalStoreAccess } from '@mikesaintsg/core'
-
-// Mock store implementation
-function createMockStore<T>(): MinimalStoreAccess<T> & { data: Map<string, T> } {
-	const data = new Map<string, T>()
-	return {
-		data,
-		get(key: string): Promise<T | undefined> {
-			return Promise.resolve(data.get(key))
-		},
-		set(value: T, key: string): Promise<string> {
-			data.set(key, value)
-			return Promise.resolve(key)
-		},
-		remove(key: string): Promise<void> {
-			data.delete(key)
-			return Promise.resolve()
-		},
-		clear(): Promise<void> {
-			data.clear()
-			return Promise.resolve()
-		},
-		all(): Promise<readonly T[]> {
-			return Promise.resolve(Array.from(data.values()))
-		},
-	}
-}
-
-// Mock database implementation
-function createMockDatabase(): MinimalDatabaseAccess & { stores: Map<string, MinimalStoreAccess<unknown>> } {
-	const stores = new Map<string, MinimalStoreAccess<unknown>>()
-	return {
-		stores,
-		store<T>(name: string): MinimalStoreAccess<T> {
-			if (!stores.has(name)) {
-				stores.set(name, createMockStore<T>())
-			}
-			return stores.get(name) as MinimalStoreAccess<T>
-		},
-	}
-}
+import { createMockDatabase } from '../../setup.js'
 
 describe('IndexedDBCache', () => {
 	let database: ReturnType<typeof createMockDatabase>

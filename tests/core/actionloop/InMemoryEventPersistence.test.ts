@@ -6,26 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createInMemoryEventPersistenceAdapter } from '@mikesaintsg/adapters'
-import type { TransitionEvent } from '@mikesaintsg/core'
-
-function createEvent(
-	id: string,
-	from: string,
-	to: string,
-	timestamp = Date.now(),
-	sessionId = 'session-1',
-): TransitionEvent {
-	return {
-		id,
-		timestamp,
-		sessionId,
-		actor: 'user',
-		from,
-		to,
-		path: '/test',
-		engagement: 'active',
-	} as TransitionEvent
-}
+import { createTransitionEvent } from '../../setup.js'
 
 describe('InMemoryEventPersistence', () => {
 	let adapter: ReturnType<typeof createInMemoryEventPersistenceAdapter>
@@ -43,7 +24,7 @@ describe('InMemoryEventPersistence', () => {
 
 	describe('persist', () => {
 		it('persists a single event', async() => {
-			const event = createEvent('e1', 'A', 'B')
+			const event = createTransitionEvent('e1', 'A', 'B')
 
 			await adapter.persist(event)
 
@@ -53,8 +34,8 @@ describe('InMemoryEventPersistence', () => {
 
 		it('persists multiple events', async() => {
 			const events = [
-				createEvent('e1', 'A', 'B'),
-				createEvent('e2', 'B', 'C'),
+				createTransitionEvent('e1', 'A', 'B'),
+				createTransitionEvent('e2', 'B', 'C'),
 			]
 
 			await adapter.persist(events)
@@ -67,10 +48,10 @@ describe('InMemoryEventPersistence', () => {
 			adapter = createInMemoryEventPersistenceAdapter({ maxEvents: 3 })
 			const now = Date.now()
 
-			await adapter.persist(createEvent('e1', 'A', 'B', now - 300))
-			await adapter.persist(createEvent('e2', 'B', 'C', now - 200))
-			await adapter.persist(createEvent('e3', 'C', 'D', now - 100))
-			await adapter.persist(createEvent('e4', 'D', 'E', now))
+			await adapter.persist(createTransitionEvent('e1', 'A', 'B', now - 300))
+			await adapter.persist(createTransitionEvent('e2', 'B', 'C', now - 200))
+			await adapter.persist(createTransitionEvent('e3', 'C', 'D', now - 100))
+			await adapter.persist(createTransitionEvent('e4', 'D', 'E', now))
 
 			const count = await adapter.getCount()
 			expect(count).toBe(3)
@@ -87,9 +68,9 @@ describe('InMemoryEventPersistence', () => {
 		beforeEach(async() => {
 			const now = Date.now()
 			await adapter.persist([
-				createEvent('e1', 'A', 'B', now - 300, 'session-1'),
-				createEvent('e2', 'B', 'C', now - 200, 'session-1'),
-				createEvent('e3', 'C', 'D', now - 100, 'session-2'),
+				createTransitionEvent('e1', 'A', 'B', now - 300, 'session-1'),
+				createTransitionEvent('e2', 'B', 'C', now - 200, 'session-1'),
+				createTransitionEvent('e3', 'C', 'D', now - 100, 'session-2'),
 			])
 		})
 
@@ -143,8 +124,8 @@ describe('InMemoryEventPersistence', () => {
 
 		it('returns count with filter', async() => {
 			await adapter.persist([
-				createEvent('e1', 'A', 'B', Date.now(), 'session-1'),
-				createEvent('e2', 'B', 'C', Date.now(), 'session-2'),
+				createTransitionEvent('e1', 'A', 'B', Date.now(), 'session-1'),
+				createTransitionEvent('e2', 'B', 'C', Date.now(), 'session-2'),
 			])
 
 			const count = await adapter.getCount({ sessionId: 'session-1' })
@@ -159,14 +140,14 @@ describe('InMemoryEventPersistence', () => {
 		})
 
 		it('returns true when events exist', async() => {
-			await adapter.persist(createEvent('e1', 'A', 'B'))
+			await adapter.persist(createTransitionEvent('e1', 'A', 'B'))
 
 			const result = await adapter.has()
 			expect(result).toBe(true)
 		})
 
 		it('returns false when filter matches nothing', async() => {
-			await adapter.persist(createEvent('e1', 'A', 'B', Date.now(), 'session-1'))
+			await adapter.persist(createTransitionEvent('e1', 'A', 'B', Date.now(), 'session-1'))
 
 			const result = await adapter.has({ sessionId: 'session-2' })
 			expect(result).toBe(false)
@@ -176,8 +157,8 @@ describe('InMemoryEventPersistence', () => {
 	describe('clear', () => {
 		it('clears all events without filter', async() => {
 			await adapter.persist([
-				createEvent('e1', 'A', 'B'),
-				createEvent('e2', 'B', 'C'),
+				createTransitionEvent('e1', 'A', 'B'),
+				createTransitionEvent('e2', 'B', 'C'),
 			])
 
 			await adapter.clear()
@@ -188,8 +169,8 @@ describe('InMemoryEventPersistence', () => {
 
 		it('clears only matching events with filter', async() => {
 			await adapter.persist([
-				createEvent('e1', 'A', 'B', Date.now(), 'session-1'),
-				createEvent('e2', 'B', 'C', Date.now(), 'session-2'),
+				createTransitionEvent('e1', 'A', 'B', Date.now(), 'session-1'),
+				createTransitionEvent('e2', 'B', 'C', Date.now(), 'session-2'),
 			])
 
 			await adapter.clear({ sessionId: 'session-1' })
@@ -202,8 +183,8 @@ describe('InMemoryEventPersistence', () => {
 	describe('export', () => {
 		it('exports all events', async() => {
 			await adapter.persist([
-				createEvent('e1', 'A', 'B'),
-				createEvent('e2', 'B', 'C'),
+				createTransitionEvent('e1', 'A', 'B'),
+				createTransitionEvent('e2', 'B', 'C'),
 			])
 
 			const events = await adapter.export()
@@ -215,8 +196,8 @@ describe('InMemoryEventPersistence', () => {
 	describe('import', () => {
 		it('imports events', async() => {
 			const events = [
-				createEvent('e1', 'A', 'B'),
-				createEvent('e2', 'B', 'C'),
+				createTransitionEvent('e1', 'A', 'B'),
+				createTransitionEvent('e2', 'B', 'C'),
 			]
 
 			await adapter.import(events)
