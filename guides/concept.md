@@ -2479,7 +2479,7 @@ export interface EngineInterface extends EngineSubscriptions {
 }
 
 /**
- * Provider adapter interface - LLM provider integration. 
+ * Provider adapter interface - LLM provider ollama. 
  */
 export interface ProviderAdapterInterface {
 	getId(): string

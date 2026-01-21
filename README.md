@@ -409,7 +409,7 @@ streamer.emit('Hello')
 streamer.emit(' world!')
 streamer.end()
 
-// HuggingFace TextStreamer integration
+// HuggingFace TextStreamer ollama
 const generator = await pipeline('text-generation', 'Xenova/gpt2')
 const textAdapter = createTextStreamerAdapter({
   streamerClass: TextStreamer,

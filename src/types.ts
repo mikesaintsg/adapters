@@ -153,6 +153,7 @@ export type HuggingFaceTextGenerationModel =
 	| 'Xenova/gpt2' | 'Xenova/distilgpt2' | 'Xenova/phi-1_5'
 	| 'Xenova/TinyLlama-1.1B-Chat-v1.0' | 'Xenova/Qwen1.5-0.5B-Chat'
 	| 'Xenova/LaMini-Flan-T5-783M'
+	| 'HuggingFaceTB/SmolLM2-135M-Instruct' | 'HuggingFaceTB/SmolLM2-360M-Instruct'
 	| (string & {})
 
 // ============================================================================

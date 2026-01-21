@@ -29,6 +29,7 @@ import {
 	clamp,
 	toError,
 	chunkArray,
+	normalizeJsonSchemaTypes,
 } from '@mikesaintsg/adapters'
 
 describe('helpers', () => {
@@ -658,6 +659,156 @@ describe('helpers', () => {
 			const objs = [{ a: 1 }, { b: 2 }, { c: 3 }]
 			const result = chunkArray(objs, 2)
 			expect(result).toEqual([[{ a: 1 }, { b: 2 }], [{ c: 3 }]])
+		})
+	})
+
+	describe('normalizeJsonSchemaTypes', () => {
+		it('converts bool to boolean', () => {
+			const schema = { type: 'bool' }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: 'boolean' })
+		})
+
+		it('converts int to integer', () => {
+			const schema = { type: 'int' }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: 'integer' })
+		})
+
+		it('converts float to number', () => {
+			const schema = { type: 'float' }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: 'number' })
+		})
+
+		it('converts str to string', () => {
+			const schema = { type: 'str' }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: 'string' })
+		})
+
+		it('converts dict to object', () => {
+			const schema = { type: 'dict' }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: 'object' })
+		})
+
+		it('converts list to array', () => {
+			const schema = { type: 'list' }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: 'array' })
+		})
+
+		it('leaves standard types unchanged', () => {
+			const schema = { type: 'boolean' }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: 'boolean' })
+		})
+
+		it('normalizes nested properties', () => {
+			const schema = {
+				type: 'object',
+				properties: {
+					enabled: { type: 'bool' },
+					count: { type: 'int' },
+					name: { type: 'string' },
+				},
+			}
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({
+				type: 'object',
+				properties: {
+					enabled: { type: 'boolean' },
+					count: { type: 'integer' },
+					name: { type: 'string' },
+				},
+			})
+		})
+
+		it('normalizes deeply nested schemas', () => {
+			const schema = {
+				type: 'object',
+				properties: {
+					items: {
+						type: 'list',
+						items: {
+							type: 'dict',
+							properties: {
+								active: { type: 'bool' },
+							},
+						},
+					},
+				},
+			}
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({
+				type: 'object',
+				properties: {
+					items: {
+						type: 'array',
+						items: {
+							type: 'object',
+							properties: {
+								active: { type: 'boolean' },
+							},
+						},
+					},
+				},
+			})
+		})
+
+		it('handles type arrays', () => {
+			const schema = { type: ['str', 'null'] }
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({ type: ['string', 'null'] })
+		})
+
+		it('handles arrays in schema', () => {
+			const schema = {
+				anyOf: [
+					{ type: 'bool' },
+					{ type: 'int' },
+				],
+			}
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({
+				anyOf: [
+					{ type: 'boolean' },
+					{ type: 'integer' },
+				],
+			})
+		})
+
+		it('returns null unchanged', () => {
+			expect(normalizeJsonSchemaTypes(null)).toBe(null)
+		})
+
+		it('returns primitives unchanged', () => {
+			expect(normalizeJsonSchemaTypes('string')).toBe('string')
+			expect(normalizeJsonSchemaTypes(42)).toBe(42)
+			expect(normalizeJsonSchemaTypes(true)).toBe(true)
+		})
+
+		it('preserves non-type properties', () => {
+			const schema = {
+				type: 'bool',
+				description: 'A flag',
+				default: false,
+			}
+			const result = normalizeJsonSchemaTypes(schema)
+			expect(result).toEqual({
+				type: 'boolean',
+				description: 'A flag',
+				default: false,
+			})
+		})
+
+		it('handles empty object', () => {
+			expect(normalizeJsonSchemaTypes({})).toEqual({})
+		})
+
+		it('handles empty array', () => {
+			expect(normalizeJsonSchemaTypes([])).toEqual([])
 		})
 	})
 })

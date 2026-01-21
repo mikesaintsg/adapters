@@ -21,7 +21,7 @@ import type {
 } from '../../types.js'
 
 import { createStreamerAdapter } from '../../factories.js'
-import { createAdapterError } from '../../helpers.js'
+import { createAdapterError, normalizeJsonSchemaTypes } from '../../helpers.js'
 import {
 	DEFAULT_OLLAMA_BASE_URL,
 	DEFAULT_TIMEOUT_MS,
@@ -153,7 +153,16 @@ export class OllamaProvider implements ProviderAdapterInterface {
 			model: this.#model,
 			messages: this.#formatMessages(messages),
 			stream: true,
-			keep_alive: this.#keepAlive,
+		}
+
+		// Handle keep_alive: Ollama expects a string (e.g., "5m") or number (seconds), not boolean
+		// true means keep loaded indefinitely, false means unload immediately
+		if (this.#keepAlive !== undefined) {
+			if (typeof this.#keepAlive === 'boolean') {
+				body.keep_alive = this.#keepAlive ? -1 : 0
+			} else {
+				body.keep_alive = this.#keepAlive
+			}
 		}
 
 		const modelOptions: Record<string, unknown> = {}
@@ -211,7 +220,7 @@ export class OllamaProvider implements ProviderAdapterInterface {
 			function: {
 				name: tool.name,
 				description: tool.description,
-				parameters: tool.parameters,
+				parameters: normalizeJsonSchemaTypes(tool.parameters),
 			},
 		}))
 	}

@@ -1,6 +1,6 @@
 {
 	"name": "@mikesaintsg/adapters",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"type": "module",
 	"description": "Type-safe adapters with full TypeScript support. Zero runtime dependencies.",
 	"keywords": [
@@ -47,6 +47,9 @@
 		"check": "npm run decache && tsc --noEmit",
 		"check:showcase": "npm run decache && tsc --noEmit -p configs/tsconfig.showcase.json",
 		"test": "npm run decache && vitest run --no-cache",
+		"test:unit": "npm run decache && vitest run --project unit  --no-cache",
+		"test:ollama": "npm run decache && vitest run --project ollama --no-cache",
+		"test:huggingface": "npm run decache && vitest run --project huggingface --no-cache",
 		"format": "eslint . --fix",
 		"show": "npm run build:showcase && npm run copy:showcase && npm run clean:showcase",
 		"clean:dist": "node -e \"try{require('fs').rmSync('dist',{recursive:true,force:true})}catch(e){}\"",
@@ -58,6 +61,7 @@
 	"devDependencies": {
 		"@huggingface/transformers": "^3.8.1",
 		"@mikesaintsg/core": "^0.0.5",
+		"@mikesaintsg/inference": "^0.0.6",
 		"@types/node": "^25.0.9",
 		"@vitest/browser-playwright": "^4.0.17",
 		"eslint": "^9.39.2",

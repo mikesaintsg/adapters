@@ -1,8 +1,6 @@
 name: copilot-setup-steps.yml
 
 # This workflow defines setup steps for GitHub Copilot to run before it performs tasks.
-# Automatically runs when the workflow is changed to allow for easy validation,
-# and allows manual testing through the repository's "Actions" tab.
 on:
     workflow_dispatch:
     push:
@@ -12,29 +10,86 @@ on:
         paths:
             - .github/workflows/copilot-setup-steps.yml
 
+env:
+    # Model configuration - qwen2.5:1.5b supports tool calling (~1GB)
+    OLLAMA_MODEL: qwen2.5:1.5b
+    OLLAMA_HOST: http://localhost:11434
+
 jobs:
-    # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
     copilot-setup-steps:
         runs-on: ubuntu-latest
 
-        # Minimal permissions needed for these steps.
-        # Copilot will use its own token for subsequent operations.
         permissions:
             contents: read
 
         steps:
-            # If you do not check out your code, Copilot will do this after the steps complete.
-            # We check out here to install dependencies and Playwright browsers from the repo.
             - name: Checkout code
-              uses: actions/checkout@v5
+              uses: actions/checkout@v4
+
+            # Cache Ollama models
+            - name: Cache Ollama models
+              uses:  actions/cache@v4
+              id: ollama-cache
+              with:
+                  path: ~/.ollama
+                  key: ollama-${{ env.OLLAMA_MODEL }}-${{ runner.os }}-v1
+                  restore-keys: |
+                      ollama-${{ env.OLLAMA_MODEL }}-${{ runner.os }}-
+
+            # Install Ollama
+            - name:  Install Ollama
+              shell: bash
+              run: |
+                  curl -fsSL https://ollama.com/install.sh | sh
+                  ollama --version
+
+            # Start Ollama service with CORS enabled for browser access
+            - name: Start Ollama service
+              shell: bash
+              run: |
+                  # Start Ollama with CORS headers for browser testing
+                  OLLAMA_ORIGINS="*" ollama serve &
+
+                  # Wait for service to be ready
+                  echo "Waiting for Ollama service..."
+                  for i in {1..60}; do
+                    if curl -s "${{ env.OLLAMA_HOST }}/api/tags" > /dev/null 2>&1; then
+                      echo "Ollama service is ready!"
+                      break
+                    fi
+                    if [ $i -eq 60 ]; then
+                      echo "ERROR: Ollama service failed to start"
+                      exit 1
+                    fi
+                    sleep 1
+                  done
+
+            # Pull model
+            - name: Pull Ollama model
+              shell: bash
+              run: |
+                  if ollama list 2>/dev/null | grep -q "${{ env.OLLAMA_MODEL }}"; then
+                    echo "Model already cached"
+                  else
+                    echo "Pulling model..."
+                    ollama pull ${{ env.OLLAMA_MODEL }}
+                  fi
+                  ollama list
+
+            # Verify model
+            - name: Verify Ollama model
+              shell: bash
+              run: |
+                  echo "Running smoke test..."
+                  ollama run ${{ env.OLLAMA_MODEL }} "Say OK" 2>&1 | head -5
+                  echo "Model verified"
 
             - name: Set up Node.js
-              uses: actions/setup-node@v6
+              uses: actions/setup-node@v4
               with:
-                  node-version: '24.11'
+                  node-version: '22'
                   cache: 'npm'
 
-            # Install dependencies using npm ci for consistency with ci.yml
             - name: Install dependencies
               shell: bash
               run: |
@@ -44,15 +99,20 @@ jobs:
                     npm install
                   fi
 
-            # Install Playwright browsers required for Vitest browser testing
-            # This ensures Copilot can run tests without binary download issues
+            # Install Playwright for browser testing
             - name: Install Playwright browsers
               shell: bash
               run: npx playwright install --with-deps chromium
-              env:
-                  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0'
 
-            # Verify Playwright installation
-            - name: Verify Playwright installation
+            - name:  Verify Playwright
               shell: bash
-              run: npx playwright --version
+              run:  npx playwright --version
+
+            # Export environment for tests
+            - name: Export test configuration
+              shell: bash
+              run: |
+                  echo "OLLAMA_HOST=${{ env.OLLAMA_HOST }}" >> $GITHUB_ENV
+                  echo "OLLAMA_MODEL=${{ env.OLLAMA_MODEL }}" >> $GITHUB_ENV
+                  echo "VITE_OLLAMA_HOST=${{ env.OLLAMA_HOST }}" >> $GITHUB_ENV
+                  echo "VITE_OLLAMA_MODEL=${{ env.OLLAMA_MODEL }}" >> $GITHUB_ENV

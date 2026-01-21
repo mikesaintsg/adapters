@@ -497,3 +497,83 @@ export function chunkArray<T>(array: readonly T[], size: number): T[][] {
 	}
 	return chunks
 }
+
+// ============================================================================
+// JSON Schema Helpers
+// ============================================================================
+
+/** Map of non-standard JSON Schema type names to standard ones */
+const JSON_SCHEMA_TYPE_MAP: Readonly<Record<string, string>> = {
+	bool: 'boolean',
+	int: 'integer',
+	float: 'number',
+	str: 'string',
+	dict: 'object',
+	list: 'array',
+}
+
+/**
+ * Normalize JSON Schema types to standard JSON Schema type names.
+ * Recursively processes objects and arrays to normalize all type fields.
+ *
+ * Common non-standard types that are normalized:
+ * - `bool` → `boolean`
+ * - `int` → `integer`
+ * - `float` → `number`
+ * - `str` → `string`
+ * - `dict` → `object`
+ * - `list` → `array`
+ *
+ * @param schema - The JSON Schema object (or any value) to normalize
+ * @returns A new object with normalized type fields
+ *
+ * @example
+ * ```ts
+ * normalizeJsonSchemaTypes({ type: 'bool' }) // { type: 'boolean' }
+ * normalizeJsonSchemaTypes({
+ *   type: 'object',
+ *   properties: {
+ *     enabled: { type: 'bool' },
+ *     count: { type: 'int' }
+ *   }
+ * })
+ * // {
+ * //   type: 'object',
+ * //   properties: {
+ * //     enabled: { type: 'boolean' },
+ * //     count: { type: 'integer' }
+ * //   }
+ * // }
+ * ```
+ */
+export function normalizeJsonSchemaTypes(schema: unknown): unknown {
+	if (schema === null || typeof schema !== 'object') {
+		return schema
+	}
+
+	if (Array.isArray(schema)) {
+		return schema.map((item) => normalizeJsonSchemaTypes(item))
+	}
+
+	const result: Record<string, unknown> = {}
+	const obj = schema as Record<string, unknown>
+
+	for (const key of Object.keys(obj)) {
+		const value = obj[key]
+
+		if (key === 'type' && typeof value === 'string') {
+			// Normalize the type field
+			result[key] = JSON_SCHEMA_TYPE_MAP[value] ?? value
+		} else if (Array.isArray(value) && key === 'type') {
+			// Handle type arrays like ["string", "null"]
+			result[key] = value.map((t: unknown): unknown =>
+				typeof t === 'string' ? (JSON_SCHEMA_TYPE_MAP[t] ?? t) : t,
+			)
+		} else {
+			// Recursively process nested objects/arrays
+			result[key] = normalizeJsonSchemaTypes(value)
+		}
+	}
+
+	return result
+}
