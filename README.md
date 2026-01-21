@@ -402,65 +402,29 @@ const priority = createPriorityAdapter({
 ### Streaming Adapters
 
 ```ts
-import {
-  createStreamerAdapter,
-  createTextStreamerAdapter,
-} from '@mikesaintsg/adapters'
-import { pipeline, TextStreamer } from '@huggingface/transformers'
+import { createStreamerAdapter } from '@mikesaintsg/adapters'
 
-// Basic streamers adapter
+// Basic streamer adapter for token emission
 const streamer = createStreamerAdapter()
-streamer.onToken((token) => process.stdout.write(token))
+const unsub = streamer.onToken((token) => process.stdout.write(token))
 streamer.emit('Hello')
 streamer.emit(' world!')
 streamer.end()
-
-// HuggingFace TextStreamer ollama
-const generator = await pipeline('text-generation', 'Xenova/gpt2')
-const textAdapter = createTextStreamerAdapter({
-  streamerClass: TextStreamer,
-  tokenizer: generator.tokenizer,
-})
-textAdapter.onToken((token) => console.log('Token:', token))
-// Pass textAdapter.getStreamer() to model.generate()
-```
-
-### Embedding with Caching
-
-```ts
-import {
-  createOpenAIEmbeddingAdapter,
-  createCachedEmbeddingAdapter,
-} from '@mikesaintsg/adapters'
-import type { CachedEmbedding } from '@mikesaintsg/adapters'
-
-const baseAdapter = createOpenAIEmbeddingAdapter({
-  apiKey: process.env.OPENAI_API_KEY!,
-})
-
-const cached = createCachedEmbeddingAdapter({
-  adapter: baseAdapter,
-  cache: new Map<string, CachedEmbedding>(),
-  ttlMs: 60 * 60 * 1000, // 1 hour
-})
-
-// Second call uses cache
-const e1 = await cached.embed(['Hello'])
-const e2 = await cached.embed(['Hello']) // Cached!
+unsub()
 ```
 
 ### Error Handling
 
 ```ts
-import { isAdapterError, AdapterError } from '@mikesaintsg/adapters'
+import { isAdapterError } from '@mikesaintsg/adapters'
 
 try {
   const result = await session.generate()
 } catch (error) {
   if (isAdapterError(error)) {
-    switch (error.code) {
+    switch (error.data.code) {
       case 'RATE_LIMIT_ERROR':
-        const retryAfter = error.retryAfter ?? 60000
+        const retryAfter = error.data.retryAfter ?? 60000
         await new Promise(r => setTimeout(r, retryAfter))
         break
       case 'AUTHENTICATION_ERROR':

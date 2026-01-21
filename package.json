@@ -60,7 +60,7 @@
 	},
 	"devDependencies": {
 		"@huggingface/transformers": "^3.8.1",
-		"@mikesaintsg/core": "^0.0.5",
+		"@mikesaintsg/core": "^0.0.6",
 		"@mikesaintsg/inference": "^0.0.6",
 		"@types/node": "^25.0.9",
 		"@vitest/browser-playwright": "^4.0.17",
