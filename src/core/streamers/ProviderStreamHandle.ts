@@ -250,6 +250,23 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 	}
 
 	/**
+	 * Set tool calls directly (for providers that parse tool calls at once).
+	 */
+	setToolCalls(toolCalls: readonly ToolCall[]): void {
+		this.#toolCalls.clear()
+		for (let i = 0; i < toolCalls.length; i++) {
+			const tc = toolCalls[i]
+			if (tc !== undefined) {
+				this.#toolCalls.set(i, {
+					id: tc.id,
+					name: tc.name,
+					arguments: typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments),
+				})
+			}
+		}
+	}
+
+	/**
 	 * Check if generation is completed.
 	 */
 	isCompleted(): boolean {

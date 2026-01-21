@@ -138,6 +138,8 @@ export interface HuggingFaceProviderAdapterOptions {
 	readonly modelName: string
 	readonly defaultOptions?: GenerationDefaults
 	readonly streamer?: StreamerAdapterInterface
+	/** Enable tool calling support (requires model with chat template) */
+	readonly enableTools?: boolean
 }
 
 /** Common Ollama chat models */
@@ -579,6 +581,59 @@ export interface HuggingFaceModelOutput {
 export interface HuggingFaceTokenizer {
 	(text: string): HuggingFaceEncodedInput
 	decode(tokenIds: readonly bigint[] | readonly number[], options?: { skip_special_tokens?: boolean }): string
+	/** Apply chat template to messages - required for tool calling with Qwen models */
+	apply_chat_template?(
+		conversation: readonly HuggingFaceChatMessage[],
+		options?: HuggingFaceApplyChatTemplateOptions,
+	): string | HuggingFaceTensor
+}
+
+/** Chat message for HuggingFace chat template */
+export interface HuggingFaceChatMessage {
+	readonly role: 'system' | 'user' | 'assistant' | 'tool'
+	readonly content: string
+	readonly name?: string
+	readonly tool_calls?: readonly HuggingFaceToolCall[]
+}
+
+/** Tool call in assistant message */
+export interface HuggingFaceToolCall {
+	readonly type: 'function'
+	readonly function: {
+		readonly name: string
+		readonly arguments: string | Record<string, unknown>
+	}
+}
+
+/** Tool schema for HuggingFace chat template */
+export interface HuggingFaceTool {
+	readonly type: 'function'
+	readonly function: {
+		readonly name: string
+		readonly description: string
+		readonly parameters: HuggingFaceToolParameters
+	}
+}
+
+/** JSON Schema-like parameters for tools */
+export interface HuggingFaceToolParameters {
+	readonly type: 'object'
+	readonly properties: Record<string, HuggingFaceToolProperty>
+	readonly required?: readonly string[] | undefined
+}
+
+/** Property definition for tool parameters */
+export interface HuggingFaceToolProperty {
+	readonly type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object'
+	readonly description?: string
+	readonly enum?: readonly string[]
+}
+
+/** Options for apply_chat_template */
+export interface HuggingFaceApplyChatTemplateOptions {
+	readonly tools?: readonly HuggingFaceTool[]
+	readonly add_generation_prompt?: boolean
+	readonly tokenize?: boolean
 }
 
 /** Encoded input from tokenizer */

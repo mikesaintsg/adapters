@@ -28,8 +28,11 @@ env.useBrowserCache = true
  * HuggingFace configuration for integration tests.
  */
 export const HUGGINGFACE_CONFIG = {
-	// Smallest text generation model available (~82MB)
+	// Smallest text generation model available (~82MB) - fast but no tool support
 	textModel: 'Xenova/distilgpt2',
+	// Qwen 1.5 0.5B - smaller model that may have chat template support
+	// Note: Tool calling support may be limited compared to Qwen2.5
+	toolModel: 'Xenova/Qwen1.5-0.5B-Chat',
 	// Smallest embedding model (~90MB, 384 dims)
 	embeddingModel: 'Xenova/all-MiniLM-L6-v2',
 	embeddingDimensions: 384,
@@ -39,8 +42,8 @@ export const HUGGINGFACE_CONFIG = {
  * Test timeouts - generous for model loading
  */
 export const HF_TEST_TIMEOUTS = {
-	modelLoad: 300_000, // 5 minutes for model download
-	generation: 60_000, // 1 minute for text generation
+	modelLoad: 600_000, // 10 minutes for large model download
+	generation: 120_000, // 2 minutes for text generation
 	embedding: 30_000, // 30 seconds for embeddings
 } as const
 
@@ -49,7 +52,7 @@ export const HF_TEST_TIMEOUTS = {
 // ============================================================================
 
 /**
- * Load the text generation pipeline.
+ * Load the text generation pipeline (distilgpt2 - fast, no tools).
  */
 export async function loadTextGenerationPipeline(): Promise<HuggingFaceTextGenerationPipeline> {
 	console.log(`[HuggingFace] Loading: ${HUGGINGFACE_CONFIG.textModel}`)
@@ -60,6 +63,22 @@ export async function loadTextGenerationPipeline(): Promise<HuggingFaceTextGener
 	)
 	console.log('[HuggingFace] Text generation pipeline loaded')
 	return textPipeline as unknown as HuggingFaceTextGenerationPipeline
+}
+
+/**
+ * Load the Qwen2.5 tool model pipeline (supports tool calling).
+ * This is a larger model (~500MB quantized) that supports Hermes-style tools.
+ */
+export async function loadToolModelPipeline(): Promise<HuggingFaceTextGenerationPipeline> {
+	console.log(`[HuggingFace] Loading tool model: ${HUGGINGFACE_CONFIG.toolModel}`)
+	console.log('[HuggingFace] This is a larger model and may take several minutes...')
+	const toolPipeline = await pipeline(
+		'text-generation',
+		HUGGINGFACE_CONFIG.toolModel,
+		{ dtype: 'q4' }, // Use quantized version for smaller size
+	)
+	console.log('[HuggingFace] Tool model pipeline loaded')
+	return toolPipeline as unknown as HuggingFaceTextGenerationPipeline
 }
 
 /**

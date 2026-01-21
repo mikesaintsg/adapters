@@ -3,6 +3,7 @@
  *
  * Implements ProviderAdapterInterface for HuggingFace Transformers models.
  * Uses TextStreamer internally for token-by-token streamers.
+ * Supports tool calling with Qwen and other Hermes-style models.
  *
  * IMPORTANT: @huggingface/transformers is NOT a runtime dependency. The consumer
  * must install @huggingface/transformers and pass initialized pipeline instances.
@@ -15,12 +16,16 @@ import type {
 	Message,
 	ProviderCapabilities,
 	StreamerAdapterInterface,
+	ToolCall,
+	ToolSchema,
 } from '@mikesaintsg/core'
 
 import type {
 	HuggingFaceProviderAdapterOptions,
 	HuggingFaceTextGenerationPipeline,
 	HuggingFaceTextGenerationOutput,
+	HuggingFaceChatMessage,
+	HuggingFaceTool,
 } from '../../types.js'
 
 import { createAdapterError } from '../../helpers.js'
@@ -30,18 +35,21 @@ import { ProviderStreamHandle } from '../streamers/ProviderStreamHandle.js'
 /**
  * HuggingFace provider implementation.
  * Streams responses using TextStreamer internally.
+ * Supports tool calling with Qwen and Hermes-style models.
  */
 export class HuggingFaceProvider implements ProviderAdapterInterface {
 	readonly #id: string
 	readonly #pipeline: HuggingFaceTextGenerationPipeline
 	readonly #modelName: string
 	readonly #streamer: StreamerAdapterInterface
+	readonly #enableTools: boolean
 
 	constructor(options: HuggingFaceProviderAdapterOptions) {
 		this.#id = crypto.randomUUID()
 		this.#pipeline = options.pipeline
 		this.#modelName = options.modelName
 		this.#streamer = options.streamer ?? createStreamerAdapter()
+		this.#enableTools = options.enableTools ?? false
 	}
 
 	getId(): string {
@@ -69,7 +77,7 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 	}
 
 	supportsTools(): boolean {
-		return false // HuggingFace Transformers doesn't have built-in tool support
+		return this.#enableTools && this.#pipeline.tokenizer?.apply_chat_template !== undefined
 	}
 
 	supportsStreaming(): boolean {
@@ -78,7 +86,7 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 
 	getCapabilities(): ProviderCapabilities {
 		return {
-			supportsTools: false,
+			supportsTools: this.supportsTools(),
 			supportsStreaming: true,
 			supportsVision: false,
 			supportsFunctions: false,
@@ -94,7 +102,7 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 	): Promise<void> {
 		try {
 			// Build prompt from messages
-			const prompt = this.#buildPrompt(messages)
+			const prompt = this.#buildPrompt(messages, options.tools)
 
 			// Check if we have model and tokenizer for streamers
 			if (this.#pipeline.model !== undefined && this.#pipeline.tokenizer !== undefined) {
@@ -130,7 +138,7 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 		const encodedInput = tokenizer(prompt)
 
 		// Create internal streamer that emits to our streamer
-		const internalStreamer = this.#createStreamer(tokenizer, handle, signal)
+		const internalStreamer = this.#createStreamer(tokenizer, handle, signal, options.tools)
 
 		// Generate with streamers - only include defined values
 		await model.generate({
@@ -151,7 +159,10 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 		tokenizer: NonNullable<HuggingFaceTextGenerationPipeline['tokenizer']>,
 		handle: ProviderStreamHandle,
 		signal: AbortSignal,
+		tools?: readonly ToolSchema[],
 	): { put: (value: readonly (readonly bigint[])[]) => void; end: () => void } {
+		let accumulatedText = ''
+
 		return {
 			put: (value: readonly (readonly bigint[])[]) => {
 				if (signal.aborted) return
@@ -160,12 +171,19 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 				for (const tokenIds of value) {
 					const text = tokenizer.decode(tokenIds, { skip_special_tokens: true })
 					if (text !== '' && text !== undefined) {
+						accumulatedText += text
 						handle.emitToken(text)
 					}
 				}
 			},
 			end: () => {
-				// Streaming complete
+				// If tools are enabled, try to parse tool calls from accumulated text
+				if (tools !== undefined && tools.length > 0) {
+					const toolCalls = this.#parseToolCalls(accumulatedText)
+					if (toolCalls.length > 0) {
+						handle.setToolCalls(toolCalls)
+					}
+				}
 			},
 		}
 	}
@@ -186,15 +204,46 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 
 		// Handle result (can be array or single output)
 		const outputs: readonly HuggingFaceTextGenerationOutput[] = Array.isArray(result) ? result : [result]
+		let fullText = ''
 		for (const output of outputs) {
 			handle.emitToken(output.generated_text)
+			fullText += output.generated_text
+		}
+
+		// Parse tool calls if tools provided
+		if (options.tools !== undefined && options.tools.length > 0) {
+			const toolCalls = this.#parseToolCalls(fullText)
+			if (toolCalls.length > 0) {
+				handle.setToolCalls(toolCalls)
+			}
 		}
 
 		handle.complete()
 	}
 
-	#buildPrompt(messages: readonly Message[]): string {
-		// Simple chat format - could be customized per model
+	#buildPrompt(messages: readonly Message[], tools?: readonly ToolSchema[]): string {
+		const tokenizer = this.#pipeline.tokenizer
+
+		// If we have apply_chat_template and tools, use it
+		if (tokenizer?.apply_chat_template !== undefined && this.#enableTools) {
+			const chatMessages = this.#convertToChatMessages(messages)
+			const hfTools = tools !== undefined ? this.#convertToHFTools(tools) : undefined
+
+			try {
+				const result = tokenizer.apply_chat_template(chatMessages, {
+					...(hfTools !== undefined && { tools: hfTools }),
+					add_generation_prompt: true,
+					tokenize: false,
+				})
+				if (typeof result === 'string') {
+					return result
+				}
+			} catch {
+				// Fall through to simple format if apply_chat_template fails
+			}
+		}
+
+		// Fallback: Simple chat format
 		return messages
 			.map((m) => {
 				const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
@@ -205,12 +254,95 @@ export class HuggingFaceProvider implements ProviderAdapterInterface {
 						return `User: ${content}`
 					case 'assistant':
 						return `Assistant: ${content}`
+					case 'tool':
+						return `Tool: ${content}`
 					default:
 						return content
 				}
 			})
 			.join('\n')
 			+ '\nAssistant:'
+	}
+
+	#convertToChatMessages(messages: readonly Message[]): readonly HuggingFaceChatMessage[] {
+		return messages.map((m): HuggingFaceChatMessage => {
+			const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+			const role = m.role === 'tool' ? 'tool' : m.role
+
+			return {
+				role,
+				content,
+			}
+		})
+	}
+
+	#convertToHFTools(tools: readonly ToolSchema[]): readonly HuggingFaceTool[] {
+		return tools.map((t): HuggingFaceTool => ({
+			type: 'function',
+			function: {
+				name: t.name,
+				description: t.description,
+				parameters: {
+					type: 'object',
+					properties: this.#convertProperties(t.parameters?.properties ?? {}),
+					required: t.parameters?.required,
+				},
+			},
+		}))
+	}
+
+	#convertProperties(props: Record<string, unknown>): Record<string, { type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object'; description?: string; enum?: readonly string[] }> {
+		const result: Record<string, { type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object'; description?: string; enum?: readonly string[] }> = {}
+
+		for (const [key, value] of Object.entries(props)) {
+			if (typeof value === 'object' && value !== null) {
+				const prop = value as Record<string, unknown>
+				const propType = prop.type as string
+				const validType = this.#isValidPropertyType(propType) ? propType : 'string'
+				result[key] = {
+					type: validType,
+					...(prop.description !== undefined && { description: prop.description as string }),
+					...(prop.enum !== undefined && { enum: prop.enum as readonly string[] }),
+				}
+			}
+		}
+
+		return result
+	}
+
+	#isValidPropertyType(type: string): type is 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' {
+		return ['string', 'number', 'integer', 'boolean', 'array', 'object'].includes(type)
+	}
+
+	/**
+	 * Parse tool calls from Hermes-style output.
+	 * Format: <tool_call>\n{"name": "func", "arguments": {...}}\n</tool_call>
+	 */
+	#parseToolCalls(text: string): readonly ToolCall[] {
+		const toolCalls: ToolCall[] = []
+		const toolCallRegex = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g
+
+		let match: RegExpExecArray | null
+		while ((match = toolCallRegex.exec(text)) !== null) {
+			try {
+				const jsonStr = match[1]
+				if (jsonStr === undefined) continue
+
+				const parsed = JSON.parse(jsonStr) as { name?: string; arguments?: Record<string, unknown> }
+				if (typeof parsed.name === 'string') {
+					const args = parsed.arguments
+					toolCalls.push({
+						id: crypto.randomUUID(),
+						name: parsed.name,
+						arguments: (typeof args === 'object' && args !== null) ? args as Readonly<Record<string, unknown>> : {},
+					})
+				}
+			} catch {
+				// Skip malformed tool calls
+			}
+		}
+
+		return toolCalls
 	}
 
 	#mapError(error: Error): Error {
