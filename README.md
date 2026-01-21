@@ -10,7 +10,7 @@
 
 ## Features
 
-- ✅ **Provider Adapters** — OpenAI, Anthropic, Ollama, and node-llama-cpp for LLM chat completions
+- ✅ **Provider Adapters** — OpenAI, Anthropic, Ollama, node-llama-cpp, and HuggingFace for LLM chat completions
 - ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, node-llama-cpp, and HuggingFace Transformers for text embeddings
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
@@ -77,7 +77,8 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 - [Introduction](./guides/adapters.md#introduction) — Value proposition and use cases
 - [Quick Start](./guides/adapters.md#quick-start) — Get started in minutes
-- [Source Adapters](./guides/adapters.md#source-adapters) — Provider and embedding adapters
+- [Provider Adapters](./guides/adapters.md#provider-adapters) — LLM providers
+- [Embedding Adapters](./guides/adapters.md#embedding-adapters) — Vector generation
 - [Policy Adapters](./guides/adapters.md#policy-adapters) — Retry and rate limiting
 - [Enhancement Adapters](./guides/adapters.md#enhancement-adapters) — Caching and batching
 - [Transform Adapters](./guides/adapters.md#transform-adapters) — Similarity scoring
@@ -269,18 +270,17 @@ const embeddings = await embedding.embed(['Hello, world!'])
 ### HuggingFace Transformers Provider (Browser/Node.js)
 
 ```ts
-import { pipeline, TextStreamer } from '@huggingface/transformers'
+import { pipeline } from '@huggingface/transformers'
 import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
 import { createEngine } from '@mikesaintsg/inference'
 
 // Consumer initializes the pipeline (downloads model on first use)
-const generator = await pipeline('text-generation', 'Xenova/gpt2')
+const generator = await pipeline('text-generation', 'HuggingFaceTB/SmolLM2-135M-Instruct')
 
-// Pass to adapter with streamers enabled
+// Pass to adapter
 const provider = createHuggingFaceProviderAdapter({
   pipeline: generator,
-  modelName: 'gpt2',
-  streamerClass: TextStreamer, // Optional: enables streamers
+  modelName: 'SmolLM2-135M-Instruct',
   defaultOptions: {
     maxTokens: 100,
     temperature: 0.7,
@@ -291,15 +291,21 @@ const engine = createEngine(provider)
 const session = engine.createSession({ system: 'You are helpful.' })
 ```
 
-**Streaming:** Pass `TextStreamer` class to enable token-by-token streaming:
+**Tool Calling:** Enable tool calling with Qwen or Hermes-style models:
 ```ts
-import { pipeline, TextStreamer } from '@huggingface/transformers'
+import { pipeline } from '@huggingface/transformers'
+
+// Use a model with chat template support (e.g., Qwen)
+const generator = await pipeline('text-generation', 'Qwen/Qwen2.5-0.5B-Instruct')
+
 const provider = createHuggingFaceProviderAdapter({
   pipeline: generator,
-  modelName: 'gpt2',
-  streamerClass: TextStreamer, // Enables streamers
+  modelName: 'Qwen2.5-0.5B-Instruct',
+  enableTools: true, // Enable tool calling
 })
 ```
+
+**Note:** Tool calling requires a model with `apply_chat_template` support. The adapter parses Hermes-style tool call output format: `<tool_call>{"name": "func", "arguments": {...}}</tool_call>`
 
 ### Policy Adapters (Retry & Rate Limiting)
 

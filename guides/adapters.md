@@ -340,13 +340,13 @@ Provider adapters implement `ProviderAdapterInterface` for LLM text generation. 
 
 ### Supported Providers
 
-| Factory                             | Provider       | Environment   | Tools |
-|-------------------------------------|----------------|---------------|-------|
-| `createOpenAIProviderAdapter`       | OpenAI         | Cloud         | ✅     |
-| `createAnthropicProviderAdapter`    | Anthropic      | Cloud         | ✅     |
-| `createOllamaProviderAdapter`       | Ollama         | Local         | ✅     |
-| `createNodeLlamaCppProviderAdapter` | node-llama-cpp | Local         | ❌     |
-| `createHuggingFaceProviderAdapter`  | HuggingFace    | Local/Browser | ❌     |
+| Factory                             | Provider       | Environment   | Tools          |
+|-------------------------------------|----------------|---------------|----------------|
+| `createOpenAIProviderAdapter`       | OpenAI         | Cloud         | ✅              |
+| `createAnthropicProviderAdapter`    | Anthropic      | Cloud         | ✅              |
+| `createOllamaProviderAdapter`       | Ollama         | Local         | ✅              |
+| `createNodeLlamaCppProviderAdapter` | node-llama-cpp | Local         | ❌              |
+| `createHuggingFaceProviderAdapter`  | HuggingFace    | Local/Browser | ✅ (opt-in)     |
 
 ### Streaming Behavior
 
@@ -514,7 +514,7 @@ const engine = createEngine(provider)
 
 ### HuggingFace Transformers (Browser/Node.js)
 
-Runs models locally using `@huggingface/transformers`. **Consumers must install `@huggingface/transformers` and pass an initialized pipeline. ** The adapter uses `TextStreamer` internally for streaming.
+Runs models locally using `@huggingface/transformers`. **Consumers must install `@huggingface/transformers` and pass an initialized pipeline.** The adapter uses the model's streaming capabilities internally.
 
 ```ts
 import { pipeline } from '@huggingface/transformers'
@@ -522,23 +522,46 @@ import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
 import { createEngine } from '@mikesaintsg/inference'
 
 // Consumer initializes the pipeline
-const generator = await pipeline('text-generation', 'Xenova/gpt2')
+const generator = await pipeline('text-generation', 'HuggingFaceTB/SmolLM2-135M-Instruct')
 
-// Pass to adapter — TextStreamer is used internally
+// Pass to adapter
 const provider = createHuggingFaceProviderAdapter({
 	pipeline: generator,
-	modelName: 'gpt2',
+	modelName: 'SmolLM2-135M-Instruct',
 	defaultOptions: {
 		maxTokens: 100,
 		temperature: 0.7,
 	},
-	streamer:  customStreamer, // Optional: custom streamer
+	streamer: customStreamer, // Optional: custom streamer
 })
 
 const engine = createEngine(provider)
 ```
 
-**Common HuggingFace models:** `Xenova/gpt2`, `Xenova/distilgpt2`, `Xenova/phi-1_5`, `Xenova/TinyLlama-1.1B-Chat-v1.0`
+**Tool Calling with Qwen Models:**
+
+Enable tool calling with models that support `apply_chat_template` (e.g., Qwen):
+
+```ts
+import { pipeline } from '@huggingface/transformers'
+import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
+
+// Use a model with chat template support
+const generator = await pipeline('text-generation', 'Qwen/Qwen2.5-0.5B-Instruct')
+
+const provider = createHuggingFaceProviderAdapter({
+	pipeline: generator,
+	modelName: 'Qwen2.5-0.5B-Instruct',
+	enableTools: true, // Enable tool calling
+})
+```
+
+**Note:** Tool calling requires a model with `apply_chat_template` support. The adapter parses Hermes-style tool call output format: `<tool_call>{"name": "func", "arguments": {...}}</tool_call>`
+
+**Common HuggingFace models:**
+- **Small/Fast:** `HuggingFaceTB/SmolLM2-135M-Instruct`, `HuggingFaceTB/SmolLM2-360M-Instruct`
+- **Tool-capable:** `Qwen/Qwen2.5-0.5B-Instruct`, `Qwen/Qwen2.5-1.5B-Instruct`
+- **Legacy:** `Xenova/gpt2`, `Xenova/distilgpt2`, `Xenova/TinyLlama-1.1B-Chat-v1.0`
 
 ---
 
@@ -1124,6 +1147,96 @@ const engine = createEngine(provider, {
 | OPFS Vector       | ✅           | Large files | Fast              | Large datasets, file-based |
 | HTTP Vector       | ✅           | Unlimited   | Network-dependent | Shared/cloud storage       |
 | IndexedDB Session | ✅           | ~500MB–2GB  | Medium            | Session persistence        |
+
+---
+
+## Context Builder Adapters
+
+Context builder adapters help manage and optimize context windows for LLM prompts. They handle deduplication, truncation, and priority ordering.
+
+### Deduplication Adapters
+
+Deduplication adapters implement `DeduplicationAdapterInterface` for removing duplicate content frames.
+
+```ts
+import { createDeduplicationAdapter } from '@mikesaintsg/adapters'
+
+const dedup = createDeduplicationAdapter({
+	strategy: 'keep_highest_priority', // or 'keep_latest', 'keep_first'
+})
+
+// Select which frame to keep from duplicates
+const selected = dedup.select(duplicateFrames)
+
+// Check if a frame should be preserved
+const preserve = dedup.shouldPreserve(frame)
+```
+
+**Strategies:**
+
+| Strategy                | Description                          |
+|-------------------------|--------------------------------------|
+| `keep_highest_priority` | Keep the frame with highest priority |
+| `keep_latest`           | Keep the most recent frame           |
+| `keep_first`            | Keep the first frame encountered     |
+
+### Truncation Adapters
+
+Truncation adapters implement `TruncationAdapterInterface` for removing content when context exceeds limits.
+
+```ts
+import {
+	createFIFOTruncationAdapter,
+	createLIFOTruncationAdapter,
+	createPriorityTruncationAdapter,
+	createScoreTruncationAdapter,
+} from '@mikesaintsg/adapters'
+
+// FIFO: Oldest first (good for chat history)
+const fifo = createFIFOTruncationAdapter({ preserveSystem: true })
+
+// LIFO: Newest first (unusual, but available)
+const lifo = createLIFOTruncationAdapter({ preserveSystem: true })
+
+// Priority: Low priority first (recommended)
+const priority = createPriorityTruncationAdapter({ preserveSystem: true })
+
+// Score: Low score first
+const score = createScoreTruncationAdapter({ preserveSystem: true })
+```
+
+**Truncation Types:**
+
+| Adapter  | Removal Order    | Best For                              |
+|----------|------------------|---------------------------------------|
+| FIFO     | Oldest first     | Chat history, chronological data      |
+| LIFO     | Newest first     | Specialized use cases                 |
+| Priority | Low priority     | Mixed content with varying importance |
+| Score    | Low score first  | Search results, ranked content        |
+
+### Priority Adapters
+
+Priority adapters implement `PriorityAdapterInterface` for managing content priority weights.
+
+```ts
+import { createPriorityAdapter } from '@mikesaintsg/adapters'
+
+const priority = createPriorityAdapter({
+	weights: {
+		critical: 100,
+		high: 75,
+		normal: 50,
+		low: 25,
+		optional: 10,
+	},
+})
+
+// Get weight for a priority level
+const weight = priority.getWeight('high') // 75
+
+// Compare two frames by priority
+const comparison = priority.compare(frameA, frameB)
+```
 
 ---
 
@@ -1885,9 +1998,11 @@ interface NodeLlamaCppProviderAdapterOptions {
 
 interface HuggingFaceProviderAdapterOptions {
 	readonly pipeline: HuggingFaceTextGenerationPipeline
-	readonly modelName:  string
+	readonly modelName: string
 	readonly defaultOptions?: GenerationDefaults
 	readonly streamer?: StreamerAdapterInterface
+	/** Enable tool calling support (requires model with chat template) */
+	readonly enableTools?: boolean
 }
 ```
 
