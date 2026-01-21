@@ -29,13 +29,17 @@ import type {
 	SSEParserInterface,
 	EventStorePersistenceAdapterInterface,
 	WeightPersistenceAdapterInterface,
+	CircuitBreakerAdapterInterface,
+	TelemetryAdapterInterface,
 } from '@mikesaintsg/core'
 
 import type {
 	AnthropicProviderAdapterOptions,
 	AnthropicToolFormatAdapterOptions,
 	BatchAdapterOptions,
+	CircuitBreakerAdapterOptions,
 	CohereRerankerAdapterOptions,
+	ConsoleTelemetryAdapterOptions,
 	CrossEncoderRerankerAdapterOptions,
 	DeduplicationAdapterOptions,
 	ExponentialRetryAdapterOptions,
@@ -53,6 +57,7 @@ import type {
 	LRUCacheAdapterOptions,
 	NodeLlamaCppEmbeddingAdapterOptions,
 	NodeLlamaCppProviderAdapterOptions,
+	NoOpTelemetryAdapterOptions,
 	OllamaEmbeddingAdapterOptions,
 	OllamaProviderAdapterOptions,
 	OpenAIEmbeddingAdapterOptions,
@@ -99,6 +104,9 @@ import {
 	LinearRetry,
 	TokenBucketRateLimit,
 	SlidingWindowRateLimit,
+	CircuitBreaker,
+	ConsoleTelemetry,
+	NoOpTelemetry,
 } from './core/policies/index.js'
 
 // Enhancements
@@ -605,6 +613,104 @@ export function createSlidingWindowRateLimitAdapter(
 	options?: SlidingWindowRateLimitAdapterOptions,
 ): RateLimitAdapterInterface {
 	return new SlidingWindowRateLimit(options)
+}
+
+/**
+ * Create a circuit breaker adapter.
+ *
+ * Circuit breakers prevent cascading failures by stopping requests to
+ * unhealthy services. After a threshold of failures, the circuit "opens"
+ * and fails fast. After a timeout, it enters "half-open" state to test
+ * if the service has recovered.
+ *
+ * @example
+ * ```ts
+ * const circuitBreaker = createCircuitBreakerAdapter({
+ *   failureThreshold: 5,
+ *   successThreshold: 3,
+ *   resetTimeoutMs: 30000,
+ *   onStateChange: (state, previous) => {
+ *     console.log(`Circuit ${previous} → ${state}`)
+ *   },
+ * })
+ *
+ * // Check before making request
+ * if (circuitBreaker.canExecute()) {
+ *   try {
+ *     const result = await provider.generate(messages)
+ *     circuitBreaker.recordSuccess()
+ *   } catch (error) {
+ *     circuitBreaker.recordFailure()
+ *     throw error
+ *   }
+ * } else {
+ *   // Use fallback or cached response
+ *   return fallbackResponse
+ * }
+ * ```
+ */
+export function createCircuitBreakerAdapter(
+	options?: CircuitBreakerAdapterOptions,
+): CircuitBreakerAdapterInterface {
+	return new CircuitBreaker(options)
+}
+
+/**
+ * Create a console telemetry adapter.
+ *
+ * Logs telemetry events to the console with configurable log level and formatting.
+ *
+ * @example
+ * ```ts
+ * const telemetry = createConsoleTelemetryAdapter({
+ *   level: 'info',
+ *   prefix: '[inference]',
+ *   includeTimestamp: true,
+ *   includeSpanId: true,
+ * })
+ *
+ * // Start a span for timing
+ * const span = telemetry.startSpan('generate', { model: 'gpt-4o' })
+ * try {
+ *   const result = await provider.generate(messages)
+ *   span.setStatus('ok')
+ * } catch (error) {
+ *   span.setStatus('error', error.message)
+ * } finally {
+ *   span.end()
+ * }
+ *
+ * // Log a message
+ * telemetry.log('info', 'Request completed', { tokens: 100 })
+ * ```
+ */
+export function createConsoleTelemetryAdapter(
+	options?: ConsoleTelemetryAdapterOptions,
+): TelemetryAdapterInterface {
+	return new ConsoleTelemetry(options)
+}
+
+/**
+ * Create a no-op telemetry adapter.
+ *
+ * Disables telemetry for production where performance is critical.
+ * All methods are no-ops that return immediately.
+ *
+ * @example
+ * ```ts
+ * const telemetry = createNoOpTelemetryAdapter()
+ *
+ * // All operations are no-ops
+ * const span = telemetry.startSpan('generate')
+ * span.end() // Does nothing
+ *
+ * telemetry.log('info', 'Message') // Does nothing
+ * ```
+ */
+export function createNoOpTelemetryAdapter(
+	options?: NoOpTelemetryAdapterOptions,
+): TelemetryAdapterInterface {
+	return new NoOpTelemetry(options)
 }
 
 // ============================================================================

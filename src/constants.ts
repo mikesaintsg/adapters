@@ -235,3 +235,37 @@ export const DEFAULT_ACTIONLOOP_WEIGHT_STORE = 'actionloop_weights'
 
 /** Default maximum events for in-memory event persistence */
 export const DEFAULT_ACTIONLOOP_MAX_EVENTS = 10000
+
+// ============================================================================
+// Circuit Breaker Defaults
+// ============================================================================
+
+/** Default failure threshold before opening circuit */
+export const DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5
+
+/** Default success threshold before closing circuit */
+export const DEFAULT_CIRCUIT_BREAKER_SUCCESS_THRESHOLD = 3
+
+/** Default reset timeout in ms */
+export const DEFAULT_CIRCUIT_BREAKER_RESET_TIMEOUT_MS = 30000
+
+/** Default monitor window in ms */
+export const DEFAULT_CIRCUIT_BREAKER_MONITOR_WINDOW_MS = 60000
+
+// ============================================================================
+// Telemetry Defaults
+// ============================================================================
+
+/** Default telemetry log level */
+export const DEFAULT_TELEMETRY_LOG_LEVEL = 'info'
+
+/** Default telemetry prefix */
+export const DEFAULT_TELEMETRY_PREFIX = '[adapters]'
+
+/** Log level priority (lower = more important) */
+export const LOG_LEVEL_PRIORITY = {
+	error: 0,
+	warn: 1,
+	info: 2,
+	debug: 3,
+} as const

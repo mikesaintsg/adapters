@@ -292,8 +292,8 @@ const store = await createVectorStore(embeddingAdapter, {
 ├─────────────────────────────────────────────────────────────────┤
 │                         Systems Layer                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │  inference  │  │ vectorstore │  │    contextprotocol      │ │
-│  │   Engine    │  │ VectorStore │  │      Registry           │ │
+│  │  inference  │  │ vectorstore │  │     contextbuilder      │ │
+│  │   Engine    │  │ VectorStore │  │ Builder + ToolRegistry  │ │
 │  └──────┬──────┘  └──────┬──────┘  └───────────┬─────────────┘ │
 │         │                │                     │                │
 ├─────────┴────────────────┴─────────────────────┴────────────────┤
@@ -873,6 +873,75 @@ const rateLimit = createSlidingWindowRateLimitAdapter({
 rateLimit.setLimit(200) // Increase limit at runtime
 ```
 
+### Circuit Breaker Adapters
+
+Circuit breaker adapters implement `CircuitBreakerAdapterInterface` to prevent cascading failures.
+
+```ts
+import { createCircuitBreakerAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+const circuitBreaker = createCircuitBreakerAdapter({
+	failureThreshold: 5,      // Open after 5 failures
+	successThreshold: 3,      // Close after 3 successes in half-open
+	resetTimeoutMs: 30000,    // Try half-open after 30s
+	monitorWindowMs: 60000,   // Count failures in 60s window
+	onStateChange: (state, previous) => {
+		console.log(`Circuit ${previous} → ${state}`)
+	},
+})
+
+const engine = createEngine(provider, { circuitBreaker })
+
+// Check state before operations
+if (circuitBreaker.canExecute()) {
+	const result = await engine.generate(messages)
+} else {
+	// Use fallback or cached response
+	return fallbackResponse
+}
+
+// Get circuit state
+const state = circuitBreaker.getState()
+console.log(`Circuit: ${state.state}, failures: ${state.failureCount}`)
+
+// Manual control
+circuitBreaker.open()  // Force open
+circuitBreaker.close() // Force close
+circuitBreaker.reset() // Reset counters and close
+```
+
+### Telemetry Adapters
+
+Telemetry adapters implement `TelemetryAdapterInterface` for observability.
+
+#### Console Telemetry
+
+```ts
+import { createConsoleTelemetryAdapter } from '@mikesaintsg/adapters'
+import { createEngine } from '@mikesaintsg/inference'
+
+const telemetry = createConsoleTelemetryAdapter({
+	level: 'info',           // 'debug' | 'info' | 'warn' | 'error'
+	prefix: '[inference]',
+	includeTimestamp: true,
+	includeSpanId: true,
+})
+
+const engine = createEngine(provider, { telemetry })
+```
+
+#### No-Op Telemetry (Production)
+
+```ts
+import { createNoOpTelemetryAdapter } from '@mikesaintsg/adapters'
+
+// Disable telemetry in production for performance
+const telemetry = createNoOpTelemetryAdapter()
+
+const engine = createEngine(provider, { telemetry })
+```
+
 ---
 
 ## Enhancement Adapters
@@ -993,7 +1062,7 @@ Tool format adapters implement `ToolFormatAdapterInterface` for converting tool 
 
 ```ts
 import { createOpenAIToolFormatAdapter } from '@mikesaintsg/adapters'
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
+import { createToolRegistry } from '@mikesaintsg/contextbuilder'
 
 const formatter = createOpenAIToolFormatAdapter({
 	toolChoice: 'auto', // 'none' | 'required' | { type: 'function', function: { name: string } }
@@ -1852,12 +1921,20 @@ const result = await engine.generateFromContext(context)
 
 ### Policy Adapter Factories
 
-| Factory                               | Options                                | Returns                     |
-|---------------------------------------|----------------------------------------|-----------------------------|
-| `createExponentialRetryAdapter`       | `ExponentialRetryAdapterOptions`       | `RetryAdapterInterface`     |
-| `createLinearRetryAdapter`            | `LinearRetryAdapterOptions`            | `RetryAdapterInterface`     |
-| `createTokenBucketRateLimitAdapter`   | `TokenBucketRateLimitAdapterOptions`   | `RateLimitAdapterInterface` |
-| `createSlidingWindowRateLimitAdapter` | `SlidingWindowRateLimitAdapterOptions` | `RateLimitAdapterInterface` |
+| Factory                               | Options                                | Returns                           |
+|---------------------------------------|----------------------------------------|-----------------------------------|
+| `createExponentialRetryAdapter`       | `ExponentialRetryAdapterOptions`       | `RetryAdapterInterface`           |
+| `createLinearRetryAdapter`            | `LinearRetryAdapterOptions`            | `RetryAdapterInterface`           |
+| `createTokenBucketRateLimitAdapter`   | `TokenBucketRateLimitAdapterOptions`   | `RateLimitAdapterInterface`       |
+| `createSlidingWindowRateLimitAdapter` | `SlidingWindowRateLimitAdapterOptions` | `RateLimitAdapterInterface`       |
+| `createCircuitBreakerAdapter`         | `CircuitBreakerAdapterOptions`         | `CircuitBreakerAdapterInterface`  |
+
+### Telemetry Adapter Factories
+
+| Factory                       | Options                          | Returns                      |
+|-------------------------------|----------------------------------|------------------------------|
+| `createConsoleTelemetryAdapter` | `ConsoleTelemetryAdapterOptions` | `TelemetryAdapterInterface` |
+| `createNoOpTelemetryAdapter`    | `NoOpTelemetryAdapterOptions`    | `TelemetryAdapterInterface` |
 
 ### Enhancement Adapter Factories
 

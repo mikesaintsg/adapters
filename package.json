@@ -1,6 +1,6 @@
 {
 	"name": "@mikesaintsg/adapters",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"type": "module",
 	"description": "Type-safe adapters with full TypeScript support. Zero runtime dependencies.",
 	"keywords": [
@@ -60,8 +60,8 @@
 	},
 	"devDependencies": {
 		"@huggingface/transformers": "^3.8.1",
-		"@mikesaintsg/core": "^0.0.6",
-		"@mikesaintsg/inference": "^0.0.6",
+		"@mikesaintsg/core": "^0.0.7",
+		"@mikesaintsg/inference": "^0.0.7",
 		"@types/node": "^25.0.9",
 		"@vitest/browser-playwright": "^4.0.17",
 		"eslint": "^9.39.2",

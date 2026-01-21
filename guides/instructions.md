@@ -100,37 +100,39 @@ createEngine({ provider: adapter })
 
 ### Package Overview
 
-| Package            | Required First Param         |
-|--------------------|------------------------------|
-| `inference`        | `ProviderAdapterInterface`   |
-| `vectorstore`      | `EmbeddingAdapterInterface`  |
-| `contextprotocol`  | `ToolFormatAdapterInterface` |
-| `contextbuilder`   | `TokenCounterInterface`      |
-| `rater`            | N/A                          |
+| Package          | Required First Param                                                    |
+|------------------|-------------------------------------------------------------------------|
+| `inference`      | `ProviderAdapterInterface`                                              |
+| `vectorstore`    | `EmbeddingAdapterInterface`                                             |
+| `contextbuilder` | `TokenCounterInterface` (builder), `ToolFormatAdapterInterface` (tools) |
+| `rater`          | N/A                                                                     |
 
 ### Interface Ownership
 
-| Interface                      | Defined In | Implemented In |
-|--------------------------------|------------|----------------|
-| `EmbeddingAdapterInterface`    | `core`     | `adapters`     |
-| `ToolFormatAdapterInterface`   | `core`     | `adapters`     |
-| `RetryAdapterInterface`        | `core`     | `adapters`     |
-| `RateLimitAdapterInterface`    | `core`     | `adapters`     |
-| `ProviderAdapterInterface`     | `core`     | `adapters`     |
-| `TokenCounterInterface`        | `core`     | `inference`    |
-| `StreamHandleInterface`        | `core`     | `inference`    |
-| `Message`, `GenerationOptions` | `core`     | —              |
-| Persistence adapters           | `core`     | `adapters`     |
+| Interface                        | Defined In | Implemented In |
+|----------------------------------|------------|----------------|
+| `EmbeddingAdapterInterface`      | `core`     | `adapters`     |
+| `ToolFormatAdapterInterface`     | `core`     | `adapters`     |
+| `RetryAdapterInterface`          | `core`     | `adapters`     |
+| `RateLimitAdapterInterface`      | `core`     | `adapters`     |
+| `CircuitBreakerAdapterInterface` | `core`     | `adapters`     |
+| `TelemetryAdapterInterface`      | `core`     | `adapters`     |
+| `ProviderAdapterInterface`       | `core`     | `adapters`     |
+| `TokenCounterInterface`          | `core`     | `inference`    |
+| `StreamHandleInterface`          | `core`     | `inference`    |
+| `Message`, `GenerationOptions`   | `core`     | —              |
+| Persistence adapters             | `core`     | `adapters`     |
 
 ### Adapter Categories
 
-| Category        | Purpose                | Examples                      |
-|-----------------|------------------------|-------------------------------|
-| **Source**      | Generate/retrieve data | Provider, Embedding           |
-| **Persistence** | Store/load data        | IndexedDB, OPFS, HTTP         |
-| **Transform**   | Transform formats      | ToolFormat, Token, Similarity |
-| **Policy**      | Apply policies         | Retry, RateLimit              |
-| **Enhancement** | Add capabilities       | Cache, Batch, Reranker        |
+| Category          | Purpose                | Examples                          |
+|-------------------|------------------------|-----------------------------------|
+| **Source**        | Generate/retrieve data | Provider, Embedding               |
+| **Persistence**   | Store/load data        | IndexedDB, OPFS, HTTP             |
+| **Transform**     | Transform formats      | ToolFormat, Token, Similarity     |
+| **Policy**        | Apply policies         | Retry, RateLimit, CircuitBreaker  |
+| **Enhancement**   | Add capabilities       | Cache, Batch, Reranker            |
+| **Observability** | Monitor/debug          | Telemetry (Console, NoOp)         |
 
 ---
 

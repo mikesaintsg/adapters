@@ -6,23 +6,22 @@
 
 ## Package Overview
 
-| Package                        | Purpose                             | Required First Param         |
-|--------------------------------|-------------------------------------|------------------------------|
-| `@mikesaintsg/core`            | Shared types, interfaces, utilities | N/A                          |
-| `@mikesaintsg/adapters`        | All adapter implementations         | N/A (factory per adapter)    |
-| `@mikesaintsg/inference`       | LLM generation engine               | `ProviderAdapterInterface`   |
-| `@mikesaintsg/vectorstore`     | Vector storage & search             | `EmbeddingAdapterInterface`  |
-| `@mikesaintsg/contextprotocol` | Tool registry & execution           | `ToolFormatAdapterInterface` |
-| `@mikesaintsg/contextbuilder`  | Context assembly & budgeting        | `TokenCounterInterface`      |
-| `@mikesaintsg/indexeddb`       | IndexedDB wrapper                   | N/A                          |
-| `@mikesaintsg/filesystem`      | OPFS wrapper                        | N/A                          |
-| `@mikesaintsg/broadcast`       | Cross-tab state sync                | N/A                          |
-| `@mikesaintsg/form`            | Form state management               | N/A                          |
-| `@mikesaintsg/table`           | Virtual table                       | N/A                          |
-| `@mikesaintsg/navigation`      | Client-side routing                 | N/A                          |
-| `@mikesaintsg/storage`         | Storage abstraction                 | N/A                          |
-| `@mikesaintsg/rater`           | Factor-based rating engine          | N/A                          |
-| `@mikesaintsg/actionloop`      | Predictive workflow guidance        | `ProceduralGraphInterface`   |
+| Package                       | Purpose                             | Required First Param                                   |
+|-------------------------------|-------------------------------------|--------------------------------------------------------|
+| `@mikesaintsg/core`           | Shared types, interfaces, utilities | N/A                                                    |
+| `@mikesaintsg/adapters`       | All adapter implementations         | N/A (factory per adapter)                              |
+| `@mikesaintsg/inference`      | LLM generation engine               | `ProviderAdapterInterface`                             |
+| `@mikesaintsg/vectorstore`    | Vector storage & search             | `EmbeddingAdapterInterface`                            |
+| `@mikesaintsg/contextbuilder` | Context assembly, tools & budgeting | `TokenCounterInterface` / `ToolFormatAdapterInterface` |
+| `@mikesaintsg/indexeddb`      | IndexedDB wrapper                   | N/A                                                    |
+| `@mikesaintsg/filesystem`     | OPFS wrapper                        | N/A                                                    |
+| `@mikesaintsg/broadcast`      | Cross-tab state sync                | N/A                                                    |
+| `@mikesaintsg/form`           | Form state management               | N/A                                                    |
+| `@mikesaintsg/table`          | Virtual table                       | N/A                                                    |
+| `@mikesaintsg/navigation`     | Client-side routing                 | N/A                                                    |
+| `@mikesaintsg/storage`        | Storage abstraction                 | N/A                                                    |
+| `@mikesaintsg/rater`          | Factor-based rating engine          | N/A                                                    |
+| `@mikesaintsg/actionloop`     | Predictive workflow guidance        | `ProceduralGraphInterface`                             |
 
 **Factory Pattern:** `createSystem(requiredAdapter, options?)`
 
@@ -48,13 +47,14 @@ Every system in this ecosystem follows the **Port Pattern**: systems define **po
 
 All adapters fall into these categories:
 
-| Category                 | Purpose                      | Examples                                                 |
-|--------------------------|------------------------------|----------------------------------------------------------|
-| **Source Adapters**      | Generate or retrieve data    | `EmbeddingAdapter`, `ProviderAdapter`                    |
-| **Persistence Adapters** | Store and load data          | `VectorPersistenceAdapter`, `SessionPersistenceAdapter`  |
-| **Policy Adapters**      | Apply policies to operations | `RetryAdapter`, `RateLimitAdapter`                       |
-| **Transform Adapters**   | Transform data formats       | `ToolFormatAdapter`, `TokenAdapter`, `SimilarityAdapter` |
-| **Enhancement Adapters** | Add capabilities             | `CacheAdapter`, `BatchAdapter`, `RerankerAdapter`        |
+| Category                   | Purpose                      | Examples                                                 |
+|----------------------------|------------------------------|----------------------------------------------------------|
+| **Source Adapters**        | Generate or retrieve data    | `EmbeddingAdapter`, `ProviderAdapter`                    |
+| **Persistence Adapters**   | Store and load data          | `VectorPersistenceAdapter`, `SessionPersistenceAdapter`  |
+| **Policy Adapters**        | Apply policies to operations | `RetryAdapter`, `RateLimitAdapter`, `CircuitBreaker`     |
+| **Transform Adapters**     | Transform data formats       | `ToolFormatAdapter`, `TokenAdapter`, `SimilarityAdapter` |
+| **Enhancement Adapters**   | Add capabilities             | `CacheAdapter`, `BatchAdapter`, `RerankerAdapter`        |
+| **Observability Adapters** | Monitor and debug            | `TelemetryAdapter` (Console, NoOp)                       |
 
 ### Key Principle: Opt-In Design
 
@@ -121,6 +121,16 @@ interface RateLimitAdapterInterface {
   setLimit(requestsPerMinute: number): void
 }
 
+/** Circuit breaker adapter - prevents cascading failures */
+interface CircuitBreakerAdapterInterface {
+  execute<T>(operation: () => Promise<T>): Promise<T>
+  getState(): CircuitBreakerState
+  canExecute(): boolean
+  open(): void
+  close(): void
+  reset(): void
+}
+
 /** Cache adapter - provides caching for embeddings */
 interface EmbeddingCacheAdapterInterface {
   get(text: string): Embedding | undefined
@@ -134,6 +144,15 @@ interface BatchAdapterInterface {
   getBatchSize(): number
   getDelayMs(): number
   shouldDeduplicate(): boolean
+}
+
+/** Telemetry adapter - provides observability hooks */
+interface TelemetryAdapterInterface {
+  startSpan(name: string, attributes?: Record<string, unknown>): TelemetrySpan
+  endSpan(span: TelemetrySpan, status?: 'ok' | 'error'): void
+  log(level: LogLevel, message: string, attributes?: Record<string, unknown>): void
+  recordMetric(name: string, value: number, attributes?: Record<string, unknown>): void
+  flush(): Promise<void>
 }
 ```
 
@@ -180,7 +199,7 @@ We provide ready-to-use default implementations for common use cases. These are 
 | **Persistence** | In-memory storage      | `createInMemoryVectorPersistenceAdapter()` |
 | **Similarity**  | Cosine similarity      | `createCosineSimilarityAdapter()`          |
 | **Retry**       | Exponential backoff    | `createExponentialRetryAdapter()`          |
-| **Batch**       | Sensible defaults      | `createBatchAdapter()`              |
+| **Batch**       | Sensible defaults      | `createBatchAdapter()`                     |
 | **Cache**       | LRU eviction           | `createLRUCacheAdapter()`                  |
 | **Rate Limit**  | Token bucket           | `createTokenBucketRateLimitAdapter()`      |
 
@@ -354,7 +373,7 @@ The foundational package providing shared type definitions, adapter interfaces, 
 | Token counting | inference | `TokenAdapterInterface` |
 | Token budgeting | contextbuilder | `BudgetAdapterInterface` |
 | Abort coordination | inference | `AbortAdapterInterface` |
-| Tool execution | contextprotocol | `ToolRegistryInterface` (minimal) |
+| Tool execution | contextbuilder | `ToolRegistryInterface` |
 
 ## Adapter Interface Pattern
 
@@ -968,7 +987,7 @@ export interface SessionPersistenceAdapterInterface {
 
 /**
  * Minimal tool registry interface for bridge functions.
- * Avoids hard dependency on contextprotocol package. 
+ * Defines minimal contract for tool execution integration.
  */
 export interface ToolRegistryMinimal {
 	has(name: string): boolean
@@ -1934,7 +1953,7 @@ The inference package provides the engine for LLM text generation. It orchestrat
 ### What Inference Does NOT Do
 
 - Context assembly (use contextbuilder)
-- Tool execution (use contextprotocol)
+- Tool execution (use contextbuilder's ToolRegistry)
 - Vector search (use vectorstore)
 - Persistence (use adapters)
 
@@ -2479,7 +2498,7 @@ export interface EngineInterface extends EngineSubscriptions {
 }
 
 /**
- * Provider adapter interface - LLM provider ollama. 
+ * Provider adapter interface - LLM provider integration. 
  */
 export interface ProviderAdapterInterface {
 	getId(): string
@@ -3046,7 +3065,7 @@ const context = builder.build()
 await engine.generateFromContext(context)
 ```
 
-### With @mikesaintsg/contextprotocol
+### With Tool Registry
 
 ```ts
 import { createRetrievalTool } from '@mikesaintsg/core'
@@ -3426,35 +3445,45 @@ export type CreateVectorStore = (
 
 ---
 
-## 5. @mikesaintsg/contextprotocol
+## 5. @mikesaintsg/contextbuilder
 
-````markdown name=guides/contextprotocol.md
-# @mikesaintsg/contextprotocol — Tool Registry & Execution
+````markdown name=guides/contextbuilder.md
+# @mikesaintsg/contextbuilder — Context Assembly, Tools & Budgeting
 
 ## Purpose
 
-Manages tool schemas, validates tool calls, and executes tool handlers.  Provides a provider-agnostic interface for LLM function calling.
+Assembles context for LLM inference with token budgeting, deduplication, and priority-based truncation. Manages tool schemas, validates tool calls, and executes tool handlers. The orchestration layer between your content and the inference engine.
 
 ## Design Principles
 
-1. **Format adapter first** — Required for provider-specific formatting
-2. **Schema-driven** — JSON Schema validation for all tool calls
-3. **Execution isolation** — Handlers run with timeouts and error boundaries
-4. **Registry pattern** — Central registry for all tools
+1. **Token adapter first** — Required for accurate budgeting
+2. **Frame-based model** — All content as typed frames
+3. **Budget-aware** — Never exceed token limits
+4. **Deduplication** — Automatic content hash detection
+5. **Priority-driven** — Critical content preserved first
+6. **Format adapter for tools** — Provider-specific tool formatting
+7. **Schema-driven validation** — JSON Schema validation for all tool calls
 
 ## Package Boundaries
 
-### What ContextProtocol Does
+### What ContextBuilder Does
 
+- Assemble context from multiple sources
+- Track sections and files with versioning
+- Deduplicate content by hash
+- Manage token budgets
+- Truncate based on priority
+- Track recency of accessed frames
+- Build formatted context for inference
 - Store and manage tool schemas
 - Format schemas for specific providers (OpenAI, Anthropic)
 - Validate tool call arguments against schemas
 - Execute tool handlers with error handling
 - Parse tool calls from provider responses
 
-### What ContextProtocol Does NOT Do
+### What ContextBuilder Does NOT Do
 
-- Context assembly (use contextbuilder)
+- Generate embeddings (use vectorstore)
 - LLM generation (use inference)
 - Define specific tools (your application does this)
 
@@ -3463,7 +3492,26 @@ Manages tool schemas, validates tool calls, and executes tool handlers.  Provide
 ### Minimal Setup
 
 ```ts
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
+import { createContextBuilder } from '@mikesaintsg/contextbuilder'
+import { createEstimatorTokenAdapter } from '@mikesaintsg/adapters'
+
+const builder = createContextBuilder(
+	createEstimatorTokenAdapter({ contextWindow: 128000 }),
+	{ budget: { maxTokens: 8000 } }
+)
+
+builder.addFrame({ type: 'system', content: 'You are helpful.', priority: 'critical' })
+builder.addFrame({ type: 'document', content: docContent, priority: 'normal' })
+
+const context = builder.build()
+console.log(context.totalTokens) // Token count
+console.log(context.frames)      // Included frames
+```
+
+### Tool Registry Setup
+
+```ts
+import { createToolRegistry } from '@mikesaintsg/contextbuilder'
 import { createOpenAIToolFormatAdapter } from '@mikesaintsg/adapters'
 
 const registry = createToolRegistry(
@@ -3474,12 +3522,12 @@ registry.register(
 	{
 		name: 'get_weather',
 		description: 'Get current weather for a city',
-		parameters:  {
-			type:  'object',
+		parameters: {
+			type: 'object',
 			properties: {
 				city: { type: 'string', description: 'City name' },
 			},
-			required:  ['city'],
+			required: ['city'],
 		},
 	},
 	async (params) => {
@@ -3488,67 +3536,7 @@ registry.register(
 )
 ```
 
-### Full Integration
-
-```ts
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
-import { createEngine } from '@mikesaintsg/inference'
-import { createOpenAIToolFormatAdapter, createOpenAIProviderAdapter } from '@mikesaintsg/adapters'
-
-const toolFormat = createOpenAIToolFormatAdapter()
-const registry = createToolRegistry(toolFormat)
-
-// Register tools
-registry.register(weatherSchema, weatherHandler)
-registry.register(searchSchema, searchHandler)
-
-// Use with inference
-const engine = createEngine(createOpenAIProviderAdapter({ apiKey }))
-const session = engine.createSession({ system: 'You are helpful.' })
-
-session.addMessage('user', 'What is the weather in Paris?')
-
-const result = await session.generate({
-	tools: registry.getSchemas(),
-})
-
-// Handle tool calls
-for (const call of result.toolCalls) {
-	const toolResult = await registry.execute(call)
-	session.addToolResult(call.id, call.name, toolResult.value)
-}
-
-// Continue if tool calls were made
-if (result.toolCalls.length > 0) {
-	const continuation = await session.generate()
-	console.log(continuation.text)
-}
-```
-
-## Creating a Tool Registry
-
-```ts
-const registry = createToolRegistry(formatAdapter, options?)
-```
-
-**Parameters:**
-
-1. `formatAdapter:  ToolFormatAdapterInterface` — **Required**.  Provider-specific formatting. 
-2. `options?: ToolRegistryOptions` — Optional configuration.
-
-### ToolRegistry Options
-
-```ts
-interface ToolRegistryOptions {
-	readonly timeout?: number  // Default execution timeout (ms)
-	readonly onToolRegistered?: (schema: ToolSchema) => void
-	readonly onToolUnregistered?: (name: string) => void
-}
-```
-
-## Registering Tools
-
-### Basic Registration
+### Full Setup with All Trackers
 
 ```ts
 const unregister = registry.register(
@@ -3574,29 +3562,84 @@ const unregister = registry.register(
 unregister()
 ```
 
-### Typed Registration
+### Full Setup with All Trackers
 
 ```ts
-interface SearchParams {
-	readonly query: string
-	readonly limit?: number
-}
+import { createContextManager } from '@mikesaintsg/contextbuilder'
+import { createModelTokenAdapter } from '@mikesaintsg/adapters'
 
-interface SearchResult {
-	readonly items: readonly string[]
-	readonly total: number
-}
+const manager = createContextManager(
+	createModelTokenAdapter({ model: 'gpt-4o' }),
+	{
+		budget: { maxTokens: 8000, reservedTokens: 1000 },
+		deduplication: { strategy: 'keep_latest' },
+		truncationStrategy: 'priority',
+	}
+)
 
-registry.register<SearchParams, SearchResult>(
-	searchSchema,
-	async (params) => {
-		// params is SearchParams, return must be SearchResult
-		return { items: ['... '], total: 1 }
+// Track sections
+manager.sections.setSection({
+	id: 'system',
+	name: 'System Prompt',
+	content: 'You are a helpful assistant.',
+	metadata: { pinned: true },
+})
+
+// Track files
+manager.files.setFile({
+	path: 'src/index.ts',
+	name: 'index.ts',
+	content: sourceCode,
+	language: 'typescript',
+})
+
+// Select and build
+manager.sections.select(['system'])
+manager.files.select(['src/index.ts'])
+
+const context = manager.buildFromSelection()
+```
+
+## Tool Registry
+
+### Creating a Tool Registry
+
+```ts
+import { createToolRegistry } from '@mikesaintsg/contextbuilder'
+import { createOpenAIToolFormatAdapter } from '@mikesaintsg/adapters'
+
+const registry = createToolRegistry(
+	createOpenAIToolFormatAdapter(),
+	{
+		defaultTimeoutMs: 30000,
+		validateArguments: true,
 	}
 )
 ```
 
-## Getting Schemas
+### Registering Tools
+
+```ts
+registry.register(
+	{
+		name: 'search',
+		description: 'Search the knowledge base',
+		parameters: {
+			type: 'object',
+			properties: {
+				query: { type: 'string' },
+				limit: { type: 'number', default: 10 },
+			},
+			required: ['query'],
+		},
+	},
+	async (params) => {
+		return await searchKnowledgeBase(params.query, params.limit)
+	}
+)
+```
+
+### Getting Schemas
 
 ```ts
 // Get internal schemas
@@ -3604,32 +3647,14 @@ const schemas = registry.getSchemas()
 
 // Get provider-formatted schemas (for API requests)
 const formatted = registry.getFormattedSchemas()
-// For OpenAI:  [{ type: 'function', function: { name, description, parameters } }]
-// For Anthropic:  [{ name, description, input_schema }]
 ```
 
-## Validating Tool Calls
-
-```ts
-const call:  ToolCall = {
-	id: 'call_123',
-	name: 'search',
-	arguments: { query: 'hello' },
-}
-
-const validation = registry.validate(call)
-
-if (! validation.valid) {
-	console.error('Invalid call:', validation.errors)
-}
-```
-
-## Executing Tool Calls
+### Executing Tool Calls
 
 ```ts
 const call: ToolCall = {
-	id:  'call_123',
-	name:  'search',
+	id: 'call_123',
+	name: 'search',
 	arguments: { query: 'hello', limit: 5 },
 }
 
@@ -3642,203 +3667,17 @@ if (result.success) {
 }
 ```
 
-### Execution with Timeout
+### Error Handling
 
 ```ts
-const registry = createToolRegistry(formatAdapter, {
-	timeout: 30000, // 30 second default timeout
-})
-
-// Or per-call (not directly supported, use AbortSignal in handler)
-```
-
-## Parsing Provider Responses
-
-```ts
-// After receiving response from LLM
-const toolCalls = registry.parseResponse(providerResponse)
-
-for (const call of toolCalls) {
-	const result = await registry.execute(call)
-	// ... 
-}
-```
-
-## Formatting Results
-
-```ts
-const result = await registry.execute(call)
-const formatted = registry.formatResult(result)
-// Provider-specific format for injecting back into conversation
-```
-
-## Tool Schema Design
-
-### JSON Schema Parameters
-
-```ts
-const schema: ToolSchema = {
-	name: 'create_task',
-	description:  'Create a new task in the project',
-	parameters:  {
-		type:  'object',
-		properties: {
-			title: {
-				type: 'string',
-				description: 'Task title',
-				minLength: 1,
-				maxLength: 200,
-			},
-			priority: {
-				type: 'string',
-				enum: ['low', 'medium', 'high'],
-				default: 'medium',
-			},
-			dueDate: {
-				type: 'string',
-				format: 'date',
-				description: 'Due date in YYYY-MM-DD format',
-			},
-			tags: {
-				type: 'array',
-				items:  { type: 'string' },
-				maxItems: 10,
-			},
-		},
-		required:  ['title'],
-	},
-}
-```
-
-### Returns Schema (Optional)
-
-```ts
-const schema: ToolSchema = {
-	name: 'get_user',
-	description: 'Get user by ID',
-	parameters: {
-		type: 'object',
-		properties: {
-			userId: { type: 'string' },
-		},
-		required: ['userId'],
-	},
-	returns: {
-		type: 'object',
-		properties: {
-			id: { type: 'string' },
-			name: { type: 'string' },
-			email: { type:  'string' },
-		},
-	},
-}
-```
-
-## Error Handling in Handlers
-
-```ts
-registry.register(
-	schema,
-	async (params) => {
-		try {
-			return await riskyOperation(params)
-		} catch (error) {
-			// Return error info that LLM can understand
-			throw new Error(`Failed to execute: ${error.message}`)
-		}
-	}
-)
-
-// The registry catches errors and returns: 
-// { callId, name, success:  false, error: 'Failed to execute:  ...' }
-```
-
-## Event Subscriptions
-
-```ts
-const cleanup1 = registry.onToolRegistered((schema) => {
-	console.log('Tool registered:', schema.name)
-})
-
-const cleanup2 = registry.onToolUnregistered((name) => {
-	console.log('Tool unregistered:', name)
-})
-
-// Cleanup
-cleanup1()
-cleanup2()
-```
-
-## Integration with VectorStore
-
-### Retrieval Tool Factory
-
-```ts
-import { createRetrievalTool } from '@mikesaintsg/core'
-
-const { schema, handler } = createRetrievalTool({
-	vectorStore: store,
-	name: 'search_docs',
-	description: 'Search documentation for relevant information',
-	defaultLimit: 5,
-	scoreThreshold: 0.7,
-	formatResult: (result) => ({
-		content: result.content,
-		score: result.score,
-		source: result.metadata?. source,
-	}),
-})
-
-registry.register(schema, handler)
-```
-
-## Integration with ContextBuilder
-
-```ts
-import { createContextBuilder } from '@mikesaintsg/contextbuilder'
-
-// Add tool schemas to context for token counting
-for (const schema of registry.getSchemas()) {
-	builder.addTool(schema, 'high')
-}
-
-const context = builder.build()
-// context.frames includes tool schema frames
-```
-
-## Tool Call Bridge
-
-For connecting inference tool calls to registry execution:
-
-```ts
-import { createToolCallBridge } from '@mikesaintsg/core'
-
-const bridge = createToolCallBridge({
-	registry,
-	timeout: 30000,
-	onError: (error, call) => {
-		console.error(`Tool ${call.name} failed:`, error)
-	},
-})
-
-// Execute single call
-const result = await bridge.execute(toolCall)
-
-// Execute all calls in parallel
-const results = await bridge.executeAll(toolCalls)
-```
-
-## Error Types
-
-```ts
-import { isContextProtocolError } from '@mikesaintsg/contextprotocol'
+import { isToolRegistryError } from '@mikesaintsg/contextbuilder'
 
 try {
 	await registry.execute(call)
 } catch (error) {
-	if (isContextProtocolError(error)) {
+	if (isToolRegistryError(error)) {
 		switch (error.code) {
-			case 'TOOL_NOT_FOUND': 
+			case 'TOOL_NOT_FOUND':
 				console.error('Unknown tool:', error.toolName)
 				break
 			case 'VALIDATION_FAILED':
@@ -3859,13 +3698,55 @@ try {
 
 ### Factory Functions
 
+- `createContextBuilder(token, options)` → `ContextBuilderInterface`
+- `createContextManager(token, options)` → `ContextManagerInterface`
+- `createSectionTracker(options?)` → `SectionTrackerInterface`
+- `createFileTracker(options?)` → `FileTrackerInterface`
+- `createTemplateRegistry()` → `TemplateRegistryInterface`
 - `createToolRegistry(formatAdapter, options?)` → `ToolRegistryInterface`
+
+### ContextBuilderInterface
+
+#### Frame Management
+
+- `addFrame(input)` → `ContextFrame`
+- `addSection(section, priority?)` → `ContextFrame`
+- `addFile(file, priority?)` → `ContextFrame`
+- `addTool(schema, priority?)` → `ContextFrame`
+- `addRetrieval(results, priority?)` → `readonly ContextFrame[]`
+- `getFrame(id)` → `ContextFrame | undefined`
+- `getFrames()` → `readonly ContextFrame[]`
+- `getFramesByType(type)` → `readonly ContextFrame[]`
+- `removeFrame(id)` → `boolean`
+- `clear()` → `void`
+
+#### Deduplication
+
+- `deduplicate()` → `DeduplicationResult`
+- `findDuplicates()` → `ReadonlyMap<ContentHash, readonly ContextFrame[]>`
+
+#### Budget
+
+- `getBudgetState()` → `TokenBudgetState`
+- `setBudget(budget)` → `void`
+- `fitsInBudget(content)` → `boolean`
+- `getAllocation()` → `TokenAllocation`
+
+#### Building
+
+- `build()` → `BuiltContext`
+- `buildFormatted(format?)` → `string`
+- `preview()` → `BuiltContext`
+
+#### Lifecycle
+
+- `destroy()` → `void`
 
 ### ToolRegistryInterface
 
 #### Registration
 
-- `register(schema, handler)` → `Unsubscribe`
+- `register(schema, handler)` ��� `Unsubscribe`
 
 #### Schema Access
 
@@ -3894,168 +3775,9 @@ try {
 - `destroy()` → `void`
 ````
 
-```typescript name=types/contextprotocol/types.ts
-/**
- * @mikesaintsg/contextprotocol
- *
- * Type definitions for tool registry and execution. 
- */
-
-import type {
-	Unsubscribe,
-	SubscriptionToHook,
-	ToolCall,
-	ToolResult,
-	ToolSchema,
-	ToolFormatAdapterInterface,
-	PackageErrorData,
-} from '@mikesaintsg/core'
-
-// ============================================================================
-// Validation Types
-// ============================================================================
-
-/** Validation result */
-export type ValidationResult =
-	| { readonly valid: true }
-	| { readonly valid: false; readonly errors: readonly string[] }
-
-// ============================================================================
-// Handler Types
-// ============================================================================
-
-/** Tool handler function */
-export type ToolHandler<TParams = unknown, TResult = unknown> = (
-	params: TParams
-) => Promise<TResult>
-
-// ============================================================================
-// Subscription Interfaces
-// ============================================================================
-
-/** Tool registry subscription methods */
-export interface ToolRegistrySubscriptions {
-	onToolRegistered(callback: (schema:  ToolSchema) => void): Unsubscribe
-	onToolUnregistered(callback: (name:  string) => void): Unsubscribe
-}
-
-// ============================================================================
-// Options Interfaces
-// ============================================================================
-
-/** Tool registry options */
-export interface ToolRegistryOptions extends SubscriptionToHook<ToolRegistrySubscriptions> {
-	/** Default execution timeout in ms (default: 30000) */
-	readonly timeout?: number
-}
-
-// ============================================================================
-// Error Types
-// ============================================================================
-
-/** Context protocol error codes */
-export type ContextProtocolErrorCode =
-	| 'TOOL_NOT_FOUND'
-	| 'VALIDATION_FAILED'
-	| 'EXECUTION_FAILED'
-	| 'TIMEOUT'
-	| 'UNKNOWN'
-
-/** Context protocol error data */
-export interface ContextProtocolErrorData extends PackageErrorData<ContextProtocolErrorCode> {
-	readonly toolName?:  string
-	readonly validationErrors?: readonly string[]
-}
-
-// ============================================================================
-// Behavioral Interfaces
-// ============================================================================
-
-/**
- * Tool registry interface - manages tools and their execution. 
- */
-export interface ToolRegistryInterface extends ToolRegistrySubscriptions {
-	/**
-	 * Register a tool with its handler.
-	 * @returns Unsubscribe function to remove the tool
-	 */
-	register<TParams = unknown, TResult = unknown>(
-		schema: ToolSchema,
-		handler: ToolHandler<TParams, TResult>
-	): Unsubscribe
-
-	/**
-	 * Get all registered tool schemas.
-	 */
-	getSchemas(): readonly ToolSchema[]
-
-	/**
-	 * Get schemas formatted for provider API.
-	 */
-	getFormattedSchemas(): unknown
-
-	/**
-	 * Check if tool is registered.
-	 */
-	has(name: string): boolean
-
-	/**
-	 * Get specific tool schema.
-	 */
-	getSchema(name: string): ToolSchema | undefined
-
-	/**
-	 * Validate tool call arguments against schema.
-	 */
-	validate(call: ToolCall): ValidationResult
-
-	/**
-	 * Execute tool call with registered handler.
-	 */
-	execute(call: ToolCall): Promise<ToolResult>
-
-	/**
-	 * Parse tool calls from provider response.
-	 */
-	parseResponse(response: unknown): readonly ToolCall[]
-
-	/**
-	 * Format tool result for provider. 
-	 */
-	formatResult(result: ToolResult): unknown
-
-	/**
-	 * Cleanup resources.
-	 */
-	destroy(): void
-}
-
-// ============================================================================
-// Factory Function Types
-// ============================================================================
-
-/** Factory for tool registry */
-export type CreateToolRegistry = (
-	formatAdapter:  ToolFormatAdapterInterface,
-	options?: ToolRegistryOptions
-) => ToolRegistryInterface
-```
-
 ---
 
-## 6. @mikesaintsg/contextbuilder
-
-````markdown name=guides/contextbuilder.md
-# @mikesaintsg/contextbuilder — Context Assembly & Budgeting
-
-## Purpose
-
-Assembles context for LLM inference with token budgeting, deduplication, and priority-based truncation.  The orchestration layer between your content and the inference engine.
-
-## Design Principles
-
-1. **Token adapter first** — Required for accurate budgeting
-2. **Frame-based model** — All content as typed frames
+## 6. @mikesaintsg/indexeddb
 3. **Budget-aware** — Never exceed token limits
 4. **Deduplication** — Automatic content hash detection
 5. **Priority-driven** — Critical content preserved first
@@ -4069,13 +3791,14 @@ Assembles context for LLM inference with token budgeting, deduplication, and pri
 - Deduplicate content by hash
 - Manage token budgets
 - Truncate based on priority
+- Track recency of accessed frames
 - Build formatted context for inference
 
 ### What ContextBuilder Does NOT Do
 
 - Generate embeddings (use vectorstore)
-- Execute tool calls (use contextprotocol)
 - LLM generation (use inference)
+- Define specific tools (your application does this)
 
 ## Quick Start
 
@@ -4156,6 +3879,7 @@ interface ContextBuilderOptions {
 	readonly deduplication?:  DeduplicationOptions
 	readonly truncationStrategy?: TruncationStrategy
 	readonly slidingWindow?: SlidingWindowOptions
+	readonly recency?: RecencyWeightOptions
 	readonly onFrameChange?: (frame, action) => void
 	readonly onBudgetChange?: (state) => void
 	readonly onBuild?: (context) => void
@@ -4166,6 +3890,13 @@ interface TokenBudget {
 	readonly reservedTokens?:  number   // Reserve for response
 	readonly warningThreshold?: number // 0-1, default 0.8
 	readonly criticalThreshold?: number // 0-1, default 0.95
+}
+
+interface RecencyWeightOptions {
+	readonly enabled: boolean
+	readonly maxBoost: number       // Maximum priority boost
+	readonly decayRate: number      // Decay rate multiplier
+	readonly halfLifeMs: number     // Time for score to decay by half
 }
 ```
 
@@ -4219,13 +3950,13 @@ builder.addRetrieval(searchResults, 'normal')
 
 Frames are sorted by priority during build:
 
-| Priority | Weight | Use Case |
-|----------|--------|----------|
-| `critical` | 100 | System prompts, must include |
-| `high` | 75 | Active file, current tool |
-| `normal` | 50 | Context documents |
-| `low` | 25 | Background info |
-| `optional` | 0 | Nice to have, truncate first |
+| Priority   | Weight | Use Case                     |
+|------------|--------|------------------------------|
+| `critical` | 100    | System prompts, must include |
+| `high`     | 75     | Active file, current tool    |
+| `normal`   | 50     | Context documents            |
+| `low`      | 25     | Background info              |
+| `optional` | 0      | Nice to have, truncate first |
 
 ## Token Budget Management
 
@@ -4669,7 +4400,7 @@ try {
 - `readonly builder: ContextBuilderInterface`
 - `buildFromSelection()` → `BuiltContext`
 - `destroy()` → `void`
-````
+
 
 ```typescript name=types/contextbuilder/types.ts
 /**
@@ -5285,16 +5016,15 @@ export type DetectLanguage = (filename: string) => string | undefined
 
 Here's the final overview of all packages:
 
-| Package                        | First Param (Required)       | Purpose                                      |
-|--------------------------------|------------------------------|----------------------------------------------|
-| `@mikesaintsg/core`            | N/A                          | Shared types, interfaces, no implementations |
-| `@mikesaintsg/adapters`        | Varies by factory            | All adapter implementations                  |
-| `@mikesaintsg/inference`       | `ProviderAdapterInterface`   | LLM generation engine                        |
-| `@mikesaintsg/vectorstore`     | `EmbeddingAdapterInterface`  | Vector storage & search                      |
-| `@mikesaintsg/contextprotocol` | `ToolFormatAdapterInterface` | Tool registry & execution                    |
-| `@mikesaintsg/contextbuilder`  | `TokenAdapterInterface`      | Context assembly & budgeting                 |
-| `@mikesaintsg/rater`           | N/A                          | Factor-based rating engine                   |
-| `@mikesaintsg/actionloop`      | `ProceduralGraphInterface`   | Predictive workflow guidance                 |
+| Package                       | First Param (Required)                                 | Purpose                                      |
+|-------------------------------|--------------------------------------------------------|----------------------------------------------|
+| `@mikesaintsg/core`           | N/A                                                    | Shared types, interfaces, no implementations |
+| `@mikesaintsg/adapters`       | Varies by factory                                      | All adapter implementations                  |
+| `@mikesaintsg/inference`      | `ProviderAdapterInterface`                             | LLM generation engine                        |
+| `@mikesaintsg/vectorstore`    | `EmbeddingAdapterInterface`                            | Vector storage & search                      |
+| `@mikesaintsg/contextbuilder` | `TokenAdapterInterface` / `ToolFormatAdapterInterface` | Context assembly, tools & budgeting          |
+| `@mikesaintsg/rater`          | N/A                                                    | Factor-based rating engine                   |
+| `@mikesaintsg/actionloop`     | `ProceduralGraphInterface`                             | Predictive workflow guidance                 |
 
 ### Dependency Graph
 
@@ -5310,7 +5040,7 @@ Here's the final overview of all packages:
         ▼                    ▼                    ▼
 ┌───────────────┐  ┌─────────────────┐  ┌─────────────────┐
 │  @mikesaintsg/│  │  @mikesaintsg/  │  │  @mikesaintsg/  │
-│   adapters    │  │  contextbuilder │  │ contextprotocol │
+│   adapters    │  │  contextbuilder │  │   vectorstore   │
 └───────┬───────┘  └────────┬────────┘  └────────┬────────┘
         │                   │                    │
         │    ┌──────────────┴──────────────┐     │
@@ -5334,8 +5064,6 @@ Here's the final overview of all packages:
 | `types/inference/types.ts`       | Inference type definitions       |
 | `guides/vectorstore.md`          | VectorStore package guide        |
 | `types/vectorstore/types.ts`     | VectorStore type definitions     |
-| `guides/contextprotocol.md`      | ContextProtocol package guide    |
-| `types/contextprotocol/types.ts` | ContextProtocol type definitions |
 | `guides/contextbuilder.md`       | ContextBuilder package guide     |
 | `types/contextbuilder/types.ts`  | ContextBuilder type definitions  |
 | `guides/rater.md`                | Rater package guide              |

@@ -225,12 +225,17 @@ import {
 	createModelTokenAdapter,
 	createOpenAIToolFormatAdapter,
 	createCosineSimilarityAdapter,
+	createDeduplicationAdapter,
+	createPriorityTruncationAdapter,
 	// Persistence Adapters
 	createIndexedDBSessionAdapter,
 	createIndexedDBVectorPersistenceAdapter,
 	// Policy Adapters
 	createExponentialRetryAdapter,
 	createTokenBucketRateLimitAdapter,
+	createCircuitBreakerAdapter,
+	// Telemetry Adapters
+	createConsoleTelemetryAdapter,
 	// Enhancement Adapters
 	createLRUCacheAdapter,
 	createBatchAdapter,
@@ -242,11 +247,8 @@ import type { SessionInterface, GenerationResult, Message } from '@mikesaintsg/i
 import { createVectorStore } from '@mikesaintsg/vectorstore'
 import type { VectorStoreInterface, Document } from '@mikesaintsg/vectorstore'
 
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
-import type { ToolRegistryInterface } from '@mikesaintsg/contextprotocol'
-
-import { createContextManager } from '@mikesaintsg/contextbuilder'
-import type { ContextManagerInterface, BuiltContext } from '@mikesaintsg/contextbuilder'
+import { createContextManager, createToolRegistry } from '@mikesaintsg/contextbuilder'
+import type { ContextManagerInterface, BuiltContext, ToolRegistryInterface } from '@mikesaintsg/contextbuilder'
 
 import { createToolCallBridge, createRetrievalTool } from '@mikesaintsg/core'
 import type { Unsubscribe, ToolCall, ToolResult } from '@mikesaintsg/core'
@@ -327,6 +329,10 @@ export async function initializeApp(): Promise<AppState> {
 	
 	const similarityAdapter = createCosineSimilarityAdapter()
 	
+	// Context Builder Adapters - Handle deduplication and truncation
+	const deduplicationAdapter = createDeduplicationAdapter({ strategy: 'keep_latest' })
+	const truncationAdapter = createPriorityTruncationAdapter({ preserveSystem: true })
+	
 	// Persistence Adapters - Store and load data
 	const sessionPersistence = createIndexedDBSessionAdapter({
 		database,
@@ -358,6 +364,20 @@ export async function initializeApp(): Promise<AppState> {
 		maxConcurrent: 10,
 	})
 	
+	const circuitBreakerAdapter = createCircuitBreakerAdapter({
+		failureThreshold: 5,
+		resetTimeoutMs: 30000,
+		onStateChange: (state, previous) => {
+			console.log(`Circuit breaker: ${previous} → ${state}`)
+		},
+	})
+	
+	// Observability Adapters - Monitor and debug
+	const telemetryAdapter = createConsoleTelemetryAdapter({
+		level: 'info',
+		prefix: '[App]',
+	})
+	
 	// Enhancement Adapters - Add capabilities
 	const cacheAdapter = createLRUCacheAdapter({
 		maxSize: 10000,
@@ -386,6 +406,10 @@ export async function initializeApp(): Promise<AppState> {
 		// Policy (opt-in)
 		retry: retryAdapter,
 		rateLimit: rateLimitAdapter,
+		circuitBreaker: circuitBreakerAdapter,
+		
+		// Observability (opt-in)
+		telemetry: telemetryAdapter,
 		
 		// Configuration
 		deduplication: {
@@ -555,11 +579,8 @@ export async function initializeApp(): Promise<AppState> {
 			warningThreshold: config.budget.warningThreshold,
 			criticalThreshold:  0.95,
 		},
-		deduplication: {
-			strategy: 'keep_latest',
-			preservePinned: true,
-		},
-		truncationStrategy: 'priority',
+		deduplication: deduplicationAdapter,
+		truncation: truncationAdapter,
 		onBudgetChange: (state) => {
 			if (state.level === 'warning') {
 				console.warn(`[Context] Token budget at ${Math.round(state.usage * 100)}%`)
@@ -721,7 +742,7 @@ export async function ingestDocuments(
  * 
  * @param app - Application state
  * @param userMessage - The user's message
- * @param onToken - Callback for each token (for streamers UI)
+ * @param onToken - Callback for each token (for streaming UI)
  * @returns The complete response
  */
 export async function handleUserMessage(
@@ -794,7 +815,7 @@ export async function handleUserMessage(
 	}
 	
 	// ──────────────────────────────────────────────────────────────────────
-	// Step 6: Generate response with streamers
+	// Step 6: Generate response with streaming
 	// ──────────────────────────────────────────────────────────────────────
 	
 	// Create the tool call bridge for executing tools
@@ -821,7 +842,7 @@ export async function handleUserMessage(
 		toolChoice: 'auto',
 	})
 	
-	// Handle streamers tokens
+	// Handle streaming tokens
 	if (onToken) {
 		stream.onToken(onToken)
 	}
@@ -1125,7 +1146,7 @@ export function greet(name: string): string {
 }
 `, 'typescript')
 		
-		// Handle a user message with streamers
+		// Handle a user message with streaming
 		console.log('\n--- Conversation Start ---\n')
 		
 		const response1 = await handleUserMessage(
@@ -1407,8 +1428,7 @@ const results = await vectorStore.hybridSearch(query, {
 import { isEcosystemError } from '@mikesaintsg/core'
 import { isInferenceError, type InferenceErrorCode } from '@mikesaintsg/inference'
 import { isVectorStoreError } from '@mikesaintsg/vectorstore'
-import { isContextProtocolError } from '@mikesaintsg/contextprotocol'
-import { isContextBuilderError } from '@mikesaintsg/contextbuilder'
+import { isContextBuilderError, isToolRegistryError } from '@mikesaintsg/contextbuilder'
 
 async function safeGenerate(app: AppState, message: string): Promise<string> {
 	try {
@@ -1453,8 +1473,8 @@ async function safeGenerate(app: AppState, message: string): Promise<string> {
 			}
 		}
 		
-		// Handle context protocol errors
-		if (isContextProtocolError(error)) {
+		// Handle tool registry errors
+		if (isToolRegistryError(error)) {
 			if (error.code === 'TOOL_NOT_FOUND') {
 				console.warn(`Tool not found: ${error.toolName}`)
 				// Continue without the tool
@@ -1698,7 +1718,7 @@ describe('Full Integration', () => {
 			(token) => tokens.push(token)
 		)
 		
-		// Verify streamers worked
+		// Verify streaming worked
 		expect(tokens.length).toBeGreaterThan(0)
 		
 		// Verify response mentions Paris
@@ -1730,7 +1750,7 @@ test('chat interface', async ({ page }) => {
 	await page.fill('[data-testid="chat-input"]', 'Hello!')
 	await page.click('[data-testid="send-button"]')
 	
-	// Wait for streamers response
+	// Wait for streaming response
 	await expect(page.locator('[data-testid="message-assistant"]')).toBeVisible()
 	
 	// Verify response is not empty
@@ -1749,10 +1769,9 @@ This integration guide demonstrates how packages in the ecosystem work together:
 2. **Adapters** implements all adapter categories (source, persistence, transform, policy, enhancement)
 3. **Inference** handles LLM generation with streaming
 4. **VectorStore** provides RAG capabilities
-5. **ContextProtocol** manages tool calling
-6. **ContextBuilder** assembles and budgets context
-7. **Rater** provides factor-based rate calculations with conditions, lookups, and aggregation
-8. **ActionLoop** provides predictive workflow guidance with learned transitions
+5. **ContextBuilder** assembles context, budgets tokens, and manages tool calling
+6. **Rater** provides factor-based rate calculations with conditions, lookups, and aggregation
+7. **ActionLoop** provides predictive workflow guidance with learned transitions
 
 The key patterns are: 
 
@@ -2068,7 +2087,7 @@ The integration enables:
 - **Predictive UI**: ActionLoop predictions displayed as confidence-ranked action buttons
 - **Prompt Refinement**: Local small model parses ambiguous input into structured queries
 - **Contextual Assistance**: LLM receives ActionLoop state (predictions, events, patterns) for informed responses
-- **Tool Automation**: LLM executes tools via ContextProtocol, transitions recorded in ActionLoop
+- **Tool Automation**: LLM executes tools via ToolRegistry, transitions recorded in ActionLoop
 - **Cross-Tab Sync**: Broadcast synchronizes state and predictions across browser tabs
 
 ### Architecture
@@ -2092,8 +2111,7 @@ The integration enables:
 │  ├── @mikesaintsg/actionloop (workflow + predictions)                   │
 │  ├── @mikesaintsg/inference (LLM generation + streaming)                │
 │  ├── @mikesaintsg/vectorstore (RAG for documentation)                   │
-│  ├── @mikesaintsg/contextbuilder (context assembly + budget)            │
-│  ├── @mikesaintsg/contextprotocol (tool schemas + execution)            │
+│  ├── @mikesaintsg/contextbuilder (context + tools + budget)             │
 │  ├── @mikesaintsg/indexeddb (persistence)                               │
 │  └── @mikesaintsg/broadcast (cross-tab sync)                            │
 ├─────────────────────────────────────────────────────────────────────────┤
@@ -2200,7 +2218,7 @@ User Input
 │    • ActionLoop predictions + confidence                        │
 │    • Recent events + engagement                                 │
 │    • RAG results from VectorStore (if needed)                   │
-│    • Tool schemas from ContextProtocol                          │
+│    • Tool schemas from ToolRegistry                             │
 └─────────────────────────────────────────────────────────────────┘
     │
     ▼
@@ -2212,7 +2230,7 @@ User Input
     │
     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 4. Tool Execution (ContextProtocol)                             │
+│ 4. Tool Execution (ToolRegistry)                                │
 │    • Execute search_accounts, get_account_details, etc.         │
 │    • Record transition in ActionLoop                            │
 └─────────────────────────────────────────────────────────────────┘
@@ -2392,7 +2410,7 @@ await vectorStore.upsertDocument([
 #### 4. Tool Registry
 
 ```ts
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
+import { createToolRegistry } from '@mikesaintsg/contextbuilder'
 import { createOpenAIToolFormatAdapter } from '@mikesaintsg/adapters'
 
 const formatAdapter = createOpenAIToolFormatAdapter()

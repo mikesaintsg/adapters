@@ -51,6 +51,10 @@ import type {
 	EventStorePersistenceAdapterInterface,
 	WeightPersistenceAdapterInterface,
 	ExportedPredictiveGraph,
+	CircuitBreakerAdapterInterface,
+	CircuitBreakerConfig,
+	TelemetryAdapterInterface,
+	LogLevel,
 } from '@mikesaintsg/core'
 
 // ============================================================================
@@ -259,6 +263,28 @@ export interface TokenBucketRateLimitAdapterOptions {
 export interface SlidingWindowRateLimitAdapterOptions {
 	readonly requestsPerMinute?: number
 	readonly windowMs?: number
+}
+
+/** Circuit breaker adapter options */
+export interface CircuitBreakerAdapterOptions {
+	readonly failureThreshold?: number
+	readonly successThreshold?: number
+	readonly resetTimeoutMs?: number
+	readonly monitorWindowMs?: number
+	readonly onStateChange?: (state: 'closed' | 'open' | 'half-open', previous: 'closed' | 'open' | 'half-open') => void
+}
+
+/** Console telemetry adapter options */
+export interface ConsoleTelemetryAdapterOptions {
+	readonly level?: LogLevel
+	readonly prefix?: string
+	readonly includeTimestamp?: boolean
+	readonly includeSpanId?: boolean
+}
+
+/** No-op telemetry adapter options (for production where telemetry is disabled) */
+export interface NoOpTelemetryAdapterOptions {
+	readonly enabled?: boolean
 }
 
 // ============================================================================
@@ -1024,6 +1050,11 @@ export type CreateExponentialRetryAdapter = (options?: ExponentialRetryAdapterOp
 export type CreateLinearRetryAdapter = (options?: LinearRetryAdapterOptions) => RetryAdapterInterface
 export type CreateTokenBucketRateLimitAdapter = (options?: TokenBucketRateLimitAdapterOptions) => RateLimitAdapterInterface
 export type CreateSlidingWindowRateLimitAdapter = (options?: SlidingWindowRateLimitAdapterOptions) => RateLimitAdapterInterface
+export type CreateCircuitBreakerAdapter = (options?: CircuitBreakerAdapterOptions) => CircuitBreakerAdapterInterface
+
+// --- Telemetry Adapter Factories ---
+export type CreateConsoleTelemetryAdapter = (options?: ConsoleTelemetryAdapterOptions) => TelemetryAdapterInterface
+export type CreateNoOpTelemetryAdapter = (options?: NoOpTelemetryAdapterOptions) => TelemetryAdapterInterface
 
 // --- Enhancement Adapter Factories ---
 export type CreateLRUCacheAdapter = (options?: LRUCacheAdapterOptions) => EmbeddingCacheAdapterInterface

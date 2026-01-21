@@ -15,7 +15,8 @@
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
 - ✅ **ActionLoop Adapters** — Event and weight persistence for ActionLoop workflows
-- ✅ **Policy Adapters** — Retry and rate limiting strategies
+- ✅ **Policy Adapters** — Retry, rate limiting, and circuit breaker strategies
+- ✅ **Telemetry Adapters** — Console logging and no-op telemetry
 - ✅ **Enhancement Adapters** — Caching, batching for embeddings
 - ✅ **Transform Adapters** — Similarity scoring algorithms
 - ✅ **Context Builder Adapters** — Deduplication, truncation, priority
@@ -118,6 +119,9 @@ const embeddings = await embedding.embed(['Hello, world!'])
 | `createLinearRetryAdapter`             | Fixed delay retry                 |
 | `createTokenBucketRateLimitAdapter`    | Token bucket rate limiting        |
 | `createSlidingWindowRateLimitAdapter`  | Sliding window rate limiting      |
+| `createCircuitBreakerAdapter`          | Prevent cascading failures        |
+| `createConsoleTelemetryAdapter`        | Console logging telemetry         |
+| `createNoOpTelemetryAdapter`           | Disabled telemetry (production)   |
 
 ### Enhancement Adapters
 
@@ -130,13 +134,13 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Transform Adapters
 
-| Function                            | Description                  |
-|-------------------------------------|------------------------------|
-| `createOpenAIToolFormatAdapter`     | Convert to OpenAI format     |
-| `createAnthropicToolFormatAdapter`  | Convert to Anthropic format  |
-| `createCosineSimilarityAdapter`     | Cosine similarity scoring    |
-| `createDotSimilarityAdapter`        | Dot product similarity       |
-| `createEuclideanSimilarityAdapter`  | Euclidean distance similarity|
+| Function                           | Description                   |
+|------------------------------------|-------------------------------|
+| `createOpenAIToolFormatAdapter`    | Convert to OpenAI format      |
+| `createAnthropicToolFormatAdapter` | Convert to Anthropic format   |
+| `createCosineSimilarityAdapter`    | Cosine similarity scoring     |
+| `createDotSimilarityAdapter`       | Dot product similarity        |
+| `createEuclideanSimilarityAdapter` | Euclidean distance similarity |
 
 ### Context Builder Adapters
 
@@ -332,6 +336,65 @@ const rateLimit = createTokenBucketRateLimitAdapter({
   requestsPerMinute: 60,
   maxConcurrent: 10,
 })
+```
+
+### Circuit Breaker Adapter
+
+```ts
+import { createCircuitBreakerAdapter } from '@mikesaintsg/adapters'
+
+const circuitBreaker = createCircuitBreakerAdapter({
+  failureThreshold: 5,     // Open after 5 failures
+  successThreshold: 3,     // Close after 3 successes in half-open
+  resetTimeoutMs: 30000,   // Try half-open after 30s
+  onStateChange: (state, previous) => {
+    console.log(`Circuit ${previous} → ${state}`)
+  },
+})
+
+// Use with operations
+if (circuitBreaker.canExecute()) {
+  try {
+    const result = await circuitBreaker.execute(() => provider.generate(messages))
+  } catch (error) {
+    // Circuit will track failure automatically
+  }
+}
+
+// Get current state
+const state = circuitBreaker.getState()
+console.log(`Circuit: ${state.state}, failures: ${state.failureCount}`)
+```
+
+### Telemetry Adapters
+
+```ts
+import {
+  createConsoleTelemetryAdapter,
+  createNoOpTelemetryAdapter,
+} from '@mikesaintsg/adapters'
+
+// Console telemetry for development
+const telemetry = createConsoleTelemetryAdapter({
+  level: 'info',           // 'debug' | 'info' | 'warn' | 'error'
+  prefix: '[inference]',
+  includeTimestamp: true,
+})
+
+// Start a span for timing
+const span = telemetry.startSpan('generate', { model: 'gpt-4o' })
+try {
+  const result = await provider.generate(messages)
+  telemetry.endSpan(span, 'ok')
+} catch (error) {
+  telemetry.endSpan(span, 'error')
+}
+
+// Log a message
+telemetry.log('info', 'Request completed', { tokens: 100 })
+
+// No-op telemetry for production (performance)
+const noOpTelemetry = createNoOpTelemetryAdapter()
 ```
 
 ### Enhancement Adapters (Cache & Batch)
