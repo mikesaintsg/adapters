@@ -1,37 +1,45 @@
 /**
- * SSE Parser Tests
+ * SSEStreamer Tests
+ *
+ * Tests for the SSE streamer implementation.
  */
 
 import { describe, it, expect } from 'vitest'
-import { createSSEParserAdapter } from '@mikesaintsg/adapters'
+import { createSSEStreamer } from '@mikesaintsg/adapters'
 import type { SSEEvent } from '@mikesaintsg/core'
 
-describe('SSEParser', () => {
-	describe('createSSEParserAdapter', () => {
-		it('creates a parser adapter', () => {
-			const adapter = createSSEParserAdapter()
-			expect(adapter).toBeDefined()
-			expect(typeof adapter.createParser).toBe('function')
+describe('SSEStreamer', () => {
+	describe('createSSEStreamer', () => {
+		it('creates a streamer with onEvent callback', () => {
+			const events: SSEEvent[] = []
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
+			})
+			expect(streamer).toBeDefined()
+			expect(typeof streamer.feed).toBe('function')
+			expect(typeof streamer.end).toBe('function')
+			expect(typeof streamer.reset).toBe('function')
 		})
 
 		it('accepts custom delimiters', () => {
-			const adapter = createSSEParserAdapter({
+			const events: SSEEvent[] = []
+			const streamer = createSSEStreamer({
 				lineDelimiter: '\r\n',
 				eventDelimiter: '\r\n\r\n',
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
-			expect(adapter).toBeDefined()
+			expect(streamer).toBeDefined()
 		})
 	})
 
-	describe('SSEParser.feed', () => {
+	describe('feed', () => {
 		it('parses complete SSE event', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('data: {"token": "hello"}\n\n')
+			streamer.feed('data: {"token": "hello"}\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.data).toBe('{"token": "hello"}')
@@ -39,13 +47,12 @@ describe('SSEParser', () => {
 
 		it('handles chunked data across multiple feed calls', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('data: {"tok')
-			parser.feed('en": "hello"}\n\n')
+			streamer.feed('data: {"tok')
+			streamer.feed('en": "hello"}\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.data).toBe('{"token": "hello"}')
@@ -53,12 +60,11 @@ describe('SSEParser', () => {
 
 		it('parses multiple events in one chunk', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('data: first\n\ndata: second\n\ndata: third\n\n')
+			streamer.feed('data: first\n\ndata: second\n\ndata: third\n\n')
 
 			expect(events).toHaveLength(3)
 			expect(events[0]?.data).toBe('first')
@@ -68,12 +74,11 @@ describe('SSEParser', () => {
 
 		it('handles multi-line data fields', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('data: line1\ndata: line2\ndata: line3\n\n')
+			streamer.feed('data: line1\ndata: line2\ndata: line3\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.data).toBe('line1\nline2\nline3')
@@ -81,12 +86,11 @@ describe('SSEParser', () => {
 
 		it('parses event field', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('event: message\ndata: hello\n\n')
+			streamer.feed('event: message\ndata: hello\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.event).toBe('message')
@@ -95,12 +99,11 @@ describe('SSEParser', () => {
 
 		it('parses id field', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('id: 123\ndata: hello\n\n')
+			streamer.feed('id: 123\ndata: hello\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.id).toBe('123')
@@ -109,12 +112,11 @@ describe('SSEParser', () => {
 
 		it('parses retry field', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('retry: 5000\ndata: hello\n\n')
+			streamer.feed('retry: 5000\ndata: hello\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.retry).toBe(5000)
@@ -123,12 +125,11 @@ describe('SSEParser', () => {
 
 		it('handles all fields together', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('event: update\nid: abc-123\nretry: 3000\ndata: payload\n\n')
+			streamer.feed('event: update\nid: abc-123\nretry: 3000\ndata: payload\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.event).toBe('update')
@@ -139,12 +140,11 @@ describe('SSEParser', () => {
 
 		it('ignores invalid retry values', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('retry: invalid\ndata: hello\n\n')
+			streamer.feed('retry: invalid\ndata: hello\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.retry).toBeUndefined()
@@ -152,32 +152,30 @@ describe('SSEParser', () => {
 
 		it('handles empty data field', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('data:\n\n')
+			streamer.feed('data:\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.data).toBe('')
 		})
 	})
 
-	describe('SSEParser.end', () => {
+	describe('end', () => {
 		it('flushes remaining buffer on end', () => {
 			const events: SSEEvent[] = []
 			let ended = false
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 				onEnd: () => { ended = true },
 			})
 
-			parser.feed('data: final')
+			streamer.feed('data: final')
 			expect(events).toHaveLength(0)
 
-			parser.end()
+			streamer.end()
 			expect(events).toHaveLength(1)
 			expect(events[0]?.data).toBe('final')
 			expect(ended).toBe(true)
@@ -185,28 +183,26 @@ describe('SSEParser', () => {
 
 		it('calls onEnd callback', () => {
 			let ended = false
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
+			const streamer = createSSEStreamer({
 				onEvent: () => {},
 				onEnd: () => { ended = true },
 			})
 
-			parser.end()
+			streamer.end()
 			expect(ended).toBe(true)
 		})
 	})
 
-	describe('SSEParser.reset', () => {
+	describe('reset', () => {
 		it('clears buffer and current event', () => {
 			const events: SSEEvent[] = []
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
-				onEvent: (e) => events.push(e),
+			const streamer = createSSEStreamer({
+				onEvent: (e: SSEEvent) => events.push(e),
 			})
 
-			parser.feed('data: partial')
-			parser.reset()
-			parser.feed('data: new\n\n')
+			streamer.feed('data: partial')
+			streamer.reset()
+			streamer.feed('data: new\n\n')
 
 			expect(events).toHaveLength(1)
 			expect(events[0]?.data).toBe('new')
@@ -216,15 +212,14 @@ describe('SSEParser', () => {
 	describe('error handling', () => {
 		it('calls onError when event handler throws', () => {
 			let caughtError: Error | undefined
-			const adapter = createSSEParserAdapter()
-			const parser = adapter.createParser({
+			const streamer = createSSEStreamer({
 				onEvent: () => {
 					throw new Error('Handler error')
 				},
-				onError: (error) => { caughtError = error },
+				onError: (error: Error) => { caughtError = error },
 			})
 
-			parser.feed('data: test\n\n')
+			streamer.feed('data: test\n\n')
 
 			expect(caughtError).toBeDefined()
 			expect(caughtError?.message).toBe('Handler error')

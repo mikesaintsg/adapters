@@ -253,3 +253,13 @@ export const LOG_LEVEL_PRIORITY = {
 	info: 2,
 	debug: 3,
 } as const
+
+// ============================================================================
+// SSE Streamer Defaults
+// ============================================================================
+
+/** Default SSE line delimiter */
+export const DEFAULT_SSE_LINE_DELIMITER = '\n'
+
+/** Default SSE event delimiter */
+export const DEFAULT_SSE_EVENT_DELIMITER = '\n\n'

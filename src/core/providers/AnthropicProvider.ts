@@ -12,14 +12,15 @@ import type {
 	Message,
 	ProviderCapabilities,
 	FinishReason,
-	StreamerAdapterInterface,
-	SSEParserAdapterInterface,
 	SSEEvent,
 } from '@mikesaintsg/core'
 
 import type {
 	AnthropicProviderAdapterOptions,
 	AnthropicMessageStreamEvent,
+	TokenStreamerInterface,
+	CreateTokenStreamer,
+	CreateSSEStreamer,
 } from '../../types.js'
 
 import { createAdapterError } from '../../helpers.js'
@@ -30,8 +31,7 @@ import {
 	DEFAULT_ANTHROPIC_VERSION,
 	DEFAULT_ANTHROPIC_MAX_TOKENS,
 } from '../../constants.js'
-import { createSSEParserAdapter, createStreamerAdapter } from '../../factories.js'
-import { ProviderStreamHandle } from '../streamers/ProviderStreamHandle.js'
+import { createTokenStreamer, createSSEStreamer } from '../../factories.js'
 
 /**
  * Anthropic provider implementation.
@@ -42,16 +42,16 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 	readonly #apiKey: string
 	readonly #model: string
 	readonly #baseURL: string
-	readonly #streamer: StreamerAdapterInterface
-	readonly #sseParser: SSEParserAdapterInterface
+	readonly #tokenStreamerFactory: CreateTokenStreamer
+	readonly #sseStreamerFactory: CreateSSEStreamer
 
 	constructor(options: AnthropicProviderAdapterOptions) {
 		this.#id = crypto.randomUUID()
 		this.#apiKey = options.apiKey
 		this.#model = options.model ?? DEFAULT_ANTHROPIC_MODEL
 		this.#baseURL = options.baseURL ?? DEFAULT_ANTHROPIC_BASE_URL
-		this.#streamer = options.streamer ?? createStreamerAdapter()
-		this.#sseParser = options.sseParser ?? createSSEParserAdapter()
+		this.#tokenStreamerFactory = options.tokenStreamerFactory ?? createTokenStreamer
+		this.#sseStreamerFactory = options.sseStreamerFactory ?? createSSEStreamer
 	}
 
 	getId(): string {
@@ -65,17 +65,13 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 		const abortController = new AbortController()
 		const requestId = crypto.randomUUID()
 
-		// Create stream handle using shared ProviderStreamHandle
-		const handle = new ProviderStreamHandle(
-			requestId,
-			abortController,
-			this.#streamer,
-		)
+		// Create token streamer for this request using factory
+		const streamer = this.#tokenStreamerFactory(requestId, abortController)
 
-		// Start async streamers
-		void this.#executeGeneration(messages, options, handle, abortController.signal)
+		// Start async streaming
+		void this.#executeGeneration(messages, options, streamer, abortController.signal)
 
-		return handle
+		return streamer
 	}
 
 	supportsTools(): boolean {
@@ -99,7 +95,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		handle: ProviderStreamHandle,
+		streamer: TokenStreamerInterface,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -107,17 +103,17 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 
 			if (!response.ok) {
 				const error = await this.#handleErrorResponse(response)
-				handle.setError(error)
+				streamer.setError(error)
 				return
 			}
 
-			await this.#processStream(response, handle)
+			await this.#processStream(response, streamer)
 		} catch (error) {
 			if (signal.aborted) {
-				handle.setAborted()
+				streamer.setAborted()
 			} else {
 				const mappedError = this.#mapNetworkError(error instanceof Error ? error : new Error(String(error)))
-				handle.setError(mappedError)
+				streamer.setError(mappedError)
 			}
 		}
 	}
@@ -257,19 +253,19 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 
 	async #processStream(
 		response: Response,
-		handle: ProviderStreamHandle,
+		streamer: TokenStreamerInterface,
 	): Promise<void> {
 		const reader = response.body?.getReader()
 		if (reader === undefined) {
-			handle.setError(createAdapterError('NETWORK_ERROR', 'No response body'))
+			streamer.setError(createAdapterError('NETWORK_ERROR', 'No response body'))
 			return
 		}
 
 		const decoder = new TextDecoder()
-		const parser = this.#sseParser.createParser({
-			onEvent: (event) => this.#handleSSEEvent(event, handle),
-			onError: (error) => handle.setError(error),
-			onEnd: () => handle.complete(),
+		const sseStreamer = this.#sseStreamerFactory({
+			onEvent: (event) => this.#handleSSEEvent(event, streamer),
+			onError: (error) => streamer.setError(error),
+			onEnd: () => streamer.complete(),
 		})
 
 		try {
@@ -278,21 +274,21 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 				if (done) break
 
 				const chunk = decoder.decode(value, { stream: true })
-				parser.feed(chunk)
+				sseStreamer.feed(chunk)
 			}
-			parser.end()
+			sseStreamer.end()
 		} catch (error) {
 			if (error instanceof Error && error.name === 'AbortError') {
-				handle.setAborted()
+				streamer.setAborted()
 			} else {
-				handle.setError(error instanceof Error ? error : new Error(String(error)))
+				streamer.setError(error instanceof Error ? error : new Error(String(error)))
 			}
 		} finally {
 			reader.releaseLock()
 		}
 	}
 
-	#handleSSEEvent(event: SSEEvent, handle: ProviderStreamHandle): void {
+	#handleSSEEvent(event: SSEEvent, streamer: TokenStreamerInterface): void {
 		const data = event.data.trim()
 
 		// Skip empty events
@@ -304,7 +300,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 			switch (parsed.type) {
 				case 'content_block_start':
 					if (parsed.content_block?.type === 'tool_use') {
-						handle.startToolCall(
+						streamer.startToolCall(
 							parsed.index ?? 0,
 							parsed.content_block.id ?? '',
 							parsed.content_block.name ?? '',
@@ -314,9 +310,9 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 
 				case 'content_block_delta':
 					if (parsed.delta?.type === 'text_delta' && parsed.delta.text !== undefined) {
-						handle.emitToken(parsed.delta.text)
+						streamer.emit(parsed.delta.text)
 					} else if (parsed.delta?.type === 'input_json_delta' && parsed.delta.partial_json !== undefined) {
-						handle.appendToolCallArguments(parsed.index ?? 0, parsed.delta.partial_json)
+						streamer.appendToolCallArguments(parsed.index ?? 0, parsed.delta.partial_json)
 					}
 					break
 
@@ -329,13 +325,13 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 					if (parsed.delta !== undefined && 'stop_reason' in parsed.delta) {
 						const stopReason = (parsed.delta as { stop_reason?: string }).stop_reason
 						if (stopReason !== undefined) {
-							handle.setFinishReason(this.#mapFinishReason(stopReason))
+							streamer.setFinishReason(this.#mapFinishReason(stopReason))
 						}
 					}
 					break
 
 				case 'message_stop':
-					handle.complete()
+					streamer.complete()
 					break
 
 				case 'message_start':
@@ -343,7 +339,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 					if ('message' in parsed) {
 						const message = parsed as unknown as { message?: { usage?: { input_tokens?: number; output_tokens?: number } } }
 						if (message.message?.usage !== undefined) {
-							handle.setUsage({
+							streamer.setUsage({
 								promptTokens: message.message.usage.input_tokens ?? 0,
 								completionTokens: message.message.usage.output_tokens ?? 0,
 								totalTokens: (message.message.usage.input_tokens ?? 0) + (message.message.usage.output_tokens ?? 0),
@@ -355,7 +351,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 				case 'error':
 					if ('error' in parsed) {
 						const errorData = parsed as unknown as { error?: { message?: string } }
-						handle.setError(createAdapterError('SERVICE_ERROR', errorData.error?.message ?? 'Unknown error'))
+						streamer.setError(createAdapterError('SERVICE_ERROR', errorData.error?.message ?? 'Unknown error'))
 					}
 					break
 			}

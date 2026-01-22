@@ -14,9 +14,8 @@
 - ✅ **Embedding Adapters** — OpenAI, Voyage, Ollama, node-llama-cpp, and HuggingFace Transformers for text embeddings
 - ✅ **Tool Format Adapters** — Convert tool schemas between provider formats
 - ✅ **Persistence Adapters** — IndexedDB, OPFS, and HTTP for vector storage
-- ✅ **ActionLoop Adapters** — Event and weight persistence for ActionLoop workflows
 - ✅ **Policy Adapters** — Retry, rate limiting, and circuit breaker strategies
-- ✅ **Telemetry Adapters** — Console logging and no-op telemetry
+- ✅ **Telemetry Adapters** — Console logging
 - ✅ **Enhancement Adapters** — Caching, batching for embeddings
 - ✅ **Transform Adapters** — Similarity scoring algorithms
 - ✅ **Context Builder Adapters** — Deduplication, truncation, priority

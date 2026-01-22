@@ -9,8 +9,6 @@
 // ============================================================================
 
 import type {
-	StreamerAdapterInterface,
-	SSEParserAdapterInterface,
 	ProviderAdapterInterface,
 	EmbeddingAdapterInterface,
 	RetryAdapterInterface,
@@ -25,8 +23,6 @@ import type {
 	DeduplicationAdapterInterface,
 	PriorityAdapterInterface,
 	TruncationAdapterInterface,
-	SSEParserOptions,
-	SSEParserInterface,
 	CircuitBreakerAdapterInterface,
 	TelemetryAdapterInterface,
 } from '@mikesaintsg/core'
@@ -56,11 +52,13 @@ import type {
 	OPFSVectorPersistenceOptions,
 	PriorityAdapterOptions,
 	SlidingWindowRateLimitAdapterOptions,
-	SSEParserAdapterOptions,
 	TokenBucketRateLimitAdapterOptions,
 	TruncationAdapterOptions,
 	TTLCacheAdapterOptions,
 	VoyageEmbeddingAdapterOptions,
+	TokenStreamerInterface,
+	SSEStreamerInterface,
+	SSEStreamerOptions,
 } from './types.js'
 
 // ============================================================================
@@ -68,7 +66,7 @@ import type {
 // ============================================================================
 
 // Streamers
-import { Streamer, SSEParser, ProviderStreamHandle } from './core/streamers/index.js'
+import { TokenStreamer, SSEStreamer } from './core/streamers/index.js'
 
 // Providers
 import {
@@ -139,83 +137,63 @@ import { DEFAULT_CACHE_STORE_NAME, DEFAULT_INDEXEDDB_CACHE_TTL_MS } from './cons
 // ============================================================================
 
 /**
- * Create a streamer adapter for token emission.
+ * Create a token streamer for managing streaming generation.
  *
- * @returns A streamer adapter instance
- *
- * @example
- * ```ts
- * const streamer = createStreamerAdapter()
- * const unsub = streamer.onToken((token) => console.log(token))
- * streamer.emit('Hello')
- * streamer.emit(' world')
- * streamer.end()
- * unsub()
- * ```
- */
-export function createStreamerAdapter(): StreamerAdapterInterface {
-	return new Streamer()
-}
-
-/**
- * Create an SSE parser adapter.
- *
- * @param options - Optional parser configuration
- * @returns An SSE parser adapter instance
- *
- * @example
- * ```ts
- * const sseAdapter = createSSEParserAdapter()
- *
- * const parser = sseAdapter.createParser({
- *   onEvent: (event) => console.log(event.data),
- *   onEnd: () => console.log('Done'),
- * })
- *
- * parser.feed('data: {"content": "Hello"}\n\n')
- * parser.end()
- * ```
- */
-export function createSSEParserAdapter(
-	options?: SSEParserAdapterOptions,
-): SSEParserAdapterInterface {
-	const lineDelimiter = options?.lineDelimiter ?? '\n'
-	const eventDelimiter = options?.eventDelimiter ?? '\n\n'
-
-	return {
-		createParser(parserOptions: SSEParserOptions): SSEParserInterface {
-			return new SSEParser(parserOptions, lineDelimiter, eventDelimiter)
-		},
-	}
-}
-
-/**
- * Create a provider stream handle for managing streaming generation.
+ * TokenStreamer is the main streaming primitive that providers create and return.
+ * It handles token accumulation, tool call building, and result collection.
  *
  * @param requestId - Unique request identifier
  * @param abortController - Abort controller for cancellation
- * @param streamer - Streamer adapter for token emission
- * @returns ProviderStreamHandle instance
+ * @returns TokenStreamerInterface implementation
  *
  * @example
  * ```ts
- * const handle = createProviderStreamHandle(
+ * const streamer = createTokenStreamer(
  *   crypto.randomUUID(),
  *   new AbortController(),
- *   createStreamerAdapter(),
  * )
+ * streamer.emit('Hello')
+ * streamer.emit(' world')
+ * streamer.complete()
  *
- * handle.emitToken('Hello')
- * handle.emitToken(' world')
- * handle.complete()
+ * const result = await streamer.result()
+ * console.log(result.text) // 'Hello world'
  * ```
  */
-export function createProviderStreamHandle(
+export function createTokenStreamer(
 	requestId: string,
 	abortController: AbortController,
-	streamer: StreamerAdapterInterface,
-): ProviderStreamHandle {
-	return new ProviderStreamHandle(requestId, abortController, streamer)
+): TokenStreamerInterface {
+	return new TokenStreamer(requestId, abortController)
+}
+
+/**
+ * Create an SSE streamer for parsing Server-Sent Events.
+ *
+ * SSEStreamer is a stateful parser that processes chunked SSE data.
+ * Providers use this internally to parse SSE streams from APIs.
+ *
+ * @param options - SSE streamer configuration with event callbacks
+ * @returns SSEStreamerInterface implementation
+ *
+ * @example
+ * ```ts
+ * const sseStreamer = createSSEStreamer({
+ *   onEvent: (event) => {
+ *     if (event.data === '[DONE]') return
+ *     const chunk = JSON.parse(event.data)
+ *     tokenStreamer.emit(chunk.content)
+ *   },
+ *   onEnd: () => tokenStreamer.complete(),
+ * })
+ *
+ * // Feed SSE chunks from response body
+ * sseStreamer.feed('data: {"content": "Hello"}\n\n')
+ * sseStreamer.end()
+ * ```
+ */
+export function createSSEStreamer(options: SSEStreamerOptions): SSEStreamerInterface {
+	return new SSEStreamer(options)
 }
 
 // ============================================================================

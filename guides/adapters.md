@@ -245,25 +245,24 @@ All provider adapters stream by default. Streaming adapters handle the token emi
 
 **Key principles:**
 
-1. **Streamers are universal** — All providers emit tokens through `StreamerAdapterInterface`
-2. **SSE parsers are for server-side only** — Used by OpenAI, Anthropic (not Ollama, local providers)
-3. **Default adapters provided** — `createStreamerAdapter()` and `createSSEParserAdapter()` are used internally
-4. **Custom adapters optional** — Pass `streamer` or `sseParser` option to use your own implementation
-5. **No streaming flags** — No `stream: true`, no `supportsStreaming()` checks
+1. **TokenStreamer is the main primitive** — Providers create TokenStreamers per-request
+2. **SSEStreamer is for server-side APIs** — Used by OpenAI, Anthropic (not Ollama, local providers)
+3. **Factories for customization** — Pass `tokenStreamerFactory` or `sseStreamerFactory` to use custom implementations
+4. **No streaming flags** — No `stream: true`, no `supportsStreaming()` checks
 
 ### Streaming Adapters
 
-Streaming adapters are first-class adapters in the ecosystem. Interfaces are defined in `@mikesaintsg/core`, implementations in `@mikesaintsg/adapters`.
+Streaming adapters are composable primitives for token emission and SSE parsing.
 
-| Adapter    | Interface                   | Factory                    | Purpose                               |
-|------------|-----------------------------|----------------------------|---------------------------------------|
-| Streamer   | `StreamerAdapterInterface`  | `createStreamerAdapter()`  | Universal token emission              |
-| SSE Parser | `SSEParserAdapterInterface` | `createSSEParserAdapter()` | Parse SSE streams (OpenAI, Anthropic) |
+| Adapter       | Interface                | Factory                 | Purpose                       |
+|---------------|--------------------------|-------------------------|-------------------------------|
+| TokenStreamer | `TokenStreamerInterface` | `createTokenStreamer()` | Token accumulation & emission |
+| SSEStreamer   | `SSEStreamerInterface`   | `createSSEStreamer()`   | Parse SSE streams             |
 
-Both follow the same opt-in pattern as other adapters:
-- Default implementation provided internally
-- Optional custom adapter via options (`sseParser`, `streamer`)
-- Interfaces in core, implementations in adapters
+Both follow the factory pattern:
+- Default factories provided internally by providers
+- Optional custom factories via options (`tokenStreamerFactory`, `sseStreamerFactory`)
+- Interfaces in adapters, implementations composable
 
 ### Opt-In Design
 
@@ -567,70 +566,72 @@ const provider = createHuggingFaceProviderAdapter({
 
 ## Streaming Adapters
 
-Streaming adapters handle token emission during LLM generation. They are first-class adapters with interfaces defined in `@mikesaintsg/core` and implementations in `@mikesaintsg/adapters`.
+Streaming adapters handle token emission and SSE parsing during LLM generation. The streaming architecture uses two composable primitives:
+
+- **TokenStreamer** — Accumulates tokens, manages subscriptions, builds final results
+- **SSEStreamer** — Parses Server-Sent Events chunks into events
 
 ### Adapter Overview
 
-| Adapter    | Interface                   | Factory                    | Purpose                  | Used By           |
-|------------|-----------------------------|----------------------------|--------------------------|-------------------|
-| Streamer   | `StreamerAdapterInterface`  | `createStreamerAdapter()`  | Universal token emission | All providers     |
-| SSE Parser | `SSEParserAdapterInterface` | `createSSEParserAdapter()` | Parse SSE streams        | OpenAI, Anthropic |
+| Adapter       | Interface                 | Factory                  | Purpose                       |
+|---------------|---------------------------|--------------------------|-------------------------------|
+| TokenStreamer | `TokenStreamerInterface`  | `createTokenStreamer()`  | Token accumulation & emission |
+| SSEStreamer   | `SSEStreamerInterface`    | `createSSEStreamer()`    | Parse SSE streams             |
 
-### StreamerAdapterInterface
+### TokenStreamer
 
-The streamer adapter provides a universal token emission interface. All provider adapters emit tokens through a streamer.
+The TokenStreamer is the main streaming primitive. It implements `StreamHandleInterface` (consumer-facing) with additional producer methods for providers.
+
+**Consumer API:** (from `StreamHandleInterface`)
+- `result()` — Get final generation result
+- `abort()` — Cancel the stream
+- `onToken(callback)` — Subscribe to tokens
+- `onComplete(callback)` — Subscribe to completion
+- `onError(callback)` — Subscribe to errors
+- `[Symbol.asyncIterator]` — Iterate over tokens
+
+**Producer API:** (for providers)
+- `emit(token)` — Emit a token
+- `appendText(text)` — Append text without emitting
+- `startToolCall()`, `appendToolCallArguments()`, `updateToolCall()` — Build tool calls
+- `setFinishReason()`, `setUsage()` — Set metadata
+- `complete()`, `setError()`, `setAborted()` — Signal completion
 
 ```ts
-import { createStreamerAdapter } from '@mikesaintsg/adapters'
-import type { StreamerAdapterInterface } from '@mikesaintsg/core'
+import { createTokenStreamer } from '@mikesaintsg/adapters'
 
-const streamer: StreamerAdapterInterface = createStreamerAdapter()
+// Providers create TokenStreamers internally
+const abortController = new AbortController()
+const streamer = createTokenStreamer('request-123', abortController)
 
-// Subscribe to tokens
-const unsubscribe = streamer.onToken((token) => {
-	process.stdout.write(token)
-})
+// Consumer usage (what users see)
+streamer.onToken((token: string) => process.stdout.write(token))
 
-// Use with provider (tokens emitted internally)
-const provider = createOpenAIProviderAdapter({
-	apiKey: process.env.OPENAI_API_KEY!,
-	model: 'gpt-4o',
-	streamer, // Custom streamer
-})
+// Producer usage (internal to providers)
+streamer.emit('Hello')
+streamer.emit(' world')
+streamer.complete()
 
-// Cleanup
-unsubscribe()
+const result = await streamer.result()
+console.log(result.text) // 'Hello world'
 ```
 
-### SSEParserAdapterInterface
+### SSEStreamer
 
-The SSE parser adapter handles Server-Sent Events streaming format used by server-side LLM providers.
-
-**Used by:** OpenAI, Anthropic, and other API-based providers using SSE format.
-
-**NOT used by:** Ollama (uses NDJSON), node-llama-cpp (direct emission), HuggingFace (TextStreamer callback).
+The SSEStreamer parses Server-Sent Events format used by OpenAI and Anthropic APIs.
 
 ```ts
-import { createSSEParserAdapter } from '@mikesaintsg/adapters'
-import type { SSEParserAdapterInterface } from '@mikesaintsg/core'
+import { createSSEStreamer } from '@mikesaintsg/adapters'
+import type { SSEEvent } from '@mikesaintsg/core'
 
-const sseAdapter: SSEParserAdapterInterface = createSSEParserAdapter({
-	lineDelimiter: '\n',
-	eventDelimiter: '\n\n',
-})
-
-// Create parser for a stream
-const parser = sseAdapter.createParser({
-	onEvent: (event) => {
-		const data = JSON.parse(event.data)
-		console.log('Content:', data.choices[0]?.delta?.content)
+const sseStreamer = createSSEStreamer({
+	onEvent: (event: SSEEvent) => {
+		if (event.data === '[DONE]') return
+		const chunk = JSON.parse(event.data)
+		console.log('Content:', chunk.choices[0]?.delta?.content)
 	},
-	onError: (error) => {
-		console.error('Parse error:', error)
-	},
-	onEnd: () => {
-		console.log('Stream complete')
-	},
+	onError: (error: Error) => console.error('Parse error:', error),
+	onEnd: () => console.log('Stream complete'),
 })
 
 // Feed chunks from fetch response
@@ -644,23 +645,58 @@ const decoder = new TextDecoder()
 while (true) {
 	const { done, value } = await reader.read()
 	if (done) break
-	parser.feed(decoder.decode(value))
+	sseStreamer.feed(decoder.decode(value, { stream: true }))
 }
 
-parser.end()
+sseStreamer.end()
+```
+
+### Custom Streamer Factories
+
+Providers accept factory functions so you can plug in custom implementations:
+
+```ts
+import {
+	createOpenAIProviderAdapter,
+	createTokenStreamer,
+	createSSEStreamer,
+} from '@mikesaintsg/adapters'
+import type { CreateTokenStreamer, CreateSSEStreamer } from '@mikesaintsg/adapters'
+
+// Custom token streamer factory with logging
+const customTokenFactory: CreateTokenStreamer = (requestId, abortController) => {
+	console.log(`Creating streamer for request: ${requestId}`)
+	return createTokenStreamer(requestId, abortController)
+}
+
+// Custom SSE streamer factory with custom delimiters
+const customSSEFactory: CreateSSEStreamer = (options) => {
+	return createSSEStreamer({
+		...options,
+		lineDelimiter: '\r\n',
+		eventDelimiter: '\r\n\r\n',
+	})
+}
+
+const provider = createOpenAIProviderAdapter({
+	apiKey: process.env.OPENAI_API_KEY!,
+	tokenStreamerFactory: customTokenFactory,
+	sseStreamerFactory: customSSEFactory,
+})
 ```
 
 ### File Structure
 
-Streaming adapter implementations are in `src/streamers/`:
+Streaming implementations are in `src/core/streamers/`:
 
 ```
 @mikesaintsg/adapters/
   src/
-    streamers/
-      streamer.ts       # createStreamerAdapter()
-      sse-parser.ts     # createSSEParserAdapter()
-      index.ts          # Barrel exports
+    core/
+      streamers/
+        TokenStreamer.ts   # createTokenStreamer()
+        SSEStreamer.ts     # createSSEStreamer()
+        index.ts           # Barrel exports
 ```
 
 ---

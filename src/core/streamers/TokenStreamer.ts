@@ -1,37 +1,35 @@
 /**
- * Provider Stream Handle
+ * Token Streamer
  *
- * A reusable stream handle implementation for provider adapters.
+ * A complete stream handle implementation for provider adapters.
  * Handles token streaming, result collection, and subscription management.
+ * This is the unified streamer that combines token emission with stream handle functionality.
  */
 
 import type {
-	StreamHandleInterface,
-	StreamerAdapterInterface,
 	GenerationResult,
 	ToolCall,
 	FinishReason,
 	UsageStats,
 	Unsubscribe,
 } from '@mikesaintsg/core'
-import type { ToolCallAccumulator } from '../../types.js'
+import type { TokenStreamerInterface, ToolCallAccumulator, ToolCallDelta } from '../../types.js'
 
 /**
- * Provider stream handle implementation.
+ * Token streamer implementation.
  *
- * This class provides a reusable stream handle that can be used by any
- * provider adapter. It handles:
- * - Token accumulation and emission via streamer
+ * This class provides a complete stream handle that manages:
+ * - Token emission and subscription
+ * - Text accumulation
  * - Tool call accumulation (for providers that support tool calling)
  * - Finish reason and usage stats tracking
  * - Subscription management for onToken, onComplete, onError
  * - AsyncIterator implementation for for-await-of loops
  * - Result promise for await handle.result()
  */
-export class ProviderStreamHandle implements StreamHandleInterface {
+export class TokenStreamer implements TokenStreamerInterface {
 	readonly requestId: string
 	readonly #abortController: AbortController
-	readonly #streamer: StreamerAdapterInterface
 
 	#text = ''
 	#toolCalls = new Map<number, ToolCallAccumulator>()
@@ -39,22 +37,22 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 	#usage: UsageStats | undefined
 	#aborted = false
 	#completed = false
+	#ended = false
+
+	#tokenListeners = new Set<(token: string) => void>()
+	#completeCallbacks = new Set<(result: GenerationResult) => void>()
+	#errorCallbacks = new Set<(error: Error) => void>()
 
 	#resultResolve: ((result: GenerationResult) => void) | undefined
 	#resultReject: ((error: Error) => void) | undefined
 	#resultPromise: Promise<GenerationResult>
 
-	#completeCallbacks = new Set<(result: GenerationResult) => void>()
-	#errorCallbacks = new Set<(error: Error) => void>()
-
 	constructor(
 		requestId: string,
 		abortController: AbortController,
-		streamer: StreamerAdapterInterface,
 	) {
 		this.requestId = requestId
 		this.#abortController = abortController
-		this.#streamer = streamer
 
 		this.#resultPromise = new Promise<GenerationResult>((resolve, reject) => {
 			this.#resultResolve = resolve
@@ -71,7 +69,7 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 		let resolveNext: ((value: IteratorResult<string>) => void) | undefined
 		let done = false
 
-		this.#streamer.onToken((token: string) => {
+		this.onToken((token: string) => {
 			if (resolveNext !== undefined) {
 				resolveNext({ value: token, done: false })
 				resolveNext = undefined
@@ -120,7 +118,8 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 	}
 
 	onToken(callback: (token: string) => void): Unsubscribe {
-		return this.#streamer.onToken(callback)
+		this.#tokenListeners.add(callback)
+		return () => { this.#tokenListeners.delete(callback) }
 	}
 
 	onComplete(callback: (result: GenerationResult) => void): Unsubscribe {
@@ -134,15 +133,18 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 	}
 
 	// ========================================================================
-	// Methods for Provider to Call
+	// Token Emission Methods
 	// ========================================================================
 
 	/**
 	 * Emit a token to all subscribers and accumulate in result text.
 	 */
-	emitToken(token: string): void {
+	emit(token: string): void {
+		if (this.#ended) return
 		this.#text += token
-		this.#streamer.emit(token)
+		for (const listener of this.#tokenListeners) {
+			listener(token)
+		}
 	}
 
 	/**
@@ -158,6 +160,10 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 	getText(): string {
 		return this.#text
 	}
+
+	// ========================================================================
+	// Tool Call Methods
+	// ========================================================================
 
 	/**
 	 * Start a new tool call at the given index.
@@ -179,11 +185,7 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 	/**
 	 * Update tool call with incremental delta (OpenAI-style).
 	 */
-	updateToolCall(index: number, delta: {
-		readonly id?: string | undefined
-		readonly name?: string | undefined
-		readonly arguments?: string | undefined
-	}): void {
+	updateToolCall(index: number, delta: ToolCallDelta): void {
 		const existing = this.#toolCalls.get(index)
 		if (existing === undefined) {
 			this.#toolCalls.set(index, {
@@ -195,57 +197,6 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 			if (delta.id !== undefined) existing.id = delta.id
 			if (delta.name !== undefined) existing.name = delta.name
 			if (delta.arguments !== undefined) existing.arguments += delta.arguments
-		}
-	}
-
-	/**
-	 * Set the finish reason.
-	 */
-	setFinishReason(reason: FinishReason): void {
-		this.#finishReason = reason
-	}
-
-	/**
-	 * Set usage statistics.
-	 */
-	setUsage(usage: UsageStats): void {
-		this.#usage = usage
-	}
-
-	/**
-	 * Signal an error occurred.
-	 */
-	setError(error: Error): void {
-		this.#completed = true
-		this.#streamer.end()
-		this.#resultReject?.(error)
-		for (const callback of this.#errorCallbacks) {
-			callback(error)
-		}
-	}
-
-	/**
-	 * Signal the request was aborted.
-	 */
-	setAborted(): void {
-		this.#aborted = true
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-	}
-
-	/**
-	 * Signal generation is complete.
-	 */
-	complete(): void {
-		if (this.#completed) return
-		this.#completed = true
-		this.#streamer.end()
-		const result = this.#buildResult()
-		this.#resultResolve?.(result)
-		for (const callback of this.#completeCallbacks) {
-			callback(result)
 		}
 	}
 
@@ -266,6 +217,65 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 		}
 	}
 
+	// ========================================================================
+	// State Setters
+	// ========================================================================
+
+	/**
+	 * Set the finish reason.
+	 */
+	setFinishReason(reason: FinishReason): void {
+		this.#finishReason = reason
+	}
+
+	/**
+	 * Set usage statistics.
+	 */
+	setUsage(usage: UsageStats): void {
+		this.#usage = usage
+	}
+
+	/**
+	 * Signal an error occurred.
+	 */
+	setError(error: Error): void {
+		this.#completed = true
+		this.#end()
+		this.#resultReject?.(error)
+		for (const callback of this.#errorCallbacks) {
+			callback(error)
+		}
+	}
+
+	/**
+	 * Signal the request was aborted.
+	 */
+	setAborted(): void {
+		this.#aborted = true
+		this.#completed = true
+		this.#end()
+		const result = this.#buildResult()
+		this.#resultResolve?.(result)
+	}
+
+	/**
+	 * Signal generation is complete.
+	 */
+	complete(): void {
+		if (this.#completed) return
+		this.#completed = true
+		this.#end()
+		const result = this.#buildResult()
+		this.#resultResolve?.(result)
+		for (const callback of this.#completeCallbacks) {
+			callback(result)
+		}
+	}
+
+	// ========================================================================
+	// State Checkers
+	// ========================================================================
+
 	/**
 	 * Check if generation is completed.
 	 */
@@ -283,6 +293,11 @@ export class ProviderStreamHandle implements StreamHandleInterface {
 	// ========================================================================
 	// Private Methods
 	// ========================================================================
+
+	#end(): void {
+		this.#ended = true
+		this.#tokenListeners.clear()
+	}
 
 	#buildResult(): GenerationResult {
 		const toolCalls: ToolCall[] = []

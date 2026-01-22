@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createOpenAIProviderAdapter, createStreamerAdapter } from '@mikesaintsg/adapters'
+import { createOpenAIProviderAdapter, createTokenStreamer } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
 import { createSSEResponse, createErrorResponse } from '../../setup.js'
 
@@ -83,7 +83,7 @@ describe('OpenAIProvider', () => {
 			const tokens: string[] = []
 			const stream = provider.generate(messages, {})
 
-			stream.onToken((token) => tokens.push(token))
+			stream.onToken((token: string) => tokens.push(token))
 
 			const result = await stream.result()
 
@@ -156,7 +156,7 @@ describe('OpenAIProvider', () => {
 			expect(result.aborted).toBe(true)
 		})
 
-		it('uses custom streamer', async() => {
+		it('uses custom token streamer factory', async() => {
 			const mockResponse = createSSEResponse([
 				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
 				'data: [DONE]\n\n',
@@ -164,13 +164,15 @@ describe('OpenAIProvider', () => {
 
 			vi.mocked(fetch).mockResolvedValue(mockResponse)
 
-			const customStreamer = createStreamerAdapter()
-			const tokens: string[] = []
-			customStreamer.onToken((t) => tokens.push(t))
+			const factoryCalls: string[] = []
+			const customFactory = (requestId: string, abortController: AbortController) => {
+				factoryCalls.push(requestId)
+				return createTokenStreamer(requestId, abortController)
+			}
 
 			const provider = createOpenAIProviderAdapter({
 				apiKey: 'test-key',
-				streamer: customStreamer,
+				tokenStreamerFactory: customFactory,
 			})
 
 			const messages: Message[] = [
@@ -185,7 +187,7 @@ describe('OpenAIProvider', () => {
 			const stream = provider.generate(messages, {})
 			await stream.result()
 
-			expect(tokens).toEqual(['Hello'])
+			expect(factoryCalls).toHaveLength(1)
 		})
 	})
 

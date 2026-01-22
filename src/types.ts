@@ -45,16 +45,18 @@ import type {
 	FramePriority,
 	SessionPersistenceInterface,
 	ProviderAdapterInterface,
-	StreamerAdapterInterface,
-	SSEParserAdapterInterface,
 	SerializedSession,
 	EventStorePersistenceAdapterInterface,
 	WeightPersistenceAdapterInterface,
 	ExportedPredictiveGraph,
 	CircuitBreakerAdapterInterface,
-	CircuitBreakerConfig,
 	TelemetryAdapterInterface,
 	LogLevel,
+	ToolCall,
+	FinishReason,
+	UsageStats,
+	SSEEvent,
+	StreamHandleInterface,
 } from '@mikesaintsg/core'
 
 // ============================================================================
@@ -102,8 +104,8 @@ export interface OpenAIProviderAdapterOptions {
 	readonly baseURL?: string
 	readonly organization?: string
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
-	readonly sseParser?: SSEParserAdapterInterface
+	readonly tokenStreamerFactory?: CreateTokenStreamer
+	readonly sseStreamerFactory?: CreateSSEStreamer
 }
 
 /** Anthropic provider adapter options */
@@ -112,8 +114,8 @@ export interface AnthropicProviderAdapterOptions {
 	readonly model?: string
 	readonly baseURL?: string
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
-	readonly sseParser?: SSEParserAdapterInterface
+	readonly tokenStreamerFactory?: CreateTokenStreamer
+	readonly sseStreamerFactory?: CreateSSEStreamer
 }
 
 /** Ollama provider adapter options */
@@ -123,7 +125,7 @@ export interface OllamaProviderAdapterOptions {
 	readonly keepAlive?: boolean | string
 	readonly timeout?: number
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
+	readonly tokenStreamerFactory?: CreateTokenStreamer
 }
 
 /** Common Ollama chat models */
@@ -385,13 +387,136 @@ export interface PriorityAdapterOptions {
 }
 
 // ============================================================================
-// 10. Streaming Adapter Options
+// 10. Streaming Types
 // ============================================================================
 
-/** SSE parser adapter options */
-export interface SSEParserAdapterOptions {
+/**
+ * Tool call accumulator for building tool calls incrementally.
+ * Used internally by TokenStreamer to accumulate streaming tool call deltas.
+ */
+export interface ToolCallAccumulator {
+	id: string
+	name: string
+	arguments: string
+}
+
+/**
+ * Tool call delta for incremental updates.
+ * Providers emit these during streaming to build tool calls piece by piece.
+ */
+export interface ToolCallDelta {
+	readonly id?: string | undefined
+	readonly name?: string | undefined
+	readonly arguments?: string | undefined
+}
+
+/**
+ * TokenStreamer interface.
+ *
+ * Extends StreamHandleInterface (consumer-facing) with producer methods
+ * that providers use to emit tokens, accumulate state, and complete the stream.
+ *
+ * This is the main streaming primitive that providers create and return.
+ */
+export interface TokenStreamerInterface extends StreamHandleInterface {
+	/** Unique request identifier */
+	readonly requestId: string
+
+	// --- Producer Methods (for providers to call) ---
+
+	/** Emit a token to subscribers and accumulate in result text */
+	emit(token: string): void
+
+	/** Append text without emitting (for non-streaming accumulation) */
+	appendText(text: string): void
+
+	/** Get the accumulated text so far */
+	getText(): string
+
+	/** Start a new tool call at the given index */
+	startToolCall(index: number, id: string, name: string): void
+
+	/** Append arguments JSON to a tool call at the given index */
+	appendToolCallArguments(index: number, json: string): void
+
+	/** Update tool call with incremental delta */
+	updateToolCall(index: number, delta: ToolCallDelta): void
+
+	/** Set tool calls directly (for non-streaming tool call responses) */
+	setToolCalls(toolCalls: readonly ToolCall[]): void
+
+	/** Set the finish reason */
+	setFinishReason(reason: FinishReason): void
+
+	/** Set usage statistics */
+	setUsage(usage: UsageStats): void
+
+	/** Signal an error occurred */
+	setError(error: Error): void
+
+	/** Signal the request was aborted */
+	setAborted(): void
+
+	/** Signal generation is complete */
+	complete(): void
+
+	// --- State Checkers ---
+
+	/** Check if generation is completed */
+	isCompleted(): boolean
+
+	/** Check if generation was aborted */
+	isAborted(): boolean
+}
+
+/**
+ * SSE Streamer interface.
+ *
+ * A stateful SSE parser that processes chunked SSE data and emits events.
+ * Providers use this internally to parse SSE streams from APIs.
+ */
+export interface SSEStreamerInterface {
+	/** Feed a chunk of SSE data to parse */
+	feed(chunk: string): void
+
+	/** Signal end of stream, flush any remaining buffer */
+	end(): void
+
+	/** Reset parser state */
+	reset(): void
+}
+
+/**
+ * SSE Streamer options.
+ *
+ * Configuration and callbacks for SSE parsing.
+ */
+export interface SSEStreamerOptions {
+	/** Custom line delimiter (default: '\n') */
 	readonly lineDelimiter?: string
+
+	/** Custom event delimiter (default: '\n\n') */
 	readonly eventDelimiter?: string
+
+	/** Called for each parsed SSE event */
+	readonly onEvent: (event: SSEEvent) => void
+
+	/** Called when parsing errors occur */
+	readonly onError?: (error: Error) => void
+
+	/** Called when stream ends */
+	readonly onEnd?: () => void
+}
+
+/**
+ * Mutable SSE event for internal parsing.
+ * Used internally by SSEStreamer to build events incrementally.
+ */
+export interface MutableSSEEvent {
+	event?: string
+	data?: string
+	id?: string
+	retry?: number
 }
 
 // ============================================================================
@@ -685,14 +810,6 @@ export interface SessionRecord {
 	readonly timestamp: number
 }
 
-/** Mutable SSE event for building events */
-export interface MutableSSEEvent {
-	event?: string
-	data?: string
-	id?: string
-	retry?: number
-}
-
 /** IndexedDB cache entry */
 export interface IndexedDBCacheEntry {
 	readonly id: string
@@ -713,13 +830,6 @@ export interface TTLCacheEntry {
 	readonly expiresAt: number
 }
 
-/** Tool call accumulator for building tool calls incrementally */
-export interface ToolCallAccumulator {
-	id: string
-	name: string
-	arguments: string
-}
-
 /** IndexedDB cache interface with async methods */
 export interface IndexedDBCacheAdapterInterface {
 	get(text: string): Promise<Embedding | undefined>
@@ -735,8 +845,12 @@ export interface IndexedDBCacheAdapterInterface {
 // ============================================================================
 
 // --- Streaming Adapter Factories ---
-export type CreateStreamerAdapter = () => StreamerAdapterInterface
-export type CreateSSEParserAdapter = (options?: SSEParserAdapterOptions) => SSEParserAdapterInterface
+export type CreateTokenStreamer = (
+	requestId: string,
+	abortController: AbortController,
+) => TokenStreamerInterface
+
+export type CreateSSEStreamer = (options: SSEStreamerOptions) => SSEStreamerInterface
 
 // --- Provider Adapter Factories ---
 export type CreateOpenAIProviderAdapter = (options: OpenAIProviderAdapterOptions) => ProviderAdapterInterface

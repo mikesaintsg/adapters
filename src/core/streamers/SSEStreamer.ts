@@ -1,22 +1,24 @@
 /**
- * SSE Parser Adapter
+ * SSE Streamer
  *
  * Implementation for parsing Server-Sent Events.
- * Used by server-side providers (OpenAI, Anthropic) for streamers.
+ * Used by server-side providers (OpenAI, Anthropic) for streaming responses.
  */
 
-import type {
-	SSEEvent,
-	SSEParserOptions,
-	SSEParserInterface,
-} from '@mikesaintsg/core'
-import type { MutableSSEEvent } from '../../types.js'
+import type { SSEEvent } from '@mikesaintsg/core'
+import type { SSEStreamerInterface, SSEStreamerOptions, MutableSSEEvent } from '../../types.js'
+import {
+	DEFAULT_SSE_LINE_DELIMITER,
+	DEFAULT_SSE_EVENT_DELIMITER,
+} from '../../constants.js'
 
 /**
- * Internal SSE parser implementation.
+ * SSE Streamer implementation.
+ *
  * Handles stateful parsing of chunked SSE data.
+ * Providers use this internally to parse SSE streams from APIs.
  */
-export class SSEParser implements SSEParserInterface {
+export class SSEStreamer implements SSEStreamerInterface {
 	#buffer = ''
 	#currentEvent: MutableSSEEvent = {}
 	readonly #onEvent: (event: SSEEvent) => void
@@ -25,16 +27,12 @@ export class SSEParser implements SSEParserInterface {
 	readonly #lineDelimiter: string
 	readonly #eventDelimiter: string
 
-	constructor(
-		options: SSEParserOptions,
-		lineDelimiter: string,
-		eventDelimiter: string,
-	) {
+	constructor(options: SSEStreamerOptions) {
 		this.#onEvent = options.onEvent
 		this.#onError = options.onError
 		this.#onEnd = options.onEnd
-		this.#lineDelimiter = lineDelimiter
-		this.#eventDelimiter = eventDelimiter
+		this.#lineDelimiter = options.lineDelimiter ?? DEFAULT_SSE_LINE_DELIMITER
+		this.#eventDelimiter = options.eventDelimiter ?? DEFAULT_SSE_EVENT_DELIMITER
 	}
 
 	feed(chunk: string): void {
