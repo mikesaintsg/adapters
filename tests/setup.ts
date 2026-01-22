@@ -5,7 +5,6 @@
  * Consolidated mocks and helpers for all test files.
  */
 
-import { vi } from 'vitest'
 import type {
 	ContextFrame,
 	MinimalDatabaseAccess,
@@ -18,101 +17,6 @@ import type {
 	TransitionEvent,
 	ExportedPredictiveGraph,
 } from '@mikesaintsg/core'
-import type {
-	HuggingFaceFeatureExtractionPipeline,
-	HuggingFaceTensor,
-	HuggingFaceTextGenerationPipeline,
-	HuggingFaceTextGenerationOutput,
-	NodeLlamaCppEmbeddingContext,
-	NodeLlamaCppContext,
-	NodeLlamaCppContextSequence,
-	NodeLlamaCppModel,
-} from '@mikesaintsg/adapters'
-
-// ============================================================================
-// HuggingFace Mock Helpers
-// ============================================================================
-
-/**
- * Creates a mock HuggingFace tensor for testing embedding adapters.
- */
-export function createMockTensor(data: number[][]): HuggingFaceTensor {
-	const firstRow = data[0]
-	const dims = firstRow ? [data.length, firstRow.length] : [0, 0]
-	return {
-		data: new Float32Array(data.flat()),
-		dims,
-		type: 'float32',
-		size: data.flat().length,
-		tolist: () => data,
-		dispose: vi.fn(),
-	}
-}
-
-/**
- * Creates a mock HuggingFace feature extraction pipeline for testing.
- */
-export function createMockFeatureExtractionPipeline(): HuggingFaceFeatureExtractionPipeline {
-	return vi.fn() as unknown as HuggingFaceFeatureExtractionPipeline
-}
-
-/**
- * Creates a mock HuggingFace text generation pipeline for testing.
- */
-export function createMockTextGenerationPipeline(
-	outputs: readonly HuggingFaceTextGenerationOutput[],
-): HuggingFaceTextGenerationPipeline {
-	return vi.fn().mockResolvedValue(outputs) as unknown as HuggingFaceTextGenerationPipeline
-}
-
-// ============================================================================
-// NodeLlamaCpp Mock Helpers
-// ============================================================================
-
-/**
- * Creates a mock NodeLlamaCpp embedding context for testing.
- */
-export function createMockEmbeddingContext(): NodeLlamaCppEmbeddingContext {
-	return {
-		getEmbeddingFor: vi.fn(),
-	}
-}
-
-/**
- * Creates a mock NodeLlamaCpp context for provider testing.
- */
-export function createMockNodeLlamaCppContext(tokens: number[]): NodeLlamaCppContext {
-	const mockSequence: NodeLlamaCppContextSequence = {
-		// eslint-disable-next-line @typescript-eslint/require-await
-		async *evaluate(): AsyncGenerator<number, void, unknown> {
-			for (const token of tokens) {
-				yield token
-			}
-		},
-	}
-
-	const mockModel: NodeLlamaCppModel = {
-		tokenize: vi.fn().mockReturnValue([1, 2, 3]),
-		detokenize: vi.fn().mockImplementation((ids: readonly number[]) => {
-			return ids.map((id) => {
-				if (id === 1) return 'Hello'
-				if (id === 2) return ' '
-				if (id === 3) return 'world'
-				if (id === 999) return ''
-				return String(id)
-			}).join('')
-		}),
-		tokens: {
-			bos: 0,
-			eos: 999,
-		},
-	}
-
-	return {
-		getSequence: vi.fn().mockReturnValue(mockSequence),
-		model: mockModel,
-	}
-}
 
 // ============================================================================
 // Persistence Mock Helpers

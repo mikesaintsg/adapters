@@ -15,14 +15,16 @@
 7. [Streaming](#streaming)
 8. [Tools and Function Calling](#tools-and-function-calling)
 9. [Token Counting](#token-counting)
-10. [Context Integration](#context-integration)
-11. [Error Handling](#error-handling)
-12. [TypeScript Integration](#typescript-integration)
-13. [Browser Compatibility](#browser-compatibility)
-14. [Performance Tips](#performance-tips)
-15. [Integration with Ecosystem](#integration-with-ecosystem)
-16. [API Reference](#api-reference)
-17. [License](#license)
+10. [Model Orchestrator](#model-orchestrator)
+11. [Intent Detector](#intent-detector)
+12. [Context Integration](#context-integration)
+13. [Error Handling](#error-handling)
+14. [TypeScript Integration](#typescript-integration)
+15. [Browser Compatibility](#browser-compatibility)
+16. [Performance Tips](#performance-tips)
+17. [Integration with Ecosystem](#integration-with-ecosystem)
+18. [API Reference](#api-reference)
+19. [License](#license)
 
 ---
 
@@ -62,7 +64,7 @@
 | StreamHandleInterface         | core            | Shared interface definition  |
 | Provider implementations      | adapters        | OpenAI, Anthropic, Ollama    |
 | Persistence adapters          | adapters        | IndexedDB, HTTP, OPFS        |
-| Tool registry and routing     | contextprotocol | Separate package             |
+| Tool registry and routing     | contextbuilder  | `createToolRegistry()`       |
 | Context assembly              | contextbuilder  | Builds BuiltContext          |
 
 ---
@@ -213,6 +215,42 @@ const engine = createEngine(provider, {
 	// Policy (opt-in)
 	retry: retryAdapter,
 	rateLimit: rateLimitAdapter,
+	circuitBreaker: circuitBreakerAdapter,
+	// Observability (opt-in)
+	telemetry: telemetryAdapter,
+})
+```
+
+### With Fault Tolerance
+
+```ts
+import { createEngine } from '@mikesaintsg/inference'
+import {
+	createOpenAIProviderAdapter,
+	createExponentialRetryAdapter,
+	createCircuitBreakerAdapter,
+	createConsoleTelemetryAdapter,
+} from '@mikesaintsg/adapters'
+
+const provider = createOpenAIProviderAdapter({
+	apiKey: process.env.OPENAI_API_KEY!,
+	model: 'gpt-4o',
+})
+
+const engine = createEngine(provider, {
+	// Retry transient failures with exponential backoff
+	retry: createExponentialRetryAdapter({
+		maxAttempts: 3,
+		initialDelayMs: 1000,
+		maxDelayMs: 10000,
+	}),
+	// Prevent cascading failures
+	circuitBreaker: createCircuitBreakerAdapter({
+		failureThreshold: 5,
+		resetTimeoutMs: 30000,
+	}),
+	// Log operations for debugging
+	telemetry: createConsoleTelemetryAdapter({ level: 'info' }),
 })
 ```
 
@@ -277,6 +315,71 @@ stream.abort()
 // Or abort by request ID
 engine.abort(stream.requestId)
 ```
+
+### Retry Logic
+
+When a retry adapter is configured, the `generate()` method automatically retries failed requests:
+
+```ts
+import { createEngine } from '@mikesaintsg/inference'
+import { createRetryAdapter } from '@mikesaintsg/adapters'
+
+const retry = createRetryAdapter({
+	maxAttempts: 3,
+	initialDelayMs: 1000,
+	backoffMultiplier: 2,
+	maxDelayMs: 30_000,
+})
+
+const engine = createEngine(provider, { retry })
+
+// Automatically retries on transient failures
+const result = await engine.generate([
+	{ role: 'user', content: 'Hello!' }
+])
+```
+
+The retry adapter interface:
+
+| Method | Description |
+|--------|-------------|
+| `shouldRetry(error, attempt)` | Returns true if the error should trigger a retry |
+| `getDelay(attempt)` | Returns delay in ms before next retry |
+| `getMaxAttempts()` | Maximum number of retry attempts |
+| `onRetry?(error, attempt, delayMs)` | Optional callback called before each retry |
+
+**Note:** Retry logic only applies to `generate()`, not `stream()`. For streaming, handle retries manually.
+
+### Rate Limiting
+
+When a rate limit adapter is configured, the `stream()` method waits for a slot before starting:
+
+```ts
+import { createEngine } from '@mikesaintsg/inference'
+import { createRateLimitAdapter } from '@mikesaintsg/adapters'
+
+const rateLimit = createRateLimitAdapter({
+	requestsPerMinute: 60,
+	maxConcurrent: 10,
+})
+
+const engine = createEngine(provider, { rateLimit })
+
+// Automatically waits for a slot, releases when done
+const handle = engine.stream([{ role: 'user', content: 'Hello!' }])
+await handle.result()
+```
+
+The rate limit adapter interface:
+
+| Method | Description |
+|--------|-------------|
+| `acquire()` | Waits for a slot, resolves when acquired |
+| `release()` | Releases the slot for other requests |
+| `getState()` | Returns current rate limit state |
+| `setLimit(requestsPerMinute)` | Dynamically adjust rate limit |
+
+Slots are automatically released on success or error.
 
 ---
 
@@ -492,13 +595,13 @@ if (final) {
 
 ## Tools and Function Calling
 
-Inference supports tool calling for LLM function execution. Tools are registered with contextprotocol and the bridge connects them to inference.
+Inference supports tool calling for LLM function execution. Tools are registered with contextbuilder's ToolRegistry and the bridge connects them to inference.
 
 ### Basic Tool Usage
 
 ```ts
 import { createEngine } from '@mikesaintsg/inference'
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
+import { createToolRegistry } from '@mikesaintsg/contextbuilder'
 import { 
 	createOpenAIProviderAdapter,
 	createOpenAIToolFormatAdapter,
@@ -657,6 +760,254 @@ const tokenCounter = createTokenCounter({
 const engine = createEngine(provider, {
 	token: tokenCounter,
 })
+```
+
+---
+
+## Model Orchestrator
+
+The Model Orchestrator provides progressive model loading and tier-based generation for optimal latency and quality balance.
+
+### Concept
+
+The orchestrator manages multiple LLM tiers:
+
+| Tier       | Purpose        | Typical Models             | Use Case                       |
+|------------|----------------|----------------------------|--------------------------------|
+| `fast`     | Lowest latency | SmolLM2-360M, Phi-1.5      | Intent detection, simple tasks |
+| `balanced` | Good balance   | Phi-3.5-mini, Qwen2.5-1.5B | Most interactions              |
+| `powerful` | Best quality   | GPT-4o, Claude-3.5         | Complex reasoning              |
+
+### Creating a Model Orchestrator
+
+```ts
+import { createModelOrchestrator } from '@mikesaintsg/inference'
+import { 
+	createHuggingFaceProviderAdapter,
+	createOpenAIProviderAdapter 
+} from '@mikesaintsg/adapters'
+
+const orchestrator = createModelOrchestrator({
+	// Fast tier: local model loads first
+	fastProvider: createHuggingFaceProviderAdapter({
+		pipeline: await loadPipeline('SmolLM2-360M-Instruct'),
+		modelName: 'smollm2-360m',
+	}),
+	
+	// Balanced tier: larger local model
+	balancedProvider: createHuggingFaceProviderAdapter({
+		pipeline: await loadPipeline('Phi-3.5-mini'),
+		modelName: 'phi-3.5-mini',
+	}),
+	
+	// Powerful tier: API model for complex tasks
+	powerfulProvider: createOpenAIProviderAdapter({
+		apiKey: process.env.OPENAI_API_KEY!,
+		model: 'gpt-4o',
+	}),
+	
+	// Selection strategy
+	strategy: 'local-first', // Prefer local, escalate if needed
+	
+	// Preload the fast tier on creation
+	preloadOnCreate: ['fast'],
+	
+	// Escalation settings
+	complexityThreshold: 0.5,
+	escalationTimeoutMs: 5000,
+})
+```
+
+### Selection Strategies
+
+```ts
+// Auto: Orchestrator chooses based on complexity
+{ strategy: 'auto' }
+
+// Local-only: Never use API models
+{ strategy: 'local-only' }
+
+// API-only: Always use API (remote) models
+{ strategy: 'api-only' }
+
+// Local-first: Try local, escalate to API if needed
+{ strategy: 'local-first' }
+```
+
+### Generating with the Orchestrator
+
+```ts
+// Simple generation - orchestrator selects tier
+const result = await orchestrator.generate('What is 2 + 2?')
+console.log(result.text) // "4"
+console.log(result.tier) // "fast"
+console.log(result.latencyMs) // 45
+
+// Force a specific tier
+const complexResult = await orchestrator.generate(
+	'Analyze this code for security vulnerabilities...',
+	{ forceTier: 'powerful' }
+)
+console.log(complexResult.tier) // "powerful"
+
+// With system prompt and tools
+const toolResult = await orchestrator.generate(
+	'Get the weather in Seattle',
+	{
+		system: 'You are a helpful assistant with access to tools.',
+		tools: [weatherToolSchema],
+		temperature: 0.3,
+	}
+)
+
+if (toolResult.toolCalls?.length) {
+	// Handle tool calls
+}
+```
+
+### Preloading Models
+
+```ts
+// Preload a specific tier
+await orchestrator.preload('balanced')
+
+// Preload all tiers
+await orchestrator.preloadAll()
+
+// Check model status
+const info = orchestrator.getModelInfo('fast')
+if (info?.state === 'ready') {
+	console.log('Fast model ready!')
+}
+```
+
+### Subscribing to Events
+
+```ts
+// Model state changes
+orchestrator.onModelStateChange((tier, state) => {
+	console.log(`${tier} model: ${state}`)
+})
+
+// Model switches (escalation)
+orchestrator.onModelSwitch((from, to, reason) => {
+	console.log(`Escalated from ${from} to ${to}: ${reason}`)
+})
+
+// Loading progress
+orchestrator.onLoadProgress((tier, progress) => {
+	console.log(`Loading ${tier}: ${(progress * 100).toFixed(1)}%`)
+})
+
+// Clean up
+orchestrator.destroy()
+```
+
+### Complexity Estimation
+
+The orchestrator estimates prompt complexity to select the appropriate tier:
+
+```ts
+const complexity = orchestrator.estimateComplexity(prompt)
+console.log(`Complexity: ${complexity}`) // 0.0 - 1.0
+
+const suggestedTier = orchestrator.selectTier(complexity)
+console.log(`Suggested tier: ${suggestedTier}`)
+```
+
+---
+
+## Intent Detector
+
+The Intent Detector classifies user input to determine the appropriate action (search, question, action, navigation).
+
+### Creating an Intent Detector
+
+```ts
+import { createIntentDetector, createModelOrchestrator } from '@mikesaintsg/inference'
+
+// Intent detector uses the orchestrator for classification
+const detector = createIntentDetector({
+	orchestrator,
+	confidenceThreshold: 0.7,
+})
+```
+
+### Detecting Intent
+
+```ts
+const result = await detector.detect('show me accounts with failed payments')
+
+console.log(result.intent) // 'search'
+console.log(result.confidence) // 0.92
+console.log(result.refinedPrompt) // 'accounts where payment_status = failed'
+console.log(result.processingTimeMs) // 23
+console.log(result.modelTier) // 'fast'
+```
+
+### Intent Types
+
+| Intent | Description | Example Input |
+|--------|-------------|---------------|
+| `search` | User wants to find/filter data | "show me overdue invoices" |
+| `question` | User is asking a question | "what is the status of order 123?" |
+| `action` | User wants to perform an action | "send reminder to John" |
+| `navigation` | User wants to go somewhere | "go to settings" |
+| `unclear` | Intent cannot be determined | "asdf" |
+
+### Handling Intents
+
+```ts
+const result = await detector.detect(userInput)
+
+switch (result.intent) {
+	case 'search':
+		// Parse as structured query and execute search
+		const query = parseQuery(result.refinedPrompt)
+		const results = await executeSearch(query)
+		displayResults(results)
+		break
+		
+	case 'question':
+		// Send to LLM for answering
+		const answer = await engine.generate([
+			{ role: 'user', content: result.refinedPrompt }
+		])
+		displayAnswer(answer.text)
+		break
+		
+	case 'action':
+		// Parse action and execute
+		const action = parseAction(result.refinedPrompt)
+		await executeAction(action)
+		break
+		
+	case 'navigation':
+		// Navigate to the requested page
+		const page = parseNavigation(result.refinedPrompt)
+		router.push(page)
+		break
+		
+	case 'unclear':
+		// Ask for clarification
+		promptClarification(result.original)
+		break
+}
+```
+
+### Refining Prompts
+
+After detecting intent, you can further refine the prompt:
+
+```ts
+const result = await detector.detect('find accounts that haven\'t paid')
+
+// Refine for a specific intent if needed
+const refined = await detector.refine(
+	result.original,
+	'search'
+)
+console.log(refined) // 'accounts WHERE payment_status != paid'
 ```
 
 ---
@@ -930,11 +1281,11 @@ const context = createContextBuilder()
 const result = await engine.generateFromContext(context)
 ```
 
-### With ContextProtocol
+### With Tool Registry
 
 ```ts
 import { createEngine } from '@mikesaintsg/inference'
-import { createToolRegistry } from '@mikesaintsg/contextprotocol'
+import { createToolRegistry } from '@mikesaintsg/contextbuilder'
 import { createToolCallBridge } from '@mikesaintsg/adapters'
 
 const engine = createEngine(provider)

@@ -106,9 +106,6 @@ export const DEFAULT_TIMEOUT_MS = 30000
 /** Default Ollama timeout in ms */
 export const DEFAULT_OLLAMA_TIMEOUT_MS = 120000
 
-/** Default node-llama-cpp timeout in ms */
-export const DEFAULT_NODE_LLAMA_CPP_TIMEOUT_MS = 120000
-
 // ============================================================================
 // Embedding Defaults
 // ============================================================================
@@ -222,19 +219,6 @@ export const DEFAULT_VOYAGE_EMBEDDING_MODELS_DIMENSIONS: Readonly<Record<string,
 	'voyage-law-2': 1024,
 	'voyage-multilingual-2': 1024,
 } as const
-
-// ============================================================================
-// ActionLoop Defaults
-// ============================================================================
-
-/** Default ActionLoop event store name for IndexedDB */
-export const DEFAULT_ACTIONLOOP_EVENT_STORE = 'actionloop_events'
-
-/** Default ActionLoop weight store name for IndexedDB */
-export const DEFAULT_ACTIONLOOP_WEIGHT_STORE = 'actionloop_weights'
-
-/** Default maximum events for in-memory event persistence */
-export const DEFAULT_ACTIONLOOP_MAX_EVENTS = 10000
 
 // ============================================================================
 // Circuit Breaker Defaults

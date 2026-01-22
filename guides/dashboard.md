@@ -1,6 +1,6 @@
 # Account Management Dashboard — Interface Design Guide
 
-> **Unified input design with smart intent detection for account management applications.**
+> **Unified input design with smart intent detection and human-agent collaboration for account management applications.**
 
 ---
 
@@ -8,7 +8,7 @@
 
 The unified input approach combines search, questions, and actions into a single natural language interface. This design leverages the @mikesaintsg ecosystem's capabilities:
 
-- **ActionLoop** predictions guide users with contextual suggestions
+- **WorkflowBuilder** enables human-agent collaboration with shared workflow state
 - **Inference** handles intent detection with progressive model loading
 - **VectorStore** enables semantic search across account data
 - **ContextBuilder** assembles context for AI-powered responses
@@ -24,14 +24,14 @@ The unified input approach combines search, questions, and actions into a single
 | **Slash Commands**  | Power user efficiency, discoverable, explicit intent                | Learning curve, requires memorization         | Developer tools, Notion-like apps |
 | **Mode Toggle**     | Clear modes, explicit context                                       | Extra click, mode confusion                   | Hybrid applications               |
 
-### Recommendation: Unified Input with Smart Intent Detection
+### Recommendation: Unified Input with Human-Agent Collaboration
 
 A unified input is the recommended approach:
 
-1. **ActionLoop predicts intent** — The predictive graph learns user patterns, making intent detection more accurate over time
+1. **WorkflowBuilder tracks workflow state** — Both human and agent see the same plan
 2. **Fast local model handles parsing** — The fast tier model quickly classifies intent
-3. **Modern UX expectations** — Users expect natural language interfaces
-4. **Reduced cognitive load** — One input field is simpler than choosing between search and prompt
+3. **Human can queue actions** — Add, modify, or remove steps while agent works
+4. **Agent checks back** — Verifies plan before each action, respecting human changes
 
 ---
 
@@ -45,13 +45,14 @@ A unified input is the recommended approach:
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  🔮 SUGGESTED ACTIONS                                    [Refresh]  │   │
+│  │  📋 WORKFLOW STATUS                                      [Expand]   │   │
+│  │  Step 2/4: Analyze Accounts │ Agent executing │ 40% complete        │   │
 │  │  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐          │   │
-│  │  │ 📊 Billing     │ │ ⚙️ Settings    │ │ 👤 Profile     │          │   │
-│  │  │ 85% confident  │ │ 62% confident  │ │ 41% confident  │          │   │
+│  │  │ 🔍 Search      │ │ 📊 Analyze     │ │ ✉️ Notify      │          │   │
+│  │  │ ✓ Complete     │ │ ⏳ In Progress │ │ ⏸️ Pending     │          │   │
 │  │  │ ────────────── │ │ ────────────── │ │ ────────────── │          │   │
-│  │  │ You usually    │ │ Common after   │ │ Update pending │          │   │
-│  │  │ check this now │ │ billing        │ │                │          │   │
+│  │  │ Found 3        │ │ Agent working  │ │ [Queue Now]    │          │   │
+│  │  │ accounts       │ │ [Interject]    │ │                │          │   │
 │  │  └────────────────┘ └────────────────┘ └────────────────┘          │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
@@ -66,16 +67,16 @@ A unified input is the recommended approach:
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  INTERPRETATION                                          [Edit] ✏️   │   │
+│  │  AGENT PLAN                                           [Modify] ✏️    │   │
 │  │                                                                      │   │
-│  │  ✨ Detected:  SEARCH                                                 │   │
+│  │  🤖 Agent proposes:                                                  │   │
 │  │  ┌─────────────────────────────────────────────────────────────┐    │   │
-│  │  │ Query: payment_status = 'failed' AND date >= '2025-01-01'   │    │   │
-│  │  │ Sort: amount DESC                                           │    │   │
-│  │  │ Limit: 10                                                   │    │   │
+│  │  │ 1. Calculate risk scores for 3 accounts                    │    │   │
+│  │  │ 2. Generate priority recommendations                        │    │   │
+│  │  │ 3. Draft outreach emails [Requires approval]                │    │   │
 │  │  └─────────────────────────────────────────────────────────────┘    │   │
 │  │                                                                      │   │
-│  │  [Execute Search] [Ask AI Instead] [Modify Query]                   │   │
+│  │  [Approve Plan] [Modify Plan] [Queue Action Before]                 │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -93,36 +94,39 @@ A unified input is the recommended approach:
 
 ## Detailed Component Specifications
 
-### 1. Suggested Actions Bar (ActionLoop Predictions)
+### 1. Workflow Status Bar (WorkflowBuilder State)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  🔮 SUGGESTED ACTIONS                              [Refresh] [Collapse] │
+│  📋 WORKFLOW STATUS                     [Pause Agent] [View History]    │
 ├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Progress: ████████░░░░░░░░░░░░ 40% │ Step 2 of 4              │   │
+│  │  Current: Analyze Accounts │ Actor: Agent │ Est: 2 min remaining │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐            │
 │  │                │  │                │  │                │            │
-│  │   📊           │  │   ⚙️           │  │   👤           │            │
-│  │   Billing      │  │   Settings     │  │   Profile      │            │
+│  │   🔍           │  │   📊           │  │   ✉️           │            │
+│  │   Search       │  │   Analyze      │  │   Notify       │            │
 │  │                │  │                │  │                │            │
-│  │  ████████░░    │  │  ██████░░░░    │  │  ████░░░░░░    │            │
-│  │  85%           │  │  62%           │  │  41%           │            │
-│  │                │  │                │  │                │  ← scroll  │
-│  │  You usually   │  │  Common after  │  │  Profile needs │  → for     │
-│  │  visit here    │  │  dashboard     │  │  update        │    more    │
-│  │  at this time  │  │                │  │                │            │
-│  │                │  │                │  │                │            │
+│  │  ✓ Complete    │  │  ⏳ Active     │  │  ⏸️ Pending    │  ← scroll  │
+│  │  by human      │  │  agent working │  │                │  → for     │
+│  │                │  │                │  │  [Queue Action]│    more    │
+│  │                │  │  [Interject]   │  │                │            │
 │  └────────────────┘  └────────────────┘  └────────────────┘            │
 │                                                                         │
-│  Based on your patterns • Last 30 days • [View insights]               │
+│  Queue: [human:review_first] → [agent:calculate_risk] → [agent:draft]  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Design Principles:**
-- **Confidence as Progress Bar**: Visual representation is faster to scan than numbers
-- **Reasoning Visible**: Brief explanation builds trust in predictions
-- **Horizontal Scroll**: Allows more predictions without vertical space
-- **Collapsible**:  Power users can minimize after learning patterns
+- **Progress as Visual Bar**: Quick scan of overall completion
+- **Current Actor Visible**: Shows who (human/agent) is working
+- **Step Cards**: Each step shows status and relevant actions
+- **Action Queue**: Shows pending actions from both actors
+- **Interject Button**: Human can interrupt agent at any time
 
 ### 2. Unified Input Field
 
@@ -150,7 +154,7 @@ A unified input is the recommended approach:
 - **Large, Prominent Input**: Central focus of the interface
 - **Placeholder Indicates Capability**: "Search accounts, ask a question, or describe an action..."
 - **Keyboard Shortcut Visible**: `⌘K` for power users
-- **Contextual Suggestions**: Based on ActionLoop predictions and common queries
+- **Contextual Suggestions**: Based on WorkflowBuilder recommendations and common queries
 - **Quick Filter Chips**: One-click common searches
 
 ### 3. Interpretation Panel (The "Translation" Display)
@@ -402,10 +406,64 @@ This is the critical differentiator.  The interpretation panel shows users what 
 ```typescript
 // types/ui/account-assistant.ts
 
+import type { 
+  WorkflowState, 
+  Step, 
+  QueuedAction, 
+  Recommendation,
+  Actor,
+} from '@mikesaintsg/workflowbuilder'
+
 /**
  * Intent types detected from user input. 
  */
 export type DetectedIntent = 'search' | 'question' | 'action' | 'navigation' | 'unclear'
+
+/**
+ * Model tier for processing.
+ */
+export type ModelTier = 'fast' | 'balanced' | 'powerful'
+
+/**
+ * Workflow step display status.
+ */
+export type StepDisplayStatus = 'pending' | 'active' | 'complete' | 'failed' | 'skipped'
+
+/**
+ * UI representation of a workflow step.
+ */
+export interface StepCard {
+  readonly step: Step
+  readonly status: StepDisplayStatus
+  readonly actor: Actor | undefined
+  readonly canInterject: boolean
+  readonly canQueue: boolean
+}
+
+/**
+ * Action queue display item.
+ */
+export interface QueuedActionDisplay {
+  readonly action: QueuedAction
+  readonly position: number
+  readonly canRemove: boolean
+  readonly canReorder: boolean
+}
+
+/**
+ * Agent plan proposal for display.
+ */
+export interface AgentPlanDisplay {
+  readonly steps: readonly {
+    readonly stepId: string
+    readonly label: string
+    readonly actions: readonly string[]
+    readonly requiresApproval: boolean
+  }[]
+  readonly proposedAt: number
+  readonly canApprove: boolean
+  readonly canModify: boolean
+}
 
 /**
  * Interpretation result from prompt refinement.  
@@ -414,13 +472,13 @@ export interface InterpretationResult {
 	readonly original: string
 	readonly intent: DetectedIntent
 	readonly confidence: number
-	readonly processingTimeMs:   number
+	readonly processingTimeMs: number
 	readonly modelTier: ModelTier
 	
 	// Intent-specific data
-	readonly search? :  SearchInterpretation
+	readonly search?: SearchInterpretation
 	readonly question?: QuestionInterpretation
-	readonly action? :  ActionInterpretation
+	readonly action?: ActionInterpretation
 }
 
 /**
@@ -428,10 +486,27 @@ export interface InterpretationResult {
  */
 export interface SearchInterpretation {
 	readonly entityType: string
-	readonly filters:   readonly QueryFilter[]
-	readonly sort?:  QuerySort
-	readonly limit:  number
-	readonly naturalLanguageSummary:  string
+	readonly filters: readonly QueryFilter[]
+	readonly sort?: QuerySort
+	readonly limit: number
+	readonly naturalLanguageSummary: string
+}
+
+/**
+ * Query filter definition.
+ */
+export interface QueryFilter {
+  readonly field: string
+  readonly operator: 'eq' | 'ne' | 'gt' | 'lt' | 'gte' | 'lte' | 'contains' | 'in'
+  readonly value: unknown
+}
+
+/**
+ * Query sort definition.
+ */
+export interface QuerySort {
+  readonly field: string
+  readonly direction: 'asc' | 'desc'
 }
 
 /**
@@ -439,7 +514,7 @@ export interface SearchInterpretation {
  */
 export interface QuestionInterpretation {
 	readonly subject: string
-	readonly aspectsToLookup:   readonly string[]
+	readonly aspectsToLookup: readonly string[]
 	readonly requiresSearch: boolean
 	readonly suggestedSources: readonly string[]
 }
@@ -456,15 +531,28 @@ export interface ActionInterpretation {
 }
 
 /**
- * Suggested action from ActionLoop predictions.
+ * Recommendation from WorkflowBuilder for display.
  */
-export interface SuggestedAction {
-	readonly nodeId: string
+export interface RecommendationDisplay {
+	readonly stepId: string
 	readonly label: string
-	readonly icon: string
 	readonly confidence: number
 	readonly reasoning: string
-	readonly factors: ConfidenceFactors
+	readonly canExecute: boolean
+}
+
+/**
+ * Workflow state for UI display.
+ */
+export interface WorkflowUIState {
+  readonly currentStep: Step | undefined
+  readonly progress: number
+  readonly currentActor: Actor | undefined
+  readonly queue: readonly QueuedActionDisplay[]
+  readonly recommendations: readonly RecommendationDisplay[]
+  readonly agentPlan: AgentPlanDisplay | undefined
+  readonly canInterject: boolean
+  readonly canPause: boolean
 }
 
 /**
@@ -529,9 +617,9 @@ export interface ActionConfirmation {
 export interface AssistantUIState {
 	readonly input: string
 	readonly isProcessing: boolean
-	readonly interpretation:   InterpretationResult | undefined
+	readonly interpretation: InterpretationResult | undefined
 	readonly results: AssistantResults | undefined
-	readonly suggestions: readonly SuggestedAction[]
+	readonly workflow: WorkflowUIState | undefined
 	readonly error: string | undefined
 }
 
@@ -539,10 +627,123 @@ export interface AssistantUIState {
  * Results union type.
  */
 export type AssistantResults =
-	| { readonly type: 'search'; readonly items: readonly SearchResultItem[]; readonly insight? :  string }
+	| { readonly type: 'search'; readonly items: readonly SearchResultItem[]; readonly insight?: string }
 	| { readonly type: 'response'; readonly response: AIResponse }
-	| { readonly type: 'confirmation'; readonly confirmation:   ActionConfirmation }
-	| { readonly type: 'success'; readonly message: string; readonly affectedCount:  number }
+	| { readonly type: 'confirmation'; readonly confirmation: ActionConfirmation }
+	| { readonly type: 'success'; readonly message: string; readonly affectedCount: number }
+```
+
+---
+
+## WorkflowBuilder Integration Example
+
+```typescript
+import {
+  createProceduralGraph,
+  createRecommendationGraph,
+  createWorkflowOrchestrator,
+  createWorkflowContextFormatter,
+} from '@mikesaintsg/workflowbuilder'
+
+// Define account management workflow
+const accountWorkflow = createProceduralGraph({
+  steps: [
+    { id: 'search', label: 'Search Accounts', order: 1,
+      actions: ['execute_query', 'filter_results'] },
+    { id: 'analyze', label: 'Analyze Results', order: 2,
+      actions: ['calculate_risk', 'identify_priority'] },
+    { id: 'action', label: 'Take Action', order: 3,
+      actions: ['draft_email', 'schedule_call', 'send_notification'] },
+    { id: 'followup', label: 'Schedule Follow-up', order: 4,
+      actions: ['set_reminder', 'create_task'] },
+  ],
+  transitions: [
+    { from: 'search', to: 'analyze', weight: 1 },
+    { from: 'analyze', to: 'action', weight: 1 },
+    { from: 'analyze', to: 'search', weight: 0.3 }, // Refine search
+    { from: 'action', to: 'followup', weight: 1 },
+    { from: 'action', to: 'analyze', weight: 0.5 }, // Review more
+  ],
+})
+
+const recommendation = createRecommendationGraph(accountWorkflow)
+const orchestrator = createWorkflowOrchestrator(accountWorkflow, recommendation, {
+  checkBackBeforeStep: true,
+  guardrails: {
+    agentRequiresApproval: ['send_notification', 'schedule_call'],
+    humanCanOverride: true,
+  },
+})
+
+const formatter = createWorkflowContextFormatter({
+  verbosity: 'standard',
+  includeRecommendations: true,
+})
+
+// UI integration
+function WorkflowStatusBar({ state }: { state: WorkflowUIState }) {
+  return (
+    <div className="workflow-status">
+      <ProgressBar value={state.progress} />
+      <StepCards steps={state.steps} current={state.currentStep} />
+      <ActionQueue queue={state.queue} />
+      {state.agentPlan && (
+        <AgentPlanPanel 
+          plan={state.agentPlan}
+          onApprove={() => orchestrator.approvePlan()}
+          onModify={(changes) => orchestrator.modifyPlan(changes)}
+          onQueue={(action) => orchestrator.queueAction(action)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Human queues action while agent works
+function handleQueueAction(stepId: string, actionId: string) {
+  orchestrator.queueAction({
+    stepId,
+    actionId,
+    actor: 'human',
+    priority: 'high',
+    position: 'first',
+  })
+}
+
+// Human interjects to pause agent
+function handleInterject(reason: string) {
+  orchestrator.interject({
+    type: 'pause',
+    actor: 'human',
+    reason,
+  })
+}
+
+// Agent checks back before each step
+async function agentExecuteStep() {
+  const checkBack = orchestrator.checkBack('agent')
+  
+  if (checkBack.isModified) {
+    // Human made changes - acknowledge in UI
+    showNotification(`Plan modified: ${checkBack.modifications.length} changes`)
+  }
+  
+  // Execute with awareness of human modifications
+  for (const action of checkBack.actions) {
+    await executeAction(action)
+    orchestrator.recordAction({
+      stepId: checkBack.stepId,
+      actionId: action.actionId,
+      actor: 'agent',
+      success: true,
+    })
+  }
+  
+  orchestrator.completeStep(checkBack.stepId, {
+    output: results,
+    actor: 'agent',
+  })
+}
 ```
 
 ---
@@ -559,10 +760,11 @@ export type AssistantResults =
 - Collapse/expand for power users
 - Quick actions visible, advanced options in menus
 
-### 3. **Predictive Assistance (ActionLoop)**
-- Suggestions based on learned patterns
-- Reasoning visible to build trust
-- Confidence visualization (progress bars, not just numbers)
+### 3. **Human-Agent Collaboration (WorkflowBuilder)**
+- Shared workflow state visible to both human and agent
+- Human can queue actions while agent works
+- Agent proposes plan, human reviews before execution
+- Interject capability for immediate human control
 
 ### 4. **Model Transparency**
 - Show which model processed the request
@@ -596,7 +798,8 @@ export type AssistantResults =
 | **Search Results**         | Card-based with AI insight summary at top                  |
 | **AI Responses**           | Markdown with inline citations and quick actions           |
 | **Action Confirmation**    | Preview table with clear confirm/cancel                    |
-| **ActionLoop Integration** | Horizontal scrolling suggestion bar at top                 |
+| **WorkflowBuilder Integration** | Workflow status bar with step progress and action queue   |
+| **Human-Agent Collaboration** | Agent plan display with approve/modify/queue options      |
 | **Model Transparency**     | Show model tier and processing time in footer              |
 
-This design balances power user efficiency (unified input, keyboard shortcuts) with novice discoverability (suggestions, interpretation panel, quick filters) while leveraging your ActionLoop predictions for proactive assistance. 
+This design balances power user efficiency (unified input, keyboard shortcuts) with novice discoverability (workflow status, interpretation panel, quick filters) while leveraging WorkflowBuilder for true human-agent collaboration. 

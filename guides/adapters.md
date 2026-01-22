@@ -18,7 +18,7 @@
 10. [Transform Adapters](#transform-adapters)
 11. [Persistence Adapters](#persistence-adapters)
 12. [Context Builder Adapters](#context-builder-adapters)
-13. [ActionLoop Adapters](#actionloop-adapters)
+13. [workflowbuilder Adapters](#workflowbuilder-adapters)
 14. [Error Handling](#error-handling)
 15. [TypeScript Integration](#typescript-integration)
 16. [Performance Tips](#performance-tips)
@@ -43,7 +43,7 @@
 - **Transform adapters** — Tool format conversion and similarity scoring
 - **Persistence adapters** — IndexedDB, OPFS, and HTTP storage
 - **Context builder adapters** — Deduplication, truncation, and priority
-- **ActionLoop adapters** — Event and weight persistence for workflow engines
+- **workflowbuilder adapters** — Event and weight persistence for workflow engines
 - **Zero dependencies** — Built entirely on native `fetch` API
 
 ### Package Role
@@ -1309,62 +1309,37 @@ const comparison = priority.compare(frameA, frameB)
 
 ---
 
-## ActionLoop Adapters
+## WorkflowBuilder Adapters
 
-ActionLoop adapters provide persistence for workflow engines and predictive graphs in the `@mikesaintsg/actionloop` package.
-
-### Event Persistence
-
-Event persistence adapters implement `EventStorePersistenceAdapterInterface` for storing transition events.
-
-#### IndexedDB Event Persistence
-
-```ts
-import { createIndexedDBEventPersistenceAdapter } from '@mikesaintsg/adapters'
-import { createDatabase } from '@mikesaintsg/indexeddb'
-
-const db = await createDatabase('actionloop-app')
-const eventPersistence = createIndexedDBEventPersistenceAdapter({
-	database: db,
-	storeName: 'events', // optional, defaults to 'actionloop_events'
-})
-
-// Use with workflow engine
-const engine = createWorkflowEngine(procedural, predictive, {
-	eventPersistence,
-})
-```
-
-#### In-Memory Event Persistence
-
-```ts
-import { createInMemoryEventPersistenceAdapter } from '@mikesaintsg/adapters'
-
-const eventPersistence = createInMemoryEventPersistenceAdapter({
-	maxEvents: 5000, // optional, defaults to 10000
-})
-```
+WorkflowBuilder adapters provide persistence for recommendation graphs and workflow state in the `@mikesaintsg/workflowbuilder` package.
 
 ### Weight Persistence
 
-Weight persistence adapters implement `WeightPersistenceAdapterInterface` for storing predictive graph weights.
+Weight persistence adapters implement `WeightPersistenceAdapterInterface` for storing recommendation graph weights.
 
 #### IndexedDB Weight Persistence
 
 ```ts
 import { createIndexedDBWeightPersistenceAdapter } from '@mikesaintsg/adapters'
 import { createDatabase } from '@mikesaintsg/indexeddb'
+import { createRecommendationGraph } from '@mikesaintsg/workflowbuilder'
 
-const db = await createDatabase('actionloop-app')
+const db = await createDatabase('workflow-app')
 const weightPersistence = createIndexedDBWeightPersistenceAdapter({
 	database: db,
-	storeName: 'weights', // optional, defaults to 'actionloop_weights'
+	storeName: 'weights', // optional, defaults to 'workflowbuilder_weights'
 })
 
-// Use with predictive graph
-const predictive = createPredictiveGraph(procedural, {
+// Use with recommendation graph
+const recommendation = createRecommendationGraph(procedural, {
 	persistence: weightPersistence,
 })
+
+// Load on startup
+await recommendation.loadWeights()
+
+// Save periodically
+await recommendation.saveWeights()
 ```
 
 #### In-Memory Weight Persistence
@@ -1373,16 +1348,42 @@ const predictive = createPredictiveGraph(procedural, {
 import { createInMemoryWeightPersistenceAdapter } from '@mikesaintsg/adapters'
 
 const weightPersistence = createInMemoryWeightPersistenceAdapter()
+
+// Use with recommendation graph (no persistence across sessions)
+const recommendation = createRecommendationGraph(procedural, {
+	persistence: weightPersistence,
+})
 ```
 
-### ActionLoop Adapter Selection Guide
+### Execution Persistence
+
+Store workflow execution state for resumption.
+
+#### IndexedDB Execution Persistence
+
+```ts
+import { createIndexedDBExecutionPersistenceAdapter } from '@mikesaintsg/adapters'
+import { createDatabase } from '@mikesaintsg/indexeddb'
+
+const db = await createDatabase('workflow-app')
+const executionPersistence = createIndexedDBExecutionPersistenceAdapter({
+	database: db,
+	storeName: 'executions',
+})
+
+// Use with orchestrator
+const orchestrator = createWorkflowOrchestrator(procedural, recommendation, {
+	executionPersistence,
+})
+```
+
+### WorkflowBuilder Adapter Selection Guide
 
 | Adapter              | Persistence | Use Case                        |
 |----------------------|-------------|---------------------------------|
-| IndexedDB Event      | ✅           | Production event sourcing       |
-| In-Memory Event      | ❌           | Testing, temporary workflows    |
 | IndexedDB Weight     | ✅           | Production weight persistence   |
 | In-Memory Weight     | ❌           | Testing, development            |
+| IndexedDB Execution  | ✅           | Resume workflows across sessions|
 
 ---
 
@@ -1967,7 +1968,7 @@ const result = await engine.generateFromContext(context)
 | `createIndexedDBSessionPersistenceAdapter` | `IndexedDBSessionPersistenceOptions` | `SessionPersistenceInterface`            |
 
 
-### ActionLoop Persistence Adapter Factories
+### workflowbuilder Persistence Adapter Factories
 
 | Factory                                    | Options                              | Returns                                   |
 |--------------------------------------------|--------------------------------------|-------------------------------------------|

@@ -27,8 +27,6 @@ import type {
 	TruncationAdapterInterface,
 	SSEParserOptions,
 	SSEParserInterface,
-	EventStorePersistenceAdapterInterface,
-	WeightPersistenceAdapterInterface,
 	CircuitBreakerAdapterInterface,
 	TelemetryAdapterInterface,
 } from '@mikesaintsg/core'
@@ -44,20 +42,12 @@ import type {
 	DeduplicationAdapterOptions,
 	ExponentialRetryAdapterOptions,
 	HTTPVectorPersistenceOptions,
-	HuggingFaceEmbeddingAdapterOptions,
-	HuggingFaceProviderAdapterOptions,
 	IndexedDBCacheAdapterInterface,
 	IndexedDBCacheAdapterOptions,
 	IndexedDBSessionPersistenceOptions,
 	IndexedDBVectorPersistenceOptions,
-	IndexedDBEventPersistenceOptions,
-	IndexedDBWeightPersistenceOptions,
-	InMemoryEventPersistenceOptions,
 	LinearRetryAdapterOptions,
 	LRUCacheAdapterOptions,
-	NodeLlamaCppEmbeddingAdapterOptions,
-	NodeLlamaCppProviderAdapterOptions,
-	NoOpTelemetryAdapterOptions,
 	OllamaEmbeddingAdapterOptions,
 	OllamaProviderAdapterOptions,
 	OpenAIEmbeddingAdapterOptions,
@@ -85,8 +75,6 @@ import {
 	OpenAIProvider,
 	AnthropicProvider,
 	OllamaProvider,
-	NodeLlamaCppProvider,
-	HuggingFaceProvider,
 } from './core/providers/index.js'
 
 // Embeddings
@@ -94,8 +82,6 @@ import {
 	OpenAIEmbedding,
 	VoyageEmbedding,
 	OllamaEmbedding,
-	NodeLlamaCppEmbedding,
-	HuggingFaceEmbedding,
 } from './core/embeddings/index.js'
 
 // Policies
@@ -106,7 +92,6 @@ import {
 	SlidingWindowRateLimit,
 	CircuitBreaker,
 	ConsoleTelemetry,
-	NoOpTelemetry,
 } from './core/policies/index.js'
 
 // Enhancements
@@ -135,14 +120,6 @@ import {
 	HTTPVectorPersistence,
 	IndexedDBSessionPersistence,
 } from './core/persistence/index.js'
-
-// ActionLoop
-import {
-	IndexedDBEventPersistence,
-	IndexedDBWeightPersistence,
-	InMemoryEventPersistence,
-	InMemoryWeightPersistence,
-} from './core/actionloop/index.js'
 
 // Context Builder
 import {
@@ -312,74 +289,6 @@ export function createOllamaProviderAdapter(
 	return new OllamaProvider(options)
 }
 
-/**
- * Creates a node-llama-cpp provider adapter.
- *
- * @param options - node-llama-cpp provider options
- * @returns Provider adapter instance
- *
- * @example
- * ```ts
- * import { getLlama } from 'node-llama-cpp'
- * import { createNodeLlamaCppProviderAdapter } from '@mikesaintsg/adapters'
- *
- * const llama = await getLlama()
- * const model = await llama.loadModel({ modelPath: './llama-3-8b.gguf' })
- * const context = await model.createContext()
- *
- * const provider = createNodeLlamaCppProviderAdapter({
- *   context,
- *   modelName: 'llama3',
- * })
- *
- * const stream = provider.generate([
- *   { role: 'user', content: 'Hello!' }
- * ], {})
- *
- * for await (const token of stream) {
- *   console.log(token)
- * }
- * ```
- */
-export function createNodeLlamaCppProviderAdapter(
-	options: NodeLlamaCppProviderAdapterOptions,
-): ProviderAdapterInterface {
-	return new NodeLlamaCppProvider(options)
-}
-
-/**
- * Creates a HuggingFace provider adapter.
- *
- * @param options - HuggingFace provider options
- * @returns Provider adapter instance
- *
- * @example
- * ```ts
- * import { pipeline } from '@huggingface/transformers'
- * import { createHuggingFaceProviderAdapter } from '@mikesaintsg/adapters'
- *
- * const generator = await pipeline('text-generation', 'Xenova/gpt2')
- *
- * const provider = createHuggingFaceProviderAdapter({
- *   pipeline: generator,
- *   modelName: 'gpt2',
- * })
- *
- * const stream = provider.generate([
- *   { role: 'user', content: 'Hello!' }
- * ], {})
- *
- * for await (const token of stream) {
- *   console.log(token)
- * }
- * ```
- */
-export function createHuggingFaceProviderAdapter(
-	options: HuggingFaceProviderAdapterOptions,
-): ProviderAdapterInterface {
-	return new HuggingFaceProvider(options)
-}
-
 // ============================================================================
 // Embedding Adapter Factories
 // ============================================================================
@@ -439,55 +348,6 @@ export function createOllamaEmbeddingAdapter(
 	options: OllamaEmbeddingAdapterOptions,
 ): EmbeddingAdapterInterface {
 	return new OllamaEmbedding(options)
-}
-
-/**
- * Create a node-llama-cpp embedding adapter.
- *
- * @example
- * ```ts
- * import { getLlama } from 'node-llama-cpp'
- *
- * const llama = await getLlama()
- * const model = await llama.loadModel({ modelPath: './nomic-embed-text.gguf' })
- * const embeddingContext = await model.createEmbeddingContext()
- *
- * const embedding = createNodeLlamaCppEmbeddingAdapter({
- *   embeddingContext,
- *   modelName: 'nomic-embed-text',
- * })
- *
- * const vectors = await embedding.embed(['Hello, world!'])
- * ```
- */
-export function createNodeLlamaCppEmbeddingAdapter(
-	options: NodeLlamaCppEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	return new NodeLlamaCppEmbedding(options)
-}
-
-/**
- * Create a HuggingFace embedding adapter.
- *
- * @example
- * ```ts
- * import { pipeline } from '@huggingface/transformers'
- *
- * const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
- *
- * const embedding = createHuggingFaceEmbeddingAdapter({
- *   pipeline: extractor,
- *   modelName: 'all-MiniLM-L6-v2',
- *   dimensions: 384,
- * })
- *
- * const vectors = await embedding.embed(['Hello, world!'])
- * ```
- */
-export function createHuggingFaceEmbeddingAdapter(
-	options: HuggingFaceEmbeddingAdapterOptions,
-): EmbeddingAdapterInterface {
-	return new HuggingFaceEmbedding(options)
 }
 
 // ============================================================================
@@ -688,29 +548,6 @@ export function createConsoleTelemetryAdapter(
 	options?: ConsoleTelemetryAdapterOptions,
 ): TelemetryAdapterInterface {
 	return new ConsoleTelemetry(options)
-}
-
-/**
- * Create a no-op telemetry adapter.
- *
- * Disables telemetry for production where performance is critical.
- * All methods are no-ops that return immediately.
- *
- * @example
- * ```ts
- * const telemetry = createNoOpTelemetryAdapter()
- *
- * // All operations are no-ops
- * const span = telemetry.startSpan('generate')
- * span.end() // Does nothing
- *
- * telemetry.log('info', 'Message') // Does nothing
- * ```
- */
-export function createNoOpTelemetryAdapter(
-	options?: NoOpTelemetryAdapterOptions,
-): TelemetryAdapterInterface {
-	return new NoOpTelemetry(options)
 }
 
 // ============================================================================
@@ -1211,99 +1048,4 @@ export function createScoreTruncationAdapter(
 	options?: TruncationAdapterOptions,
 ): TruncationAdapterInterface {
 	return new ScoreTruncationAdapter(options)
-}
-
-// ============================================================================
-// ActionLoop Persistence Adapter Factories
-// ============================================================================
-
-/**
- * Creates an IndexedDB event persistence adapter for ActionLoop.
- *
- * @param options - IndexedDB configuration with database access
- * @returns EventStorePersistenceAdapterInterface implementation
- *
- * @example
- * ```ts
- * import { createDatabase } from '@mikesaintsg/indexeddb'
- *
- * const db = await createDatabase('my-app')
- * const eventPersistence = createIndexedDBEventPersistenceAdapter({
- *   database: db,
- *   storeName: 'events',
- * })
- *
- * const engine = createWorkflowEngine(procedural, predictive, {
- *   eventPersistence,
- * })
- * ```
- */
-export function createIndexedDBEventPersistenceAdapter(
-	options: IndexedDBEventPersistenceOptions,
-): EventStorePersistenceAdapterInterface {
-	return new IndexedDBEventPersistence(options)
-}
-
-/**
- * Creates an IndexedDB weight persistence adapter for ActionLoop.
- *
- * @param options - IndexedDB configuration with database access
- * @returns WeightPersistenceAdapterInterface implementation
- *
- * @example
- * ```ts
- * import { createDatabase } from '@mikesaintsg/indexeddb'
- *
- * const db = await createDatabase('my-app')
- * const weightPersistence = createIndexedDBWeightPersistenceAdapter({
- *   database: db,
- *   storeName: 'weights',
- * })
- *
- * const predictive = createPredictiveGraph(procedural, {
- *   persistence: weightPersistence,
- * })
- * ```
- */
-export function createIndexedDBWeightPersistenceAdapter(
-	options: IndexedDBWeightPersistenceOptions,
-): WeightPersistenceAdapterInterface {
-	return new IndexedDBWeightPersistence(options)
-}
-
-/**
- * Creates an in-memory event persistence adapter for ActionLoop.
- *
- * Useful for testing or when persistence is not required.
- *
- * @param options - Optional configuration with max events limit
- * @returns EventStorePersistenceAdapterInterface implementation
- *
- * @example
- * ```ts
- * const eventPersistence = createInMemoryEventPersistenceAdapter({
- *   maxEvents: 5000,
- * })
- * ```
- */
-export function createInMemoryEventPersistenceAdapter(
-	options?: InMemoryEventPersistenceOptions,
-): EventStorePersistenceAdapterInterface {
-	return new InMemoryEventPersistence(options)
-}
-
-/**
- * Creates an in-memory weight persistence adapter for ActionLoop.
- *
- * Useful for testing or when persistence is not required.
- *
- * @returns WeightPersistenceAdapterInterface implementation
- *
- * @example
- * ```ts
- * const weightPersistence = createInMemoryWeightPersistenceAdapter()
- * ```
- */
-export function createInMemoryWeightPersistenceAdapter(): WeightPersistenceAdapterInterface {
-	return new InMemoryWeightPersistence()
 }

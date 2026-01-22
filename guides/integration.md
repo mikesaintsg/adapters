@@ -1771,7 +1771,7 @@ This integration guide demonstrates how packages in the ecosystem work together:
 4. **VectorStore** provides RAG capabilities
 5. **ContextBuilder** assembles context, budgets tokens, and manages tool calling
 6. **Rater** provides factor-based rate calculations with conditions, lookups, and aggregation
-7. **ActionLoop** provides predictive workflow guidance with learned transitions
+7. **WorkflowBuilder** provides human-agent collaborative workflows with shared state and adaptive recommendations
 
 The key patterns are: 
 
@@ -1881,108 +1881,140 @@ const form = createForm<RateFactorForm>(formElement, {
 
 ---
 
-## Appendix: ActionLoop Integration
+## Appendix: WorkflowBuilder Integration
 
-The `@mikesaintsg/actionloop` package provides predictive workflow guidance for user navigation and interaction patterns.
+The `@mikesaintsg/workflowbuilder` package provides human-agent collaborative workflows with shared state, action stacking, and adaptive recommendations.
 
 ### Basic Setup
 
 ```typescript
 import {
 	createProceduralGraph,
-	createPredictiveGraph,
-	createWorkflowEngine,
-} from '@mikesaintsg/actionloop'
+	createRecommendationGraph,
+	createWorkflowOrchestrator,
+} from '@mikesaintsg/workflowbuilder'
 
-// 1. Define workflow transitions
-const transitions = [
-	{ from: 'landing', to: 'login', weight: 1, actor: 'user' },
-	{ from: 'landing', to: 'register', weight: 1, actor: 'user' },
-	{ from: 'login', to: 'dashboard', weight: 1, actor: 'user' },
-	{ from: 'register', to: 'onboarding', weight: 1, actor: 'user' },
-	{ from: 'onboarding', to: 'dashboard', weight: 1, actor: 'user' },
-	{ from: 'dashboard', to: 'settings', weight: 1, actor: 'user' },
-	{ from: 'dashboard', to: 'profile', weight: 1, actor: 'user' },
-	{ from: 'dashboard', to: 'projects', weight: 1, actor: 'user' },
+// 1. Define workflow steps
+const steps = [
+	{ id: 'analyze', label: 'Analyze Requirements', order: 1 },
+	{ id: 'design', label: 'Design Solution', order: 2 },
+	{ id: 'implement', label: 'Implement Code', order: 3 },
+	{ id: 'test', label: 'Write Tests', order: 4 },
 ] as const
 
-// 2. Create procedural graph (static rules)
+// 2. Define valid transitions
+const transitions = [
+	{ from: 'analyze', to: 'design', weight: 1 },
+	{ from: 'design', to: 'implement', weight: 1 },
+	{ from: 'implement', to: 'test', weight: 1 },
+	{ from: 'test', to: 'implement', weight: 0.5 }, // Loop back if tests fail
+] as const
+
+// 3. Create procedural graph (static rules)
 const procedural = createProceduralGraph({
+	steps,
 	transitions,
 	validateOnCreate: true,
 })
 
-// 3. Create predictive graph (dynamic weights)
-const predictive = createPredictiveGraph(procedural, {
-	decayAlgorithm: 'ewma',
+// 4. Create recommendation graph (dynamic weights)
+const recommendation = createRecommendationGraph(procedural, {
+	learningRate: 0.1,
 	decayFactor: 0.9,
 })
 
-// 4. Create workflow engine
-const engine = createWorkflowEngine(procedural, predictive, {
-	trackSessions: true,
-	validateTransitions: true,
+// 5. Create workflow orchestrator
+const orchestrator = createWorkflowOrchestrator(procedural, recommendation, {
+	checkBackBeforeStep: true,
+	guardrails: {
+		enforceOrder: true,
+		agentRequiresApproval: ['delete_file', 'deploy'],
+		humanCanOverride: true,
+	},
 })
 ```
 
-### Recording Transitions
+### Human-Agent Collaboration
 
 ```typescript
-// Start a session
-const session = engine.startSession('user')
-
-// Record transitions
-engine.recordTransition('landing', 'login', {
-	actor: 'user',
-	sessionId: session.id,
-	path: '/login',
+// Start a workflow
+const execution = orchestrator.start({
+	taskId: 'feature-123',
+	initiator: 'human',
 })
 
-engine.recordTransition('login', 'dashboard', {
-	actor: 'user',
-	sessionId: session.id,
-	path: '/dashboard',
+// Agent proposes a plan (visible to human)
+orchestrator.proposePlan([
+	{ stepId: 'analyze', actions: ['read_codebase', 'identify_patterns'] },
+	{ stepId: 'design', actions: ['create_outline', 'plan_implementation'] },
+], 'agent')
+
+// Human reviews and modifies before agent executes
+orchestrator.queueAction({
+	stepId: 'design',
+	actionId: 'security_review',
+	actor: 'human',
+	priority: 'high',
+	position: 'first',
 })
 
-// Get predictions for current state
-const predictions = engine.predictNext('dashboard', {
-	actor: 'user',
-	sessionId: session.id,
-	path: '/dashboard',
-	count: 3,
+// Agent checks back before each step
+const plan = orchestrator.checkBack('agent')
+// plan.isModified === true
+// plan.modifications === [{ type: 'added', actionId: 'security_review', by: 'human' }]
+
+// Agent executes with awareness of human modifications
+orchestrator.recordAction({
+	stepId: 'analyze',
+	actionId: 'read_codebase',
+	actor: 'agent',
+	success: true,
 })
-// => ['projects', 'settings', 'profile'] ranked by learned weights
+
+// Get recommendations for next step
+const recommendations = orchestrator.getRecommendations()
+// => [{ stepId: 'design', confidence: 0.92, reasoning: '...' }]
 ```
 
-### Displaying Predictions
+### Displaying Workflow State
 
 ```typescript
-// With confidence scores
-const detailed = engine.predictNextDetailed('dashboard', {
-	actor: 'user',
-	sessionId: session.id,
-	path: '/dashboard',
-	count: 5,
+import { createWorkflowContextFormatter } from '@mikesaintsg/workflowbuilder'
+
+const formatter = createWorkflowContextFormatter({
+	includeHistory: true,
+	maxHistoryItems: 5,
+	verbosity: 'standard',
 })
 
-detailed.predictions.forEach(prediction => {
-	console.log(`${prediction.nodeId}: ${Math.round(prediction.confidence * 100)}%`)
-})
+// Get formatted context for agent
+const context = formatter.format(orchestrator.getState())
+
+console.log(context.naturalLanguage)
+// => ## Current Workflow State
+//
+// **Progress:** Step 2 of 4 (50%)
+// **Current Step:** Design Solution
+// **Current Actor:** agent
 ```
 
-### Persisting Weights
+### Persisting State
 
 ```typescript
-// Save to localStorage
+import { createDatabase } from '@mikesaintsg/indexeddb'
+
+const db = await createDatabase({ name: 'workflow-app' })
+
+// Save recommendation weights
 function saveWeights() {
-	const exported = predictive.export()
-	localStorage.setItem('actionloop:weights', JSON.stringify(exported))
+	const exported = recommendation.export()
+	localStorage.setItem('workflowbuilder:weights', JSON.stringify(exported))
 }
 
 function loadWeights() {
-	const stored = localStorage.getItem('actionloop:weights')
+	const stored = localStorage.getItem('workflowbuilder:weights')
 	if (stored) {
-		predictive.import(JSON.parse(stored))
+		recommendation.import(JSON.parse(stored))
 	}
 }
 ```
@@ -1990,58 +2022,44 @@ function loadWeights() {
 ### Cross-Tab Synchronization
 
 ```typescript
-const channel = new BroadcastChannel('actionloop-sync')
+import { createBroadcast } from '@mikesaintsg/broadcast'
 
-// Broadcast weight updates
-predictive.onWeightUpdate((from, to, actor, weight) => {
-	channel.postMessage({ type: 'weight', from, to, actor, weight })
+const broadcast = createBroadcast({
+	channel: 'workflow-sync',
+	state: { currentStep: undefined },
+})
+
+// Broadcast state changes
+orchestrator.onStepComplete((step) => {
+	broadcast.setState({ currentStep: step.id })
 })
 
 // Listen for updates from other tabs
-channel.onmessage = (event) => {
-	if (event.data.type === 'weight') {
-		const { from, to, actor, weight } = event.data
-		predictive.setWeight(from, to, actor, weight)
+broadcast.onMessage((message) => {
+	if (message.type === 'state_update') {
+		// Refresh local view
 	}
-}
-```
-
-### Navigation Integration
-
-```typescript
-// Navigation guard
-function canNavigate(from: string, to: string): boolean {
-	return engine.isValidTransition(from, to)
-}
-
-// Navigation hook
-function onNavigate(from: string, to: string) {
-	engine.recordTransition(from, to, {
-		actor: 'user',
-		sessionId: currentSessionId,
-		path: `/${to}`,
-	})
-}
+})
 ```
 
 ### Error Handling
 
 ```typescript
-import { isActionLoopError } from '@mikesaintsg/actionloop'
+import { isWorkflowBuilderError } from '@mikesaintsg/workflowbuilder'
 
 try {
-	engine.recordTransition('invalid', 'transition', context)
+	orchestrator.goToStep('invalid', 'agent')
 } catch (error) {
-	if (isActionLoopError(error)) {
+	if (isWorkflowBuilderError(error)) {
 		switch (error.code) {
 			case 'INVALID_TRANSITION':
 				console.warn('Invalid transition:', error.message)
 				break
-			case 'SESSION_NOT_FOUND':
-				console.info('Session expired, starting new session')
-				engine.startSession('user')
+			case 'GUARDRAIL_VIOLATION':
+				console.warn('Guardrail blocked:', error.message)
+				// Request human override if needed
 				break
-			case 'NODE_NOT_FOUND':
+			case 'STEP_NOT_FOUND':
 				console.error('Configuration error:', error.message)
 				break
 		}
@@ -2055,40 +2073,37 @@ try {
 // Application shutdown
 window.addEventListener('beforeunload', () => {
 	// Save weights
-	const exported = predictive.export()
-	localStorage.setItem('actionloop:weights', JSON.stringify(exported))
-
-	// End session
-	engine.endSession(session.id, 'abandoned')
+	const exported = recommendation.export()
+	localStorage.setItem('workflowbuilder:weights', JSON.stringify(exported))
 
 	// Cleanup
-	engine.destroy()
+	orchestrator.destroy()
 })
 ```
 
 ### Use Cases
 
-| Use Case                       | ActionLoop Features Used                     |
-|--------------------------------|----------------------------------------------|
-| Navigation suggestions         | Predictions, session tracking                |
-| Workflow optimization          | Transition recording, weight learning        |
-| User behavior analytics        | Session chains, prediction accuracy          |
-| Onboarding flows               | Valid transitions, step validation           |
-| Form wizard guidance           | Micro-transitions, predictions               |
-| Content recommendation         | Learned weights, confidence scores           |
+| Use Case                      | WorkflowBuilder Features Used                  |
+|-------------------------------|------------------------------------------------|
+| Collaborative coding          | Plan proposals, check-back, human override     |
+| Supervised automation         | Guardrails, approval workflow, interjections   |
+| Complex research workflows    | Action queue, step management, recommendations |
+| Document processing pipelines | Step outputs, mutation history, audit trail    |
+| Agentic task completion       | Context formatter, recommendation graph        |
 
-## Appendix: LLM-Powered ActionLoop Applications
+## Appendix: Agent-Powered WorkflowBuilder Applications
 
-This section describes how to build intelligent applications that combine ActionLoop's predictive workflow capabilities with local and remote LLM inference for contextual assistance.
+This section describes how to build intelligent applications that combine WorkflowBuilder's human-agent collaboration with local and remote LLM inference.
 
 ### Overview
 
 The integration enables:
-- **Predictive UI**: ActionLoop predictions displayed as confidence-ranked action buttons
-- **Prompt Refinement**: Local small model parses ambiguous input into structured queries
-- **Contextual Assistance**: LLM receives ActionLoop state (predictions, events, patterns) for informed responses
-- **Tool Automation**: LLM executes tools via ToolRegistry, transitions recorded in ActionLoop
-- **Cross-Tab Sync**: Broadcast synchronizes state and predictions across browser tabs
+- **Collaborative UI**: Shared workflow state visible to both human and agent
+- **Plan Visibility**: Agent proposes, human reviews, agent executes
+- **Proactive Control**: Human queues actions while agent works
+- **Contextual Assistance**: Agent receives workflow state for informed responses
+- **Tool Automation**: Agent executes tools, transitions recorded with attribution
+- **Cross-Tab Sync**: Broadcast synchronizes state across browser tabs
 
 ### Architecture
 
@@ -2097,18 +2112,18 @@ The integration enables:
 │                         Application                                      │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  UI Layer                                                               │
-│  ├── Recommended Actions (from ActionLoop predictions)                  │
-│  ├── Input Field (search/prompt)                                        │
-│  ├── Refined Prompt Display (from local model)                          │
-│  └── Results + Insights (from LLM + tools)                              │
+│  ├── Workflow Progress (from WorkflowBuilder state)                     │
+│  ├── Agent Plan (proposed actions, visible to human)                    │
+│  ├── Action Queue (human + agent pending actions)                       │
+│  └── Results + Insights (from agent + tools)                            │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  Integration Layer                                                      │
-│  ├── ActionLoopContextFormatter (predictions → LLM context)             │
+│  ├── WorkflowContextFormatter (state → agent context)                   │
 │  ├── ModelOrchestrator (fast/balanced/powerful tier selection)          │
-│  └── AccountAssistant (orchestrates the full flow)                      │
+│  └── CollaborativeAssistant (orchestrates human-agent flow)             │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  Core Packages                                                          │
-│  ├── @mikesaintsg/actionloop (workflow + predictions)                   │
+│  ├── @mikesaintsg/workflowbuilder (collaboration + recommendations)     │
 │  ├── @mikesaintsg/inference (LLM generation + streaming)                │
 │  ├── @mikesaintsg/vectorstore (RAG for documentation)                   │
 │  ├── @mikesaintsg/contextbuilder (context + tools + budget)             │
@@ -2118,8 +2133,7 @@ The integration enables:
 │  Adapter Layer                                                          │
 │  ├── HuggingFace Provider Adapter (local models)                        │
 │  ├── OpenAI/Anthropic Provider Adapter (API models)                     │
-│  ├── HuggingFace Embedding Adapter (local embeddings)                   │
-│  ├── IndexedDB Persistence Adapters (weights, events, vectors)          │
+│  ├── IndexedDB Persistence Adapters (state, weights, vectors)           │
 │  └── OpenAI Tool Format Adapter (tool calling)                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -2130,10 +2144,10 @@ The integration enables:
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │                    Account Management UI                               │ │
+│  │                    Collaborative Workflow UI                           │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
-│  │  │  🔮 Recommended Actions (ActionLoop predictions)                 │  │ │
-│  │  │  [Billing 85%] [Settings 62%] [Profile 41%] [Support 23%]       │  │ │
+│  │  │  📋 Workflow Progress (WorkflowBuilder state)                    │  │ │
+│  │  │  Step 2/4: Design Solution │ Agent executing │ 50% complete     │  │ │
 │  │  └─────────────────────────────────────────────────────────────────┘  │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
 │  │  │  🔍 User Input                                                   │  │ │
@@ -2154,13 +2168,13 @@ The integration enables:
 │                        Integration Layer                                     │
 │                                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
-│  │ ActionLoop      │  │ Model           │  │ Context         │             │
+│  │ Workflow        │  │ Model           │  │ Context         │             │
 │  │ Context         │  │ Orchestrator    │  │ Builder         │             │
 │  │ Formatter       │  │                 │  │                 │             │
 │  │                 │  │ • Fast (360M)   │  │ • Token budget  │             │
-│  │ • Predictions   │  │ • Balanced (1.5B)│ │ • Deduplication │             │
-│  │ • Events        │  │ • Powerful (API)│  │ • RAG frames    │             │
-│  │ • Patterns      │  │                 │  │                 │             │
+│  │ • State         │  │ • Balanced (1.5B)│ │ • Deduplication │             │
+│  │ • Queue         │  │ • Powerful (API)│  │ • RAG frames    │             │
+│  │ • Recommends    │  │                 │  │                 │             │
 │  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘             │
 │           │                    │                    │                       │
 │           └────────────────────┼────────────────────┘                       │
@@ -2169,12 +2183,12 @@ The integration enables:
 │                        Core Packages                                         │
 │                                │                                            │
 │  ┌─────────────┐  ┌────────────┴───────────┐  ┌─────────────┐              │
-│  │ actionloop  │  │      inference         │  │ vectorstore │              │
-│  │             │  │                        │  │             │              │
+│  │ workflow    │  │      inference         │  │ vectorstore │              │
+│  │ builder     │  │                        │  │             │              │
 │  │ • Procedural│  │ • Engine               │  │ • Embeddings│              │
-│  │ • Predictive│  │ • Session              │  │ • Search    │              │
-│  │ • Engine    │  │ • Streaming            │  │ • RAG       │              │
-│  │ • Activity  │  │ • Token batching       │  │             │              │
+│  │ • Recommend │  │ • Session              │  │ • Search    │              │
+│  │ • Orchestr. │  │ • Streaming            │  │ • RAG       │              │
+│  │ • Queue     │  │ • Token batching       │  │             │              │
 │  └─────────────┘  └────────────────────────┘  └─────────────┘              │
 │                                                                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
@@ -2204,42 +2218,43 @@ The integration enables:
 ### Data Flow
 
 ```markdown
-User Input
+User/Agent Input
     │
     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 1. Prompt Refinement (Fast Model)                               │
-│    "show failed payments" → { intent: 'search', query: {... } }  │
+│ 1. Check-Back (Agent verifies plan state)                       │
+│    • Get latest modifications from human                        │
+│    • Receive updated action queue                               │
 └─────────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ 2. Context Assembly (ContextBuilder)                            │
-│    • ActionLoop predictions + confidence                        │
-│    • Recent events + engagement                                 │
+│    • WorkflowBuilder state + recommendations                    │
+│    • Action queue (pending, executing, completed)               │
 │    • RAG results from VectorStore (if needed)                   │
 │    • Tool schemas from ToolRegistry                             │
 └─────────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 3. Generation (Balanced/Powerful Model)                         │
+│ 3. Generation (Agent Model)                                     │
 │    • Structured response with tool calls                        │
-│    • Insights based on ActionLoop patterns                      │
+│    • Respects human modifications and interjections             │
 └─────────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ 4. Tool Execution (ToolRegistry)                                │
-│    • Execute search_accounts, get_account_details, etc.         │
-│    • Record transition in ActionLoop                            │
+│    • Execute tools with actor attribution                       │
+│    • Record actions in WorkflowBuilder                          │
 └─────────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ 5. Response + Updated Predictions                               │
 │    • Display results                                            │
-│    • Update recommended actions from ActionLoop                 │
+│    • Update recommended actions from workflowbuilder                 │
 │    • Cross-tab sync via Broadcast                               │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -2297,44 +2312,51 @@ const database = await createDatabase<AppSchema>({
 })
 ```
 
-#### 2. ActionLoop Setup
+#### 2. WorkflowBuilder Setup
 
 ```ts
 import {
 	createProceduralGraph,
-	createPredictiveGraph,
-	createWorkflowEngine,
-	createActivityTracker,
-} from '@mikesaintsg/actionloop'
-import {
-	createIndexedDBEventPersistenceAdapter,
-	createIndexedDBWeightPersistenceAdapter,
-} from '@mikesaintsg/adapters'
+	createRecommendationGraph,
+	createWorkflowOrchestrator,
+	createWorkflowContextFormatter,
+} from '@mikesaintsg/workflowbuilder'
+import { createIndexedDBWeightPersistenceAdapter } from '@mikesaintsg/adapters'
 
-// Define workflow transitions
-const transitions = [
-	{ from: 'dashboard', to: 'accounts', weight: 1, actor: 'user' },
-	{ from: 'dashboard', to: 'billing', weight: 1, actor:  'user' },
-	{ from: 'dashboard', to:  'settings', weight: 1, actor: 'user' },
-	{ from: 'accounts', to: 'account-detail', weight: 1, actor:  'user' },
-	{ from: 'accounts', to:  'dashboard', weight: 1, actor:  'user' },
-	{ from: 'account-detail', to: 'accounts', weight: 1, actor:  'user' },
-	{ from: 'account-detail', to: 'send-notification', weight: 1, actor:  'user' },
-	{ from: 'billing', to: 'dashboard', weight: 1, actor: 'user' },
-	{ from:  'settings', to: 'dashboard', weight: 1, actor: 'user' },
+// Define workflow steps
+const steps = [
+	{ id: 'analyze', label: 'Analyze Request', order: 1, actions: ['parse_query', 'identify_intent'] },
+	{ id: 'search', label: 'Search Data', order: 2, actions: ['search_accounts', 'filter_results'] },
+	{ id: 'process', label: 'Process Results', order: 3, actions: ['format_data', 'generate_insights'] },
+	{ id: 'respond', label: 'Respond to User', order: 4, actions: ['present_results', 'suggest_actions'] },
 ] as const
 
-// Create graphs
-const procedural = createProceduralGraph({ transitions })
+// Define valid transitions
+const transitions = [
+	{ from: 'analyze', to: 'search', weight: 1 },
+	{ from: 'search', to: 'process', weight: 1 },
+	{ from: 'process', to: 'respond', weight: 1 },
+	{ from: 'respond', to: 'analyze', weight: 0.5 }, // Follow-up query
+	{ from: 'search', to: 'analyze', weight: 0.3 }, // Refine search
+] as const
 
+// Create procedural graph
+const procedural = createProceduralGraph({
+	steps,
+	transitions,
+	validateOnCreate: true,
+})
+
+// Create weight persistence
 const weightPersistence = createIndexedDBWeightPersistenceAdapter({
 	database,
 	storeName: 'weights',
 })
 
-const predictive = createPredictiveGraph(procedural, {
+// Create recommendation graph
+const recommendation = createRecommendationGraph(procedural, {
 	persistence: weightPersistence,
-	decayAlgorithm: 'ewma',
+	learningRate: 0.1,
 	decayFactor: 0.9,
 	coldStart: {
 		strategy: 'procedural-weight',
@@ -2343,26 +2365,24 @@ const predictive = createPredictiveGraph(procedural, {
 })
 
 // Load existing weights on startup
-await predictive.loadWeights()
+await recommendation.loadWeights()
 
-// Create activity tracker
-const activity = createActivityTracker({
-	idleThreshold: 30000,
-	awayThreshold: 300000,
+// Create workflow orchestrator
+const orchestrator = createWorkflowOrchestrator(procedural, recommendation, {
+	checkBackBeforeStep: true,
+	guardrails: {
+		enforceOrder: true,
+		agentRequiresApproval: ['delete_account', 'send_notification'],
+		humanCanOverride: true,
+	},
 })
 
-// Create event persistence
-const eventPersistence = createIndexedDBEventPersistenceAdapter({
-	database,
-	storeName: 'events',
-})
-
-// Create engine
-const engine = createWorkflowEngine(procedural, predictive, {
-	activity,
-	eventPersistence,
-	validateTransitions: true,
-	trackSessions: true,
+// Create context formatter for agent consumption
+const formatter = createWorkflowContextFormatter({
+	includeHistory: true,
+	maxHistoryItems: 5,
+	includeRecommendations: true,
+	verbosity: 'standard',
 })
 ```
 
@@ -2578,75 +2598,91 @@ function createModelOrchestrator(): ModelOrchestrator {
 const orchestrator = createModelOrchestrator()
 ```
 
-#### 6. ActionLoop Context Formatter
+#### 6. WorkflowBuilder Context Formatter
 
 ```ts
-import type { DetailedPrediction, TransitionEvent } from '@mikesaintsg/actionloop'
+import type { 
+	WorkflowState, 
+	Recommendation, 
+	ActionRecord 
+} from '@mikesaintsg/workflowbuilder'
 
-interface FormattedActionLoopContext {
-	currentNode: string
-	predictions: Array<{
-		nodeId: string
+interface FormattedWorkflowContext {
+	currentStep: string | undefined
+	currentActor: string | undefined
+	progress: number
+	recommendations: Array<{
+		stepId: string
 		label: string
 		confidencePercent: number
 		reasoning: string
 	}>
-	warmupComplete: boolean
-	recentActivity: Array<{
-		from: string
-		to: string
-		timestamp: number
+	actionQueue: Array<{
+		actionId: string
+		actor: string
+		priority: string
 	}>
-	engagement: string
+	recentActions: Array<{
+		actionId: string
+		actor: string
+		stepId: string
+		success: boolean
+	}>
 }
 
-function formatActionLoopContext(
-	predictions: DetailedPrediction,
-	events: readonly TransitionEvent[],
-	getLabel: (nodeId: string) => string = (id) => id
-): FormattedActionLoopContext {
+function formatWorkflowContext(
+	state: WorkflowState,
+	getLabel: (stepId: string) => string = (id) => id
+): FormattedWorkflowContext {
 	return {
-		currentNode: predictions. currentNode,
-		predictions:  predictions.predictions.slice(0, 5).map((p) => ({
-			nodeId: p.nodeId,
-			label: getLabel(p.nodeId),
-			confidencePercent: Math.round(p.confidence * 100),
-			reasoning: formatReasoning(p.factors),
+		currentStep: state.currentStep?.id,
+		currentActor: state.currentActor,
+		progress: state.progress,
+		recommendations: state.recommendations.slice(0, 5).map((r) => ({
+			stepId: r.stepId,
+			label: getLabel(r.stepId),
+			confidencePercent: Math.round(r.confidence * 100),
+			reasoning: r.reasoning,
 		})),
-		warmupComplete: predictions.warmupComplete,
-		recentActivity: events.slice(-10).map((e) => ({
-			from: e.from,
-			to: e.to,
-			timestamp: e.timestamp,
-		})),
-		engagement: events[events.length - 1]?.engagement ??  'unknown',
+		actionQueue: state.actionQueue?.pending.slice(0, 5).map((a) => ({
+			actionId: a.actionId,
+			actor: a.actor,
+			priority: a.priority,
+		})) ?? [],
+		recentActions: state.history
+			.filter((h) => h.type === 'action_performed')
+			.slice(-5)
+			.map((h) => ({
+				actionId: h.actionId ?? '',
+				actor: h.actor ?? 'system',
+				stepId: h.stepId ?? '',
+				success: true,
+			})),
 	}
 }
 
-function formatReasoning(factors: { frequency: number; recency: number; engagement: number; sampleSize: number }): string {
-	const parts:  string[] = []
-	if (factors.frequency > 0.7) parts.push('frequently visited')
-	if (factors.recency > 0.7) parts.push('recently accessed')
-	if (factors.engagement > 0.7) parts.push('high engagement')
-	if (factors.sampleSize > 0.7) parts.push('strong pattern')
-	return parts.length > 0 ? parts.join(', ') : 'based on workflow structure'
-}
-
-function contextToNaturalLanguage(context: FormattedActionLoopContext): string {
+function contextToNaturalLanguage(context: FormattedWorkflowContext): string {
 	const lines: string[] = []
 	
-	lines.push(`Current location: ${context.currentNode}`)
-	lines.push(`User engagement: ${context.engagement}`)
+	lines.push(`## Workflow State`)
+	lines.push(`Current step: ${context.currentStep ?? 'none'}`)
+	lines.push(`Current actor: ${context.currentActor ?? 'none'}`)
+	lines.push(`Progress: ${Math.round(context.progress * 100)}%`)
 	
-	if (context.warmupComplete && context.predictions.length > 0) {
+	if (context.actionQueue.length > 0) {
 		lines.push('')
-		lines.push('Predicted next actions (based on learned patterns):')
-		for (const p of context.predictions. slice(0, 3)) {
-			lines.push(`  - ${p.label}: ${p.confidencePercent}% likely (${p.reasoning})`)
+		lines.push('### Pending Actions (Queue)')
+		for (const a of context.actionQueue) {
+			lines.push(`  - [${a.actor}] ${a.actionId} (${a.priority})`)
 		}
-	} else if (! context.warmupComplete) {
+	}
+	
+	if (context.recommendations.length > 0) {
 		lines.push('')
-		lines.push('Note:  Predictions will improve with more usage data.')
+		lines.push('### Recommendations')
+		for (const r of context.recommendations.slice(0, 3)) {
+			lines.push(`  - ${r.label}: ${r.confidencePercent}% (${r.reasoning})`)
+		}
 	}
 	
 	return lines.join('\n')
@@ -2662,8 +2698,8 @@ const tokenCounter = createTokenCounter()
 
 async function buildAssistantContext(
 	userInput: string,
-	actionLoopContext: FormattedActionLoopContext,
-	ragQuery?:  string
+	workflowContext: FormattedWorkflowContext,
+	ragQuery?: string
 ): Promise<BuiltContext> {
 	const builder = createContextBuilder(tokenCounter, {
 		budget: { maxTokens: 4000, reservedTokens: 1000 },
@@ -2685,16 +2721,17 @@ Guidelines:
 - Be concise and actionable
 - Use structured queries when searching
 - Confirm before destructive actions
-- Leverage the user's behavioral context for personalization`,
+- Leverage the workflow state for context-aware responses
+- Check back before each step for human modifications`,
 	})
 	
-	// ActionLoop context
+	// WorkflowBuilder context
 	builder.addFrame({
-		id: 'actionloop-context',
+		id: 'workflow-context',
 		type: 'context',
 		priority: 'high',
-		content: contextToNaturalLanguage(actionLoopContext),
-		metadata: { source: 'actionloop' },
+		content: contextToNaturalLanguage(workflowContext),
+		metadata: { source: 'workflowbuilder' },
 	})
 	
 	// RAG results if query provided
@@ -2702,7 +2739,7 @@ Guidelines:
 		const results = await vectorStore.similaritySearch(ragQuery, { limit: 3 })
 		for (const result of results) {
 			builder.addFrame({
-				id: `rag-${result. document.id}`,
+				id: `rag-${result.document.id}`,
 				type: 'retrieval',
 				priority: 'medium',
 				content: result.document.content,
@@ -2737,50 +2774,47 @@ Guidelines:
 import { createSession } from '@mikesaintsg/inference'
 
 interface AssistantResult {
-	refinedPrompt: string
 	response: string
 	toolsExecuted: Array<{ name: string; result: unknown }>
-	recommendations: Array<{ nodeId: string; label: string; confidence: number }>
+	recommendations: Array<{ stepId: string; label: string; confidence: number }>
+	actionsQueued: string[]
 }
 
 async function processUserInput(
 	input: string,
-	currentNode: string,
-	sessionId: string
+	taskId: string
 ): Promise<AssistantResult> {
-	// 1. Get ActionLoop predictions
-	const predictions = engine.predictNextDetailed(currentNode, {
-		actor: 'user',
-		sessionId,
-		path: window.location.pathname,
-		count: 5,
-	})
+	// 1. Start workflow if not active
+	if (!orchestrator.isActive()) {
+		orchestrator.start({ taskId })
+	}
 	
-	// 2. Get recent events
-	const recentEvents = await engine.getEvents({
-		sessionId,
-		limit: 20,
-	})
+	// 2. Agent checks back for latest plan
+	const checkBack = orchestrator.checkBack('agent')
 	
-	// 3. Format ActionLoop context
-	const actionLoopContext = formatActionLoopContext(
-		predictions,
-		recentEvents,
-		(nodeId) => procedural.getNode(nodeId)?.label ??  nodeId
+	// 3. Handle any pending interjections from human
+	if (checkBack.interjections.length > 0) {
+		for (const interjection of checkBack.interjections) {
+			console.log(`Human interjection: ${interjection.type} - ${interjection.reason}`)
+		}
+	}
+	
+	// 4. Get current state and format context
+	const state = orchestrator.getState()
+	const workflowContext = formatWorkflowContext(
+		state,
+		(stepId) => procedural.getStep(stepId)?.label ?? stepId
 	)
 	
-	// 4. Refine prompt with fast model
-	const refinedPrompt = await refinePrompt(input)
-	
-	// 5. Build context
+	// 5. Build context for generation
 	const builtContext = await buildAssistantContext(
-		refinedPrompt,
-		actionLoopContext,
-		refinedPrompt // Use refined prompt for RAG
+		input,
+		workflowContext,
+		input // Use input for RAG
 	)
 	
 	// 6. Generate response with tools
-	const session = orchestrator.balanced?. createSession({
+	const session = modelOrchestrator.balanced?.createSession({
 		system: builtContext.system,
 	})
 	
@@ -2788,7 +2822,7 @@ async function processUserInput(
 		throw new Error('No model available')
 	}
 	
-	for (const frame of builtContext.frames. filter((f) => f.type !== 'system')) {
+	for (const frame of builtContext.frames.filter((f) => f.type !== 'system')) {
 		session.addMessage('user', frame.content)
 	}
 	
@@ -2797,91 +2831,101 @@ async function processUserInput(
 		toolChoice: 'auto',
 	})
 	
-	// 7. Execute tool calls
-	const toolsExecuted:  Array<{ name: string; result: unknown }> = []
+	// 7. Execute tool calls and record actions
+	const toolsExecuted: Array<{ name: string; result: unknown }> = []
 	
 	if (result.toolCalls && result.toolCalls.length > 0) {
 		for (const call of result.toolCalls) {
+			// Record action with actor attribution
+			orchestrator.recordAction({
+				stepId: state.currentStep?.id ?? 'unknown',
+				actionId: call.name,
+				actor: 'agent',
+				success: true,
+				input: call.arguments,
+			})
+			
 			const toolResult = await tools.execute(call)
-			toolsExecuted.push({ name: call.name, result: toolResult. result })
+			toolsExecuted.push({ name: call.name, result: toolResult.result })
 			session.addToolResult(call.id, call.name, toolResult.result)
 		}
 		
 		// Get final response after tool execution
 		const finalResult = await session.generate()
 		
+		// Get updated recommendations
+		const recommendations = orchestrator.getRecommendations()
+		
 		return {
-			refinedPrompt,
 			response: finalResult.text,
 			toolsExecuted,
-			recommendations: actionLoopContext.predictions.map((p) => ({
-				nodeId: p.nodeId,
-				label: p.label,
-				confidence: p.confidencePercent,
+			recommendations: recommendations.map((r) => ({
+				stepId: r.stepId,
+				label: procedural.getStep(r.stepId)?.label ?? r.stepId,
+				confidence: Math.round(r.confidence * 100),
 			})),
+			actionsQueued: checkBack.actions.map((a) => a.actionId),
 		}
 	}
 	
+	// Get recommendations
+	const recommendations = orchestrator.getRecommendations()
+	
 	return {
-		refinedPrompt,
 		response: result.text,
-		toolsExecuted:  [],
-		recommendations: actionLoopContext.predictions.map((p) => ({
-			nodeId: p. nodeId,
-			label: p.label,
-			confidence: p.confidencePercent,
+		toolsExecuted: [],
+		recommendations: recommendations.map((r) => ({
+			stepId: r.stepId,
+			label: procedural.getStep(r.stepId)?.label ?? r.stepId,
+			confidence: Math.round(r.confidence * 100),
 		})),
+		actionsQueued: checkBack.actions.map((a) => a.actionId),
 	}
-}
-
-async function refinePrompt(input: string): Promise<string> {
-	if (!orchestrator.isReady('fast')) {
-		return input // Fall back to raw input if fast model not ready
-	}
-	
-	const result = await orchestrator.generate(
-		`Analyze and refine this user input for an account management system. 
-Input: "${input}"
-
-Respond with a clear, structured version of the request.
-If it's a search, specify the filters clearly.
-If it's an action, specify what should be done.
-Keep it concise. `,
-		{ tier: 'fast' }
-	)
-	
-	return result.trim()
 }
 ```
 
-#### 9. Recording Transitions
+#### 9. Recording Step Completion
 
 ```ts
-// When user navigates or takes action
-function handleNavigation(from: string, to: string): void {
-	const session = engine.getActiveSession('user') ??  engine.startSession('user')
+// When agent completes a step
+async function completeCurrentStep(output: unknown): Promise<void> {
+	const state = orchestrator.getState()
+	if (!state.currentStep) return
 	
-	engine.recordTransition(from, to, {
-		actor:  'user',
-		sessionId: session.id,
-		path: window.location.pathname,
+	orchestrator.completeStep(state.currentStep.id, {
+		output,
+		actor: 'agent',
+		notes: 'Completed by AI agent',
+	})
+	
+	// Record successful transition
+	recommendation.recordTransition(
+		state.currentStep.id,
+		orchestrator.getState().currentStep?.id ?? 'end',
+		{ success: true, duration: Date.now() - (state.execution?.startedAt ?? 0) }
+	)
+	
+	// Move to next step
+	orchestrator.nextStep('agent')
+}
+
+// When human queues an action
+function humanQueuesAction(stepId: string, actionId: string): void {
+	orchestrator.queueAction({
+		stepId,
+		actionId,
+		actor: 'human',
+		priority: 'high',
+		position: 'first',
 	})
 }
 
-// When tool is executed, record as system transition
-function handleToolExecution(toolName: string): void {
-	const session = engine.getActiveSession('user')
-	if (! session) return
-	
-	const currentNode = session.nodeHistory? .[session.nodeHistory.length - 1] ?? 'dashboard'
-	const toolNode = `tool: ${toolName}`
-	
-	// Record as automation actor
-	engine.recordTransition(currentNode, toolNode, {
-		actor: 'automation',
-		sessionId: session.id,
-		path: window.location. pathname,
-		metadata: { toolName },
+// When human interjects
+function humanInterjects(reason: string): void {
+	orchestrator.interject({
+		type: 'pause',
+		actor: 'human',
+		reason,
 	})
 }
 ```
@@ -2892,43 +2936,42 @@ function handleToolExecution(toolName: string): void {
 import { createBroadcast } from '@mikesaintsg/broadcast'
 
 interface AppState {
-	currentNode: string
-	predictions: Array<{ nodeId: string; confidence: number }>
-	sessionId: string
+	currentStep: string | undefined
+	progress: number
+	currentActor: string | undefined
+	recommendations: Array<{ stepId: string; confidence: number }>
 }
 
-const broadcast = createBroadcast<AppState, { type: 'navigation'; to: string }>({
-	channel: 'account-manager',
+const broadcast = createBroadcast<AppState, { type: 'workflow_update' }>({
+	channel: 'workflow-manager',
 	state: {
-		currentNode: 'dashboard',
-		predictions: [],
-		sessionId: '',
+		currentStep: undefined,
+		progress: 0,
+		currentActor: undefined,
+		recommendations: [],
 	},
 })
 
-// Update state when predictions change
-engine.onTransition((from, to, context) => {
-	const predictions = engine.predictNextDetailed(to, {
-		actor: 'user',
-		sessionId: context.sessionId,
-		path: context.path,
-		count: 5,
-	})
+// Update state when step changes
+orchestrator.onStepComplete((step, result, actor) => {
+	const state = orchestrator.getState()
+	const recommendations = orchestrator.getRecommendations()
 	
 	broadcast.setState({
-		currentNode: to,
-		predictions:  predictions. predictions.map((p) => ({
-			nodeId: p.nodeId,
-			confidence: p.confidence,
+		currentStep: state.currentStep?.id,
+		progress: state.progress,
+		currentActor: state.currentActor,
+		recommendations: recommendations.map((r) => ({
+			stepId: r.stepId,
+			confidence: r.confidence,
 		})),
-		sessionId: context.sessionId,
 	})
 })
 
 // Listen for changes from other tabs
 broadcast.onStateChange((state, source) => {
 	if (source === 'remote') {
-		updateUIWithPredictions(state.predictions)
+		updateUIWithState(state)
 	}
 })
 
@@ -2937,7 +2980,7 @@ broadcast.onLeaderChange((isLeader) => {
 	if (isLeader) {
 		// Auto-save weights periodically
 		setInterval(() => {
-			predictive.saveWeights()
+			recommendation.saveWeights()
 		}, 60000)
 	}
 })
@@ -2946,56 +2989,69 @@ broadcast.onLeaderChange((isLeader) => {
 #### 11. UI Integration
 
 ```ts
-// Recommended actions component
-function RecommendedActions(): HTMLElement {
+// Workflow progress component
+function WorkflowProgress(): HTMLElement {
 	const container = document.createElement('div')
-	container.className = 'recommended-actions'
+	container.className = 'workflow-progress'
 	
-	function render(predictions: Array<{ nodeId: string; label: string; confidence: number }>): void {
+	function render(state: AppState): void {
 		container.innerHTML = ''
 		
 		const heading = document.createElement('h3')
-		heading.textContent = '🔮 Recommended Actions'
+		heading.textContent = '📋 Workflow Progress'
 		container.appendChild(heading)
 		
-		const buttons = document.createElement('div')
-		buttons.className = 'action-buttons'
+		const progress = document.createElement('div')
+		progress.className = 'progress-bar'
+		progress.innerHTML = `
+			<div class="progress-fill" style="width: ${Math.round(state.progress * 100)}%"></div>
+			<span class="progress-text">Step: ${state.currentStep ?? 'none'} (${Math.round(state.progress * 100)}%)</span>
+		`
+		container.appendChild(progress)
 		
-		for (const p of predictions) {
-			const button = document.createElement('button')
-			button.className = 'action-button'
-			button.innerHTML = `${p.label} <span class="confidence">${p. confidence}%</span>`
-			button.onclick = () => handleNavigation(getCurrentNode(), p.nodeId)
-			buttons.appendChild(button)
+		const actor = document.createElement('div')
+		actor.className = 'current-actor'
+		actor.textContent = `Current: ${state.currentActor ?? 'waiting'}`
+		container.appendChild(actor)
+		
+		if (state.recommendations.length > 0) {
+			const recsDiv = document.createElement('div')
+			recsDiv.className = 'recommendations'
+			recsDiv.innerHTML = '<h4>Recommendations</h4>'
+			
+			for (const r of state.recommendations.slice(0, 3)) {
+				const rec = document.createElement('button')
+				rec.className = 'rec-button'
+				const label = procedural.getStep(r.stepId)?.label ?? r.stepId
+				rec.innerHTML = `${label} <span class="confidence">${Math.round(r.confidence * 100)}%</span>`
+				rec.onclick = () => orchestrator.goToStep(r.stepId, 'human')
+				recsDiv.appendChild(rec)
+			}
+			
+			container.appendChild(recsDiv)
 		}
-		
-		container. appendChild(buttons)
 	}
 	
-	// Subscribe to prediction updates
+	// Subscribe to state updates
 	broadcast.onStateChange((state) => {
-		const predictions = state.predictions. map((p) => ({
-			...p,
-			label: procedural.getNode(p.nodeId)?.label ?? p.nodeId,
-		}))
-		render(predictions)
+		render(state)
 	})
 	
 	return container
 }
 
-// Input with refinement display
+// Input with workflow awareness
 function AssistantInput(): HTMLElement {
 	const container = document.createElement('div')
 	container.className = 'assistant-input'
 	
 	const input = document.createElement('input')
 	input.type = 'text'
-	input.placeholder = 'Search accounts or ask a question...'
+	input.placeholder = 'Enter task or command...'
 	
-	const refinedDisplay = document.createElement('div')
-	refinedDisplay.className = 'refined-prompt'
-	refinedDisplay.style.display = 'none'
+	const queueDisplay = document.createElement('div')
+	queueDisplay.className = 'action-queue'
+	queueDisplay.style.display = 'none'
 	
 	const responseDisplay = document.createElement('div')
 	responseDisplay.className = 'response'
@@ -3007,16 +3063,22 @@ function AssistantInput(): HTMLElement {
 		if (!userInput) return
 		
 		// Show loading state
-		refinedDisplay.textContent = 'Refining.. .'
-		refinedDisplay.style.display = 'block'
+		queueDisplay.textContent = 'Processing...'
+		queueDisplay.style.display = 'block'
 		
 		try {
-			const session = engine.getActiveSession('user') ?? engine.startSession('user')
-			const currentNode = broadcast.getState().currentNode
+			const state = orchestrator.getState()
+			const taskId = state.execution?.taskId ?? crypto.randomUUID()
 			
-			const result = await processUserInput(userInput, currentNode, session.id)
+			const result = await processUserInput(userInput, taskId)
 			
-			refinedDisplay.textContent = `✨ ${result.refinedPrompt}`
+			// Show action queue
+			if (result.actionsQueued.length > 0) {
+				queueDisplay.textContent = `✨ Queued: ${result.actionsQueued.join(', ')}`
+			} else {
+				queueDisplay.style.display = 'none'
+			}
+			
 			responseDisplay.innerHTML = formatResponse(result)
 		} catch (error) {
 			responseDisplay.textContent = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -3024,7 +3086,7 @@ function AssistantInput(): HTMLElement {
 	}
 	
 	container.appendChild(input)
-	container.appendChild(refinedDisplay)
+	container.appendChild(queueDisplay)
 	container.appendChild(responseDisplay)
 	
 	return container
@@ -3042,6 +3104,15 @@ function formatResponse(result: AssistantResult): string {
 		html += '</ul></div>'
 	}
 	
+	if (result.recommendations.length > 0) {
+		html += '<div class="recommendations">'
+		html += '<strong>Next steps:</strong><ul>'
+		for (const rec of result.recommendations.slice(0, 3)) {
+			html += `<li>${rec.label} (${rec.confidence}%)</li>`
+		}
+		html += '</ul></div>'
+	}
+	
 	return html
 }
 ```
@@ -3050,27 +3121,36 @@ function formatResponse(result: AssistantResult): string {
 
 1. **Progressive Model Loading**: Load smallest model first for instant responsiveness
 2. **Token Batching**: Use `TokenBatcher` from inference for smooth streaming UI
-3. **Debounce Input**: Debounce prompt refinement to avoid excessive model calls
+3. **Debounce Input**: Debounce user input to avoid excessive model calls
 4. **Cache Embeddings**: VectorStore persistence avoids re-embedding on reload
-5. **Weight Persistence**: Auto-save ActionLoop weights to avoid cold-start on refresh
+5. **Weight Persistence**: Auto-save WorkflowBuilder weights to avoid cold-start on refresh
 6. **Leader Election**: Use Broadcast leader to coordinate background tasks
+7. **Check-Back Caching**: Agent check-back results can be cached briefly
 
 ### Error Handling
 
 ```ts
-import { isActionLoopError } from '@mikesaintsg/actionloop'
+import { isWorkflowBuilderError } from '@mikesaintsg/workflowbuilder'
 import { isInferenceError } from '@mikesaintsg/inference'
 import { isVectorStoreError } from '@mikesaintsg/vectorstore'
 
-async function safeProcessInput(input: string): Promise<AssistantResult | null> {
+async function safeProcessInput(input: string, taskId: string): Promise<AssistantResult | null> {
 	try {
-		return await processUserInput(input, getCurrentNode(), getSessionId())
+		return await processUserInput(input, taskId)
 	} catch (error) {
-		if (isActionLoopError(error)) {
-			console.error(`ActionLoop error [${error.code}]: ${error.message}`)
-			// Handle specific ActionLoop errors
+		if (isWorkflowBuilderError(error)) {
+			console.error(`WorkflowBuilder error [${error.code}]: ${error.message}`)
+			// Handle specific WorkflowBuilder errors
+			switch (error.code) {
+				case 'GUARDRAIL_VIOLATION':
+					// Maybe request human override
+					break
+				case 'INVALID_TRANSITION':
+					// Reset to valid state
+					break
+			}
 		} else if (isInferenceError(error)) {
-			console.error(`Inference error [${error.code}]: ${error. message}`)
+			console.error(`Inference error [${error.code}]: ${error.message}`)
 			// Retry with different tier or show user message
 		} else if (isVectorStoreError(error)) {
 			console.error(`VectorStore error [${error.code}]: ${error.message}`)
@@ -3086,11 +3166,12 @@ async function safeProcessInput(input: string): Promise<AssistantResult | null> 
 ```ts
 function cleanup(): void {
 	// Save weights before closing
-	predictive.saveWeights()
+	recommendation.saveWeights()
 	
 	// Destroy all components
-	engine.destroy()
-	activity.destroy()
+	orchestrator.destroy()
+	recommendation.destroy()
+	procedural.destroy()
 	vectorStore.destroy()
 	tools.destroy()
 	broadcast.destroy()
@@ -3102,7 +3183,7 @@ window.addEventListener('beforeunload', cleanup)
 
 ### Use Cases
 
-| Use Case               | ActionLoop Role                      | LLM Role                                   |
+| Use Case               | workflowbuilder Role                      | LLM Role                                   |
 |------------------------|--------------------------------------|--------------------------------------------|
 | Navigation suggestions | Predict next actions with confidence | Explain reasoning                          |
 | Account search         | Record search patterns               | Parse natural language to structured query |

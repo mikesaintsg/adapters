@@ -126,41 +126,12 @@ export interface OllamaProviderAdapterOptions {
 	readonly streamer?: StreamerAdapterInterface
 }
 
-/** node-llama-cpp provider adapter options */
-export interface NodeLlamaCppProviderAdapterOptions {
-	readonly context: NodeLlamaCppContext
-	readonly chatWrapper?: NodeLlamaCppChatWrapper
-	readonly modelName?: string
-	readonly timeout?: number
-	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
-}
-
-/** HuggingFace provider adapter options */
-export interface HuggingFaceProviderAdapterOptions {
-	readonly pipeline: HuggingFaceTextGenerationPipeline
-	readonly modelName: string
-	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
-	/** Enable tool calling support (requires model with chat template) */
-	readonly enableTools?: boolean
-}
-
 /** Common Ollama chat models */
 export type OllamaChatModel =
 	| 'llama2' | 'llama2:13b' | 'llama2:70b'
 	| 'llama3' | 'llama3:8b' | 'llama3:70b'
 	| 'mistral' | 'mixtral' | 'codellama'
 	| 'deepseek-coder' | 'phi' | 'qwen' | 'gemma' | 'gemma2'
-	| (string & {})
-
-/** Common HuggingFace text generation models */
-export type HuggingFaceTextGenerationModel =
-	| 'Xenova/gpt2' | 'Xenova/distilgpt2' | 'Xenova/phi-1_5'
-	| 'Xenova/TinyLlama-1.1B-Chat-v1.0' | 'Xenova/Qwen1.5-0.5B-Chat'
-	| 'Xenova/LaMini-Flan-T5-783M'
-	| 'HuggingFaceTB/SmolLM2-135M-Instruct' | 'HuggingFaceTB/SmolLM2-360M-Instruct'
-	| 'Qwen/Qwen2.5-0.5B-Instruct' | 'Qwen/Qwen2.5-1.5B-Instruct'
 	| (string & {})
 
 // ============================================================================
@@ -200,33 +171,6 @@ export interface OllamaEmbeddingAdapterOptions {
 /** Common Ollama embedding models */
 export type OllamaEmbeddingModel =
 	| 'nomic-embed-text' | 'mxbai-embed-large' | 'all-minilm' | 'snowflake-arctic-embed'
-	| (string & {})
-
-/** node-llama-cpp embedding adapter options */
-export interface NodeLlamaCppEmbeddingAdapterOptions {
-	readonly embeddingContext: NodeLlamaCppEmbeddingContext
-	readonly modelName?: string
-	readonly dimensions?: number
-}
-
-/** HuggingFace embedding adapter options */
-export interface HuggingFaceEmbeddingAdapterOptions {
-	readonly pipeline: HuggingFaceFeatureExtractionPipeline
-	readonly modelName: string
-	readonly dimensions: number
-	readonly pooling?: HuggingFacePoolingStrategy
-	readonly normalize?: boolean
-}
-
-/** Pooling strategy for HuggingFace embeddings */
-export type HuggingFacePoolingStrategy = 'none' | 'mean' | 'cls'
-
-/** Common HuggingFace embedding models */
-export type HuggingFaceEmbeddingModel =
-	| 'Xenova/all-MiniLM-L6-v2' | 'Xenova/all-mpnet-base-v2'
-	| 'Xenova/paraphrase-MiniLM-L6-v2' | 'Xenova/bert-base-uncased'
-	| 'Xenova/multilingual-e5-small' | 'Xenova/bge-small-en-v1.5' | 'Xenova/gte-small'
-	| 'sentence-transformers/all-MiniLM-L6-v2'
 	| (string & {})
 
 // ============================================================================
@@ -280,11 +224,6 @@ export interface ConsoleTelemetryAdapterOptions {
 	readonly prefix?: string
 	readonly includeTimestamp?: boolean
 	readonly includeSpanId?: boolean
-}
-
-/** No-op telemetry adapter options (for production where telemetry is disabled) */
-export interface NoOpTelemetryAdapterOptions {
-	readonly enabled?: boolean
 }
 
 // ============================================================================
@@ -385,44 +324,6 @@ export interface IndexedDBSessionPersistenceOptions {
 	readonly ttlMs?: number
 }
 
-/** IndexedDB event persistence options for ActionLoop */
-export interface IndexedDBEventPersistenceOptions {
-	readonly database: MinimalDatabaseAccess
-	readonly storeName?: string
-}
-
-/** IndexedDB weight persistence options for ActionLoop */
-export interface IndexedDBWeightPersistenceOptions {
-	readonly database: MinimalDatabaseAccess
-	readonly storeName?: string
-}
-
-/** In-memory event persistence options for ActionLoop */
-export interface InMemoryEventPersistenceOptions {
-	readonly maxEvents?: number
-}
-
-/** Stored event record in IndexedDB for ActionLoop */
-export interface ActionLoopStoredEventRecord {
-	readonly id: string
-	readonly timestamp: number
-	readonly sessionId: string
-	readonly actor: string
-	readonly from: string
-	readonly to: string
-	readonly path: string
-	readonly engagement: string
-	readonly namespace?: string
-	readonly dwell?: unknown
-	readonly metadata?: unknown
-}
-
-/** Stored weight record in IndexedDB for ActionLoop */
-export interface ActionLoopStoredWeightRecord {
-	readonly modelId: string
-	readonly data: ExportedPredictiveGraph
-}
-
 // ============================================================================
 // 9. Context Builder Adapter Options
 // ============================================================================
@@ -453,225 +354,6 @@ export interface PriorityAdapterOptions {
 export interface SSEParserAdapterOptions {
 	readonly lineDelimiter?: string
 	readonly eventDelimiter?: string
-}
-
-// ============================================================================
-// 11. External Dependency Interfaces (Minimal)
-// ============================================================================
-
-// --- node-llama-cpp Interfaces ---
-
-/** Minimal interface for node-llama-cpp LlamaContext */
-export interface NodeLlamaCppContext {
-	getSequence(): NodeLlamaCppContextSequence
-	readonly model: NodeLlamaCppModel
-}
-
-/** Minimal interface for node-llama-cpp LlamaContextSequence */
-export interface NodeLlamaCppContextSequence {
-	evaluate(
-		tokens: readonly number[],
-		options?: NodeLlamaCppEvaluateOptions
-	): AsyncGenerator<number, void, unknown>
-}
-
-/** Minimal interface for node-llama-cpp LlamaModel */
-export interface NodeLlamaCppModel {
-	tokenize(text: string, options?: { readonly special?: boolean }): readonly number[]
-	detokenize(tokens: readonly number[]): string
-	readonly tokens: { readonly bos?: number; readonly eos?: number }
-}
-
-/** Minimal interface for node-llama-cpp LlamaEmbeddingContext */
-export interface NodeLlamaCppEmbeddingContext {
-	getEmbeddingFor(text: string): Promise<NodeLlamaCppLlamaEmbedding>
-}
-
-/** Minimal interface for node-llama-cpp LlamaEmbedding */
-export interface NodeLlamaCppLlamaEmbedding {
-	readonly vector: readonly number[]
-}
-
-/** Minimal interface for node-llama-cpp ChatWrapper */
-export interface NodeLlamaCppChatWrapper {
-	generateContextState(options: {
-		readonly chatHistory: readonly NodeLlamaCppChatHistoryItem[]
-		readonly availableFunctions?: Record<string, unknown>
-		readonly documentFunctionParams?: boolean
-	}): {
-		readonly contextText: NodeLlamaCppLlamaText
-		readonly stopGenerationTriggers: readonly (readonly number[])[]
-	}
-}
-
-/** Minimal interface for node-llama-cpp LlamaText */
-export interface NodeLlamaCppLlamaText {
-	tokenize(tokenizer: {
-		tokenize(text: string, options?: { special?: boolean }): readonly number[]
-	}): readonly number[]
-}
-
-/** Minimal interface for node-llama-cpp ChatHistoryItem */
-export type NodeLlamaCppChatHistoryItem =
-	| { readonly type: 'system'; readonly text: string }
-	| { readonly type: 'user'; readonly text: string }
-	| { readonly type: 'model'; readonly response: readonly string[] }
-
-/** Minimal interface for node-llama-cpp evaluate options */
-export interface NodeLlamaCppEvaluateOptions {
-	readonly temperature?: number
-	readonly topP?: number
-	readonly topK?: number
-	readonly maxTokens?: number
-	readonly stopOnBos?: boolean
-	readonly stopOnEos?: boolean
-	readonly signal?: AbortSignal
-}
-
-// --- HuggingFace Interfaces ---
-
-/** Minimal interface for HuggingFace FeatureExtractionPipeline */
-export interface HuggingFaceFeatureExtractionPipeline {
-	(texts: string | readonly string[], options?: HuggingFaceFeatureExtractionOptions): Promise<HuggingFaceTensor>
-	dispose?(): Promise<void>
-}
-
-/** Options for HuggingFace feature extraction */
-export interface HuggingFaceFeatureExtractionOptions {
-	readonly pooling?: HuggingFacePoolingStrategy
-	readonly normalize?: boolean
-}
-
-/** Minimal interface for HuggingFace TextGenerationPipeline */
-export interface HuggingFaceTextGenerationPipeline {
-	(texts: string | readonly string[], options?: HuggingFaceTextGenerationOptions): Promise<HuggingFaceTextGenerationOutput | readonly HuggingFaceTextGenerationOutput[]>
-	readonly model?: HuggingFacePreTrainedModel
-	readonly tokenizer?: HuggingFaceTokenizer
-	dispose?(): Promise<void>
-}
-
-/** Options for HuggingFace text generation */
-export interface HuggingFaceTextGenerationOptions {
-	readonly max_new_tokens?: number
-	readonly temperature?: number
-	readonly top_p?: number
-	readonly top_k?: number
-	readonly do_sample?: boolean
-	readonly repetition_penalty?: number
-	readonly return_full_text?: boolean
-	readonly streamer?: HuggingFaceBaseStreamer
-}
-
-/** Output from HuggingFace text generation */
-export interface HuggingFaceTextGenerationOutput {
-	readonly generated_text: string
-}
-
-/** Minimal interface for HuggingFace Tensor */
-export interface HuggingFaceTensor {
-	readonly data: Float32Array | Float64Array | Int32Array | BigInt64Array | Uint8Array
-	readonly dims: readonly number[]
-	readonly type: string
-	readonly size: number
-	tolist(): unknown[]
-	dispose?(): void
-}
-
-/** Minimal interface for HuggingFace PreTrainedModel */
-export interface HuggingFacePreTrainedModel {
-	generate(options: HuggingFaceGenerateOptions): Promise<HuggingFaceModelOutput>
-}
-
-/** Options for the model's generate method */
-export interface HuggingFaceGenerateOptions {
-	readonly inputs?: HuggingFaceTensor
-	readonly generation_config?: HuggingFaceGenerationConfig
-	readonly streamer?: HuggingFaceBaseStreamer
-}
-
-/** Generation configuration for HuggingFace models */
-export interface HuggingFaceGenerationConfig {
-	readonly max_new_tokens?: number
-	readonly temperature?: number
-	readonly top_p?: number
-	readonly top_k?: number
-	readonly do_sample?: boolean
-}
-
-/** Minimal interface for HuggingFace model output */
-export interface HuggingFaceModelOutput {
-	readonly data?: readonly bigint[]
-	readonly dims?: readonly number[]
-}
-
-/** Minimal interface for HuggingFace tokenizer */
-export interface HuggingFaceTokenizer {
-	(text: string): HuggingFaceEncodedInput
-	decode(tokenIds: readonly bigint[] | readonly number[], options?: { skip_special_tokens?: boolean }): string
-	/** Apply chat template to messages - required for tool calling with Qwen models */
-	apply_chat_template?(
-		conversation: readonly HuggingFaceChatMessage[],
-		options?: HuggingFaceApplyChatTemplateOptions,
-	): string | HuggingFaceTensor
-}
-
-/** Chat message for HuggingFace chat template */
-export interface HuggingFaceChatMessage {
-	readonly role: 'system' | 'user' | 'assistant' | 'tool'
-	readonly content: string
-	readonly name?: string
-	readonly tool_calls?: readonly HuggingFaceToolCall[]
-}
-
-/** Tool call in assistant message */
-export interface HuggingFaceToolCall {
-	readonly type: 'function'
-	readonly function: {
-		readonly name: string
-		readonly arguments: string | Record<string, unknown>
-	}
-}
-
-/** Tool schema for HuggingFace chat template */
-export interface HuggingFaceTool {
-	readonly type: 'function'
-	readonly function: {
-		readonly name: string
-		readonly description: string
-		readonly parameters: HuggingFaceToolParameters
-	}
-}
-
-/** JSON Schema-like parameters for tools */
-export interface HuggingFaceToolParameters {
-	readonly type: 'object'
-	readonly properties: Record<string, HuggingFaceToolProperty>
-	readonly required?: readonly string[] | undefined
-}
-
-/** Property definition for tool parameters */
-export interface HuggingFaceToolProperty {
-	readonly type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object'
-	readonly description?: string
-	readonly enum?: readonly string[]
-}
-
-/** Options for apply_chat_template */
-export interface HuggingFaceApplyChatTemplateOptions {
-	readonly tools?: readonly HuggingFaceTool[]
-	readonly add_generation_prompt?: boolean
-	readonly tokenize?: boolean
-}
-
-/** Encoded input from tokenizer */
-export interface HuggingFaceEncodedInput {
-	readonly input_ids: HuggingFaceTensor
-}
-
-/** Base interface for HuggingFace streamers */
-export interface HuggingFaceBaseStreamer {
-	put(value: readonly (readonly bigint[])[]): void
-	end(): void
 }
 
 // ============================================================================
@@ -1022,15 +704,11 @@ export type CreateSSEParserAdapter = (options?: SSEParserAdapterOptions) => SSEP
 export type CreateOpenAIProviderAdapter = (options: OpenAIProviderAdapterOptions) => ProviderAdapterInterface
 export type CreateAnthropicProviderAdapter = (options: AnthropicProviderAdapterOptions) => ProviderAdapterInterface
 export type CreateOllamaProviderAdapter = (options: OllamaProviderAdapterOptions) => ProviderAdapterInterface
-export type CreateNodeLlamaCppProviderAdapter = (options: NodeLlamaCppProviderAdapterOptions) => ProviderAdapterInterface
-export type CreateHuggingFaceProviderAdapter = (options: HuggingFaceProviderAdapterOptions) => ProviderAdapterInterface
 
 // --- Embedding Adapter Factories ---
 export type CreateOpenAIEmbeddingAdapter = (options: OpenAIEmbeddingAdapterOptions) => EmbeddingAdapterInterface
 export type CreateVoyageEmbeddingAdapter = (options: VoyageEmbeddingAdapterOptions) => EmbeddingAdapterInterface
 export type CreateOllamaEmbeddingAdapter = (options: OllamaEmbeddingAdapterOptions) => EmbeddingAdapterInterface
-export type CreateNodeLlamaCppEmbeddingAdapter = (options: NodeLlamaCppEmbeddingAdapterOptions) => EmbeddingAdapterInterface
-export type CreateHuggingFaceEmbeddingAdapter = (options: HuggingFaceEmbeddingAdapterOptions) => EmbeddingAdapterInterface
 
 // --- Transform Adapter Factories ---
 export type CreateOpenAIToolFormatAdapter = (options?: OpenAIToolFormatAdapterOptions) => ToolFormatAdapterInterface
@@ -1054,7 +732,6 @@ export type CreateCircuitBreakerAdapter = (options?: CircuitBreakerAdapterOption
 
 // --- Telemetry Adapter Factories ---
 export type CreateConsoleTelemetryAdapter = (options?: ConsoleTelemetryAdapterOptions) => TelemetryAdapterInterface
-export type CreateNoOpTelemetryAdapter = (options?: NoOpTelemetryAdapterOptions) => TelemetryAdapterInterface
 
 // --- Enhancement Adapter Factories ---
 export type CreateLRUCacheAdapter = (options?: LRUCacheAdapterOptions) => EmbeddingCacheAdapterInterface
@@ -1071,9 +748,3 @@ export type CreateFIFOTruncationAdapter = (options?: TruncationAdapterOptions) =
 export type CreateLIFOTruncationAdapter = (options?: TruncationAdapterOptions) => TruncationAdapterInterface
 export type CreateScoreTruncationAdapter = (options?: TruncationAdapterOptions) => TruncationAdapterInterface
 export type CreatePriorityAdapter = (options?: PriorityAdapterOptions) => PriorityAdapterInterface
-
-// --- ActionLoop Persistence Adapter Factories ---
-export type CreateIndexedDBEventPersistenceAdapter = (options: IndexedDBEventPersistenceOptions) => EventStorePersistenceAdapterInterface
-export type CreateIndexedDBWeightPersistenceAdapter = (options: IndexedDBWeightPersistenceOptions) => WeightPersistenceAdapterInterface
-export type CreateInMemoryEventPersistenceAdapter = (options?: InMemoryEventPersistenceOptions) => EventStorePersistenceAdapterInterface
-export type CreateInMemoryWeightPersistenceAdapter = () => WeightPersistenceAdapterInterface

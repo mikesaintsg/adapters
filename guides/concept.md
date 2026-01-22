@@ -21,7 +21,7 @@
 | `@mikesaintsg/navigation`     | Client-side routing                 | N/A                                                    |
 | `@mikesaintsg/storage`        | Storage abstraction                 | N/A                                                    |
 | `@mikesaintsg/rater`          | Factor-based rating engine          | N/A                                                    |
-| `@mikesaintsg/actionloop`     | Predictive workflow guidance        | `ProceduralGraphInterface`                             |
+| `@mikesaintsg/workflowbuilder`     | Human-agent collaborative workflows        | `ProceduralGraphInterface`                             |
 
 **Factory Pattern:** `createSystem(requiredAdapter, options?)`
 
@@ -1430,7 +1430,7 @@ type AdapterErrorCode =
 - `createOPFSVectorPersistenceAdapter(options)` → `VectorStorePersistenceAdapterInterface`
 - `createHTTPVectorPersistenceAdapter(options)` → `VectorStorePersistenceAdapterInterface`
 
-### ActionLoop Persistence Adapters
+### workflowbuilder Persistence Adapters
 
 - `createIndexedDBEventPersistenceAdapter(options)` → `EventStorePersistenceAdapterInterface`
 - `createIndexedDBWeightPersistenceAdapter(options)` → `WeightPersistenceAdapterInterface`
@@ -5024,7 +5024,7 @@ Here's the final overview of all packages:
 | `@mikesaintsg/vectorstore`    | `EmbeddingAdapterInterface`                            | Vector storage & search                      |
 | `@mikesaintsg/contextbuilder` | `TokenAdapterInterface` / `ToolFormatAdapterInterface` | Context assembly, tools & budgeting          |
 | `@mikesaintsg/rater`          | N/A                                                    | Factor-based rating engine                   |
-| `@mikesaintsg/actionloop`     | `ProceduralGraphInterface`                             | Predictive workflow guidance                 |
+| `@mikesaintsg/workflowbuilder`     | `ProceduralGraphInterface`                             | Human-agent collaborative workflows                 |
 
 ### Dependency Graph
 
@@ -5068,8 +5068,8 @@ Here's the final overview of all packages:
 | `types/contextbuilder/types.ts`  | ContextBuilder type definitions  |
 | `guides/rater.md`                | Rater package guide              |
 | `types/rater/types.ts`           | Rater type definitions           |
-| `guides/actionloop.md`           | ActionLoop package guide         |
-| `types/actionloop/types.ts`      | ActionLoop type definitions      |
+| `guides/workflowbuilder.md`           | workflowbuilder package guide         |
+| `types/workflowbuilder/types.ts`      | workflowbuilder type definitions      |
 
 ### Key Design Decisions
 
@@ -5084,39 +5084,41 @@ Here's the final overview of all packages:
 
 ---
 
-## 7. @mikesaintsg/actionloop
+## 7. @mikesaintsg/workflowbuilder
 
-````markdown name=guides/actionloop.md
-# @mikesaintsg/actionloop — Predictive Workflow Guidance
+````markdown name=guides/workflowbuilder.md
+# @mikesaintsg/workflowbuilder — Human-Agent Collaborative Workflows
 
 ## Purpose
 
-ActionLoop provides predictive workflow guidance through the PPALS (Predict-Present-Act-Learn-Store) cycle. It combines static rules with dynamic learning to guide users through optimal workflows.
+WorkflowBuilder enables real-time collaboration between humans and AI agents through shared workflow state, action stacking, and adaptive recommendations. It combines static rules with dynamic learning to coordinate human-agent workflows.
 
 ## Design Principles
 
-1. **Separation of Concerns**: Static rules (ProceduralGraph) vs dynamic weights (PredictiveGraph)
-2. **Composable**: Workflow engine combines graphs with runtime coordination
-3. **Decay-based Learning**: Recent behavior weighted more heavily (EWMA)
-4. **Session-aware**: Predictions consider session context
+1. **Separation of Concerns**: Static rules (ProceduralGraph) vs dynamic weights (RecommendationGraph)
+2. **Shared State**: Both human and agent see and modify the same workflow
+3. **Check-Back Loop**: Agent verifies plan state before each action
+4. **Actor Attribution**: Every action tagged with who did it
 
 ## Core Concepts
 
 ### ProceduralGraph
 
-Defines valid transitions (static rules):
+Defines valid steps and transitions (static rules):
 
 ```ts
-import { createProceduralGraph } from '@mikesaintsg/actionloop'
+import { createProceduralGraph } from '@mikesaintsg/workflowbuilder'
+
+const steps = [
+	{ id: 'analyze', label: 'Analyze', order: 1, actions: ['read', 'ask'] },
+	{ id: 'design', label: 'Design', order: 2, actions: ['outline', 'plan'] },
+	{ id: 'implement', label: 'Implement', order: 3, actions: ['code', 'test'] },
+] as const
 
 const transitions = [
-	{ from: 'landing', to: 'login', weight: 1, actor: 'user' },
-	{ from: 'landing', to: 'register', weight: 1, actor: 'user' },
-	{ from: 'login', to: 'dashboard', weight: 1, actor: 'user' },
-	{ from: 'register', to: 'onboarding', weight: 1, actor: 'user' },
-	{ from: 'onboarding', to: 'dashboard', weight: 1, actor: 'user' },
-	{ from: 'dashboard', to: 'settings', weight: 1, actor: 'user' },
-	{ from: 'dashboard', to: 'profile', weight: 1, actor: 'user' },
+	{ from: 'analyze', to: 'design', weight: 1 },
+	{ from: 'design', to: 'implement', weight: 1 },
+	{ from: 'implement', to: 'design', weight: 0.5 }, // Backtrack if needed
 ] as const
 
 const procedural = createProceduralGraph({
@@ -5124,146 +5126,178 @@ const procedural = createProceduralGraph({
 	validateOnCreate: true,
 })
 
-// Query valid transitions
-const valid = procedural.isValid('dashboard', 'settings') // true
-const neighbors = procedural.getNeighbors('dashboard') // ['settings', 'profile']
+// Query steps and transitions
+const step = procedural.getStep('analyze') // Step object
+const canTransition = procedural.hasTransition('analyze', 'design') // true
 ```
 
-### PredictiveGraph
+### RecommendationGraph
 
-Learns from user behavior (dynamic weights):
+Learns from execution patterns (dynamic weights):
 
 ```ts
-import { createPredictiveGraph } from '@mikesaintsg/actionloop'
+import { createRecommendationGraph } from '@mikesaintsg/workflowbuilder'
 
-const predictive = createPredictiveGraph(procedural, {
-	decayAlgorithm: 'ewma',
+const recommendation = createRecommendationGraph(procedural, {
+	learningRate: 0.1,
 	decayFactor: 0.9,
-	initialWeight: 0.5,
+	minConfidence: 0.1,
 })
 
-// Update weights based on usage
-predictive.recordTransition('dashboard', 'settings', 'user')
+// Record transition outcomes
+recommendation.recordTransition('analyze', 'design', {
+	success: true,
+	duration: 5000,
+})
 
-// Get predictions
-const predictions = predictive.predict('dashboard', { actor: 'user', count: 3 })
-// => ['settings', 'profile'] sorted by learned weights
+// Get recommendations
+const recommendations = recommendation.getRecommendations('analyze')
+// => [{ stepId: 'design', confidence: 0.92, reasoning: '...' }]
 
 // Export/import for persistence
-const exported = predictive.export()
-predictive.import(exported)
+const exported = recommendation.export()
+recommendation.import(exported)
 ```
 
-### WorkflowEngine
+### WorkflowOrchestrator
 
-Orchestrates the PPALS cycle:
+Coordinates human-agent collaboration:
 
 ```ts
-import { createWorkflowEngine } from '@mikesaintsg/actionloop'
+import { createWorkflowOrchestrator } from '@mikesaintsg/workflowbuilder'
 
-const engine = createWorkflowEngine(procedural, predictive, {
-	trackSessions: true,
-	validateTransitions: true,
+const orchestrator = createWorkflowOrchestrator(procedural, recommendation, {
+	checkBackBeforeStep: true,
+	guardrails: {
+		enforceOrder: true,
+		agentRequiresApproval: ['deploy'],
+		humanCanOverride: true,
+	},
 })
 
-// Start a session
-const session = engine.startSession('user')
+// Start workflow
+const execution = orchestrator.start({ taskId: 'feature-123' })
 
-// Record transitions
-engine.recordTransition('landing', 'login', {
-	actor: 'user',
-	sessionId: session.id,
-	path: '/login',
+// Agent proposes a plan
+orchestrator.proposePlan([
+	{ stepId: 'analyze', actions: ['read', 'ask'] },
+], 'agent')
+
+// Human queues an action
+orchestrator.queueAction({
+	stepId: 'analyze',
+	actionId: 'security_check',
+	actor: 'human',
+	priority: 'high',
 })
 
-// Get predictions
-const predictions = engine.predictNext('dashboard', {
-	actor: 'user',
-	sessionId: session.id,
-	path: '/dashboard',
-	count: 3,
+// Agent checks back (sees human modification)
+const plan = orchestrator.checkBack('agent')
+console.log(`Modified: ${plan.isModified}`)
+
+// Record action
+orchestrator.recordAction({
+	stepId: 'analyze',
+	actionId: 'read',
+	actor: 'agent',
+	success: true,
 })
 
-// With detailed confidence scores
-const detailed = engine.predictNextDetailed('dashboard', context)
-detailed.predictions.forEach(p => {
-	console.log(`${p.nodeId}: ${Math.round(p.confidence * 100)}%`)
-})
-
-// End session
-engine.endSession(session.id, 'completed')
+// Get recommendations
+const recommendations = orchestrator.getRecommendations()
 
 // Cleanup
-engine.destroy()
+orchestrator.destroy()
 ```
 
-## The PPALS Cycle
+## The HACWS Cycle
 
-1. **Predict**: Use learned weights to predict next likely action
-2. **Present**: Show predictions to user (UI integration)
-3. **Act**: User selects action (or different one)
-4. **Learn**: Update weights based on actual action
-5. **Store**: Persist updated weights
+The Human-Agent Collaborative Workflow System runs a continuous cycle:
+
+1. **Propose**: Agent proposes plan (visible to human)
+2. **Modify**: Human may add, remove, or reorder actions
+3. **Check-Back**: Agent queries for latest plan state
+4. **Execute**: Agent executes with human modifications
+5. **Record**: Outcome recorded with actor attribution
+6. **Recommend**: RecommendationGraph suggests next step
 
 ```ts
-// PPALS in action
-async function handleNavigation(from: string, to: string) {
-	// 1. Predict (for analytics)
-	const predicted = engine.predictNext(from, context)
-	const wasPredicted = predicted.includes(to)
+// HACWS in action
+async function agentWorkflow(taskId: string) {
+	// Start workflow
+	orchestrator.start({ taskId })
 	
-	// 2. Present (in UI layer)
-	// ... render suggested actions
+	// 1. Propose plan
+	orchestrator.proposePlan([
+		{ stepId: 'analyze', actions: ['read', 'ask'] },
+	], 'agent')
 	
-	// 3. Act (user navigation)
-	engine.recordTransition(from, to, context) // 4. Learn
+	// 2. Human may modify (in UI layer)...
 	
-	// 5. Store (periodic or on-demand)
-	saveWeights(predictive.export())
+	// 3. Check-back before acting
+	const plan = orchestrator.checkBack('agent')
+	
+	// 4. Execute with awareness of modifications
+	for (const action of plan.actions) {
+		orchestrator.recordAction({
+			stepId: plan.stepId,
+			actionId: action.actionId,
+			actor: 'agent',
+			success: true,
+		})
+	}
+	
+	// 5. Record step completion
+	orchestrator.completeStep(plan.stepId, { output: result, actor: 'agent' })
+	
+	// 6. Get recommendations
+	const next = orchestrator.getRecommendations()
 }
 ```
 
 ## Decay Algorithms
 
-### EWMA (Exponential Weighted Moving Average)
+The RecommendationGraph uses decay algorithms to weight recent patterns more heavily.
 
-Default algorithm. Recent events weighted more heavily:
+### Learning Rate
+
+Configure how quickly new patterns affect recommendations:
 
 ```ts
-const predictive = createPredictiveGraph(procedural, {
-	decayAlgorithm: 'ewma',
-	decayFactor: 0.9, // 0-1, higher = more weight on recent
+const recommendation = createRecommendationGraph(procedural, {
+	learningRate: 0.1, // Lower = more stable, higher = more responsive
+	decayFactor: 0.9, // How quickly old patterns fade
 })
 ```
 
-### Time-based Decay
+### Cold Start
 
-Weights decay based on elapsed time:
+Handle initial recommendations before learning:
 
 ```ts
-const predictive = createPredictiveGraph(procedural, {
-	decayAlgorithm: 'time',
-	halfLifeMs: 24 * 60 * 60 * 1000, // 24 hours
+const recommendation = createRecommendationGraph(procedural, {
+	coldStart: {
+		strategy: 'procedural-weight', // Use procedural graph weights
+		warmupThreshold: 50, // Number of transitions before fully learned
+	},
 })
 ```
 
-## Session Tracking
+## Execution History
 
 ```ts
-const engine = createWorkflowEngine(procedural, predictive, {
-	trackSessions: true,
-	maxSessionHistory: 100,
-})
+// Get workflow execution history
+const history = orchestrator.getHistory()
+console.log(`Entries: ${history.length}`)
 
-// Get session history
-const chain = engine.getSessionChain('user', {
-	limit: 50,
-	includeMetadata: true,
-})
+// Filter by type
+const completedSteps = history.filter(h => h.type === 'step_completed')
+console.log(`Steps completed: ${completedSteps.length}`)
 
-console.log(`Events: ${chain.events.length}`)
-console.log(`Duration: ${chain.totalDuration}ms`)
-console.log(`Conversion: ${chain.completed ? 'Yes' : 'No'}`)
+// Get audit trail
+const audit = orchestrator.getAuditTrail()
+console.log(`Duration: ${audit.duration}ms`)
+console.log(`Status: ${audit.status}`)
 ```
 
 ## API Reference
@@ -5271,364 +5305,116 @@ console.log(`Conversion: ${chain.completed ? 'Yes' : 'No'}`)
 ### Factory Functions
 
 - `createProceduralGraph(options)` → `ProceduralGraphInterface`
-- `createPredictiveGraph(procedural, options?)` → `PredictiveGraphInterface`
-- `createWorkflowEngine(procedural, predictive, options?)` → `WorkflowEngineInterface`
+- `createRecommendationGraph(procedural, options?)` → `RecommendationGraphInterface`
+- `createWorkflowOrchestrator(procedural, recommendation, options?)` → `WorkflowOrchestratorInterface`
+- `createWorkflowContextFormatter(options?)` → `WorkflowContextFormatterInterface`
 
 ### ProceduralGraphInterface
 
-- `isValid(from, to)` → `boolean`
-- `getNeighbors(nodeId)` → `readonly string[]`
-- `getNodes()` → `readonly string[]`
-- `getEdges()` → `readonly Edge[]`
-- `getWeight(from, to, actor?)` → `number | undefined`
+- `getStep(id)` → `Step | undefined`
+- `getSteps()` → `readonly Step[]`
+- `hasTransition(from, to)` → `boolean`
+- `getTransitions(from)` → `readonly StepTransition[]`
+- `isValidAction(stepId, actionId)` → `boolean`
+- `validate()` → `readonly ValidationResult[]`
 
-### PredictiveGraphInterface
+### RecommendationGraphInterface
 
-- `recordTransition(from, to, actor)` → `void`
-- `predict(from, options?)` → `readonly string[]`
-- `getWeight(from, to, actor)` → `number`
-- `setWeight(from, to, actor, weight)` → `void`
+- `recordTransition(from, to, result)` → `void`
+- `getRecommendations(stepId, options?)` → `readonly Recommendation[]`
+- `getConfidence(from, to)` → `number`
 - `export()` → `ExportedWeights`
 - `import(weights)` → `void`
-- `onWeightUpdate(callback)` → `Unsubscribe`
-- `reset()` → `void`
+- `saveWeights()` → `Promise<void>`
+- `loadWeights()` → `Promise<boolean>`
 
-### WorkflowEngineInterface
+### WorkflowOrchestratorInterface
 
-- `startSession(actor, id?)` → `Session`
-- `endSession(id, reason)` → `void`
-- `resumeSession(id, context)` → `void`
-- `recordTransition(from, to, context)` → `void`
-- `recordTransitions(batch)` → `void`
-- `predictNext(from, context)` → `readonly string[]`
-- `predictNextDetailed(from, context)` → `DetailedPredictions`
-- `isValidTransition(from, to)` → `boolean`
-- `getSessionChain(actor, options?)` → `SessionChain`
+- `start(taskContext)` → `Execution`
+- `pause()` → `void`
+- `resume()` → `void`
+- `cancel(reason?)` → `void`
+- `proposePlan(steps, actor)` → `void`
+- `checkBack(actor)` → `CheckBackResult`
+- `queueAction(input)` → `void`
+- `dequeueAction(input)` → `void`
+- `recordAction(action)` → `void`
+- `completeStep(stepId, result)` → `void`
+- `nextStep(actor)` → `Step | undefined`
+- `getRecommendations(options?)` → `readonly Recommendation[]`
+- `getState()` → `WorkflowState`
+- `interject(interjection)` → `void`
+- `overrideGuardrail(override)` → `void`
+- `hasPendingModifications()` → `boolean`
 - `destroy()` → `void`
 
 ### Error Types
 
 ```ts
-import { isActionLoopError } from '@mikesaintsg/actionloop'
+import { isWorkflowBuilderError } from '@mikesaintsg/workflowbuilder'
 
 try {
-	engine.recordTransition('invalid', 'transition', context)
+	orchestrator.goToStep('invalid', 'agent')
 } catch (error) {
-	if (isActionLoopError(error)) {
+	if (isWorkflowBuilderError(error)) {
 		switch (error.code) {
 			case 'INVALID_TRANSITION':
 				console.error('Transition not allowed')
 				break
-			case 'SESSION_NOT_FOUND':
-				console.error('Session expired')
+			case 'STEP_NOT_FOUND':
+				console.error('Step does not exist')
 				break
-			case 'NODE_NOT_FOUND':
-				console.error('Unknown node')
+			case 'GUARDRAIL_VIOLATION':
+				console.error('Action blocked by guardrail')
 				break
 		}
 	}
 }
 ```
+
+## Integration with ContextBuilder
+
+WorkflowBuilder integrates with ContextBuilder through loose coupling. The workflow state is formatted as text and added as a section:
+
+```ts
+import { createContextManager } from '@mikesaintsg/contextbuilder'
+import { 
+	createWorkflowOrchestrator,
+	createWorkflowContextFormatter,
+} from '@mikesaintsg/workflowbuilder'
+import { createModelTokenAdapter } from '@mikesaintsg/adapters'
+
+const tokenAdapter = createModelTokenAdapter({ model: 'gpt-4o' })
+const context = createContextManager(tokenAdapter, {
+	budget: { maxTokens: 8000, reservedTokens: 2000 },
+})
+
+const orchestrator = createWorkflowOrchestrator(procedural, recommendation)
+const formatter = createWorkflowContextFormatter({ verbosity: 'standard' })
+
+// Add workflow state as section (loose coupling)
+function syncWorkflowToContext() {
+	const formatted = formatter.format(orchestrator.getState())
+	context.sections.setSection({
+		id: 'workflow-state',
+		name: 'Current Workflow',
+		content: formatted.naturalLanguage,
+		metadata: { pinned: true },
+	})
+}
+
+// Update on workflow changes
+orchestrator.onStepComplete(() => syncWorkflowToContext())
+
+// Build context includes workflow state
+context.sections.select(['workflow-state'])
+const built = context.buildFromSelection()
+```
+
+This approach:
+- **Loose Coupling**: Packages don't depend on each other
+- **Token Budget**: Workflow state respects ContextBuilder's token management
+- **Verbosity Control**: Use minimal verbosity for tight budgets
 ````
 
-```typescript name=types/actionloop/types.ts
-/**
- * @mikesaintsg/actionloop
- *
- * Type definitions for predictive workflow guidance.
- */
-
-import type { Unsubscribe, PackageErrorData } from '@mikesaintsg/core'
-
-// ============================================================================
-// Core Types
-// ============================================================================
-
-/** Actor type for transitions */
-export type Actor = string
-
-/** Node identifier */
-export type NodeId = string
-
-/** Edge in the graph */
-export interface Edge {
-	readonly from: NodeId
-	readonly to: NodeId
-	readonly weight: number
-	readonly actor?: Actor
-}
-
-/** Transition definition for procedural graph */
-export interface TransitionDefinition {
-	readonly from: NodeId
-	readonly to: NodeId
-	readonly weight: number
-	readonly actor: Actor
-}
-
-// ============================================================================
-// Session Types
-// ============================================================================
-
-/** Session state */
-export interface Session {
-	readonly id: string
-	readonly actor: Actor
-	readonly startedAt: number
-	readonly currentNode?: NodeId
-}
-
-/** Session end reason */
-export type SessionEndReason = 'completed' | 'abandoned' | 'timeout' | 'error'
-
-/** Session event */
-export interface SessionEvent {
-	readonly from: NodeId
-	readonly to: NodeId
-	readonly timestamp: number
-	readonly metadata?: Readonly<Record<string, unknown>>
-}
-
-/** Session chain for analytics */
-export interface SessionChain {
-	readonly sessionId: string
-	readonly actor: Actor
-	readonly events: readonly SessionEvent[]
-	readonly startedAt: number
-	readonly endedAt?: number
-	readonly totalDuration: number
-	readonly completed: boolean
-	readonly endReason?: SessionEndReason
-}
-
-// ============================================================================
-// Prediction Types
-// ============================================================================
-
-/** Transition context */
-export interface TransitionContext {
-	readonly actor: Actor
-	readonly sessionId?: string
-	readonly path?: string
-	readonly metadata?: Readonly<Record<string, unknown>>
-}
-
-/** Prediction options */
-export interface PredictionOptions {
-	readonly actor?: Actor
-	readonly sessionId?: string
-	readonly path?: string
-	readonly count?: number
-}
-
-/** Detailed prediction result */
-export interface PredictionResult {
-	readonly nodeId: NodeId
-	readonly confidence: number
-	readonly weight: number
-}
-
-/** Detailed predictions with metadata */
-export interface DetailedPredictions {
-	readonly predictions: readonly PredictionResult[]
-	readonly currentNode: NodeId
-	readonly sessionId?: string
-	readonly timestamp: number
-}
-
-// ============================================================================
-// Export/Import Types
-// ============================================================================
-
-/** Exported weight entry */
-export interface ExportedWeightEntry {
-	readonly from: NodeId
-	readonly to: NodeId
-	readonly actor: Actor
-	readonly weight: number
-	readonly updatedAt: number
-}
-
-/** Exported weights for persistence */
-export interface ExportedWeights {
-	readonly version: number
-	readonly entries: readonly ExportedWeightEntry[]
-	readonly exportedAt: number
-}
-
-// ============================================================================
-// Options Types
-// ============================================================================
-
-/** Decay algorithm type */
-export type DecayAlgorithm = 'ewma' | 'time' | 'none'
-
-/** Procedural graph options */
-export interface ProceduralGraphOptions {
-	readonly transitions: readonly TransitionDefinition[]
-	readonly validateOnCreate?: boolean
-}
-
-/** Predictive graph options */
-export interface PredictiveGraphOptions {
-	readonly decayAlgorithm?: DecayAlgorithm
-	readonly decayFactor?: number
-	readonly halfLifeMs?: number
-	readonly initialWeight?: number
-}
-
-/** Workflow engine options */
-export interface WorkflowEngineOptions {
-	readonly trackSessions?: boolean
-	readonly validateTransitions?: boolean
-	readonly maxSessionHistory?: number
-	readonly onTransition?: (from: NodeId, to: NodeId, context: TransitionContext) => void
-}
-
-/** Session chain query options */
-export interface SessionChainOptions {
-	readonly limit?: number
-	readonly includeMetadata?: boolean
-}
-
-// ============================================================================
-// Error Types
-// ============================================================================
-
-/** ActionLoop error codes */
-export type ActionLoopErrorCode =
-	| 'INVALID_TRANSITION'
-	| 'SESSION_NOT_FOUND'
-	| 'NODE_NOT_FOUND'
-	| 'VALIDATION_FAILED'
-	| 'UNKNOWN'
-
-/** ActionLoop error data */
-export interface ActionLoopErrorData extends PackageErrorData<ActionLoopErrorCode> {
-	readonly from?: NodeId
-	readonly to?: NodeId
-	readonly sessionId?: string
-}
-
-// ============================================================================
-// Behavioral Interfaces
-// ============================================================================
-
-/**
- * Procedural graph interface - defines valid transitions (static).
- */
-export interface ProceduralGraphInterface {
-	/** Check if transition is valid */
-	isValid(from: NodeId, to: NodeId): boolean
-
-	/** Get valid neighbors from a node */
-	getNeighbors(nodeId: NodeId): readonly NodeId[]
-
-	/** Get all nodes */
-	getNodes(): readonly NodeId[]
-
-	/** Get all edges */
-	getEdges(): readonly Edge[]
-
-	/** Get edge weight */
-	getWeight(from: NodeId, to: NodeId, actor?: Actor): number | undefined
-}
-
-/**
- * Predictive graph interface - learns from behavior (dynamic).
- */
-export interface PredictiveGraphInterface {
-	/** Record a transition to update weights */
-	recordTransition(from: NodeId, to: NodeId, actor: Actor): void
-
-	/** Get predictions from a node */
-	predict(from: NodeId, options?: PredictionOptions): readonly NodeId[]
-
-	/** Get current weight for an edge */
-	getWeight(from: NodeId, to: NodeId, actor: Actor): number
-
-	/** Set weight for an edge */
-	setWeight(from: NodeId, to: NodeId, actor: Actor, weight: number): void
-
-	/** Export weights for persistence */
-	export(): ExportedWeights
-
-	/** Import weights from storage */
-	import(weights: ExportedWeights): void
-
-	/** Subscribe to weight updates */
-	onWeightUpdate(callback: (from: NodeId, to: NodeId, actor: Actor, weight: number) => void): Unsubscribe
-
-	/** Reset all learned weights */
-	reset(): void
-}
-
-/**
- * Workflow engine interface - orchestrates the PPALS cycle.
- */
-export interface WorkflowEngineInterface {
-	// ---- Session Management ----
-
-	/** Start a new session */
-	startSession(actor: Actor, id?: string): Session
-
-	/** End a session */
-	endSession(id: string, reason: SessionEndReason): void
-
-	/** Resume an existing session */
-	resumeSession(id: string, context: { previousNode: NodeId; actor: Actor }): void
-
-	// ---- Transitions ----
-
-	/** Record a single transition */
-	recordTransition(from: NodeId, to: NodeId, context: TransitionContext): void
-
-	/** Record multiple transitions in batch */
-	recordTransitions(batch: readonly { from: NodeId; to: NodeId; context: TransitionContext }[]): void
-
-	// ---- Predictions ----
-
-	/** Get predictions for next node */
-	predictNext(from: NodeId, context: TransitionContext & { count?: number }): readonly NodeId[]
-
-	/** Get detailed predictions with confidence scores */
-	predictNextDetailed(from: NodeId, context: TransitionContext & { count?: number }): DetailedPredictions
-
-	// ---- Validation ----
-
-	/** Check if transition is valid */
-	isValidTransition(from: NodeId, to: NodeId): boolean
-
-	// ---- Analytics ----
-
-	/** Get session chain for analytics */
-	getSessionChain(actor: Actor, options?: SessionChainOptions): SessionChain
-
-	// ---- Lifecycle ----
-
-	/** Destroy engine and cleanup resources */
-	destroy(): void
-}
-
-// ============================================================================
-// Factory Function Types
-// ============================================================================
-
-/** Factory for procedural graph */
-export type CreateProceduralGraph = (
-	options: ProceduralGraphOptions
-) => ProceduralGraphInterface
-
-/** Factory for predictive graph */
-export type CreatePredictiveGraph = (
-	procedural: ProceduralGraphInterface,
-	options?: PredictiveGraphOptions
-) => PredictiveGraphInterface
-
-/** Factory for workflow engine */
-export type CreateWorkflowEngine = (
-	procedural: ProceduralGraphInterface,
-	predictive: PredictiveGraphInterface,
-	options?: WorkflowEngineOptions
-) => WorkflowEngineInterface
-```
+See [types/workflowbuilder/types.ts](../../types/workflowbuilder/types.ts) for complete type definitions.
