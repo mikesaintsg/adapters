@@ -324,6 +324,44 @@ export interface IndexedDBSessionPersistenceOptions {
 	readonly ttlMs?: number
 }
 
+/** IndexedDB event persistence options for workflowbuilder */
+export interface IndexedDBEventPersistenceOptions {
+	readonly database: MinimalDatabaseAccess
+	readonly storeName?: string
+}
+
+/** IndexedDB weight persistence options for workflowbuilder */
+export interface IndexedDBWeightPersistenceOptions {
+	readonly database: MinimalDatabaseAccess
+	readonly storeName?: string
+}
+
+/** In-memory event persistence options for workflowbuilder */
+export interface InMemoryEventPersistenceOptions {
+	readonly maxEvents?: number
+}
+
+/** Stored event record in IndexedDB for workflowbuilder */
+export interface WorkflowBuilderStoredEventRecord {
+	readonly id: string
+	readonly timestamp: number
+	readonly sessionId: string
+	readonly actor: string
+	readonly from: string
+	readonly to: string
+	readonly path: string
+	readonly engagement: string
+	readonly namespace?: string
+	readonly dwell?: unknown
+	readonly metadata?: unknown
+}
+
+/** Stored weight record in IndexedDB for workflowbuilder */
+export interface WorkflowBuilderStoredWeightRecord {
+	readonly modelId: string
+	readonly data: ExportedPredictiveGraph
+}
+
 // ============================================================================
 // 9. Context Builder Adapter Options
 // ============================================================================
@@ -357,7 +395,7 @@ export interface SSEParserAdapterOptions {
 }
 
 // ============================================================================
-// 12. API Response Types (Internal)
+// 11. API Response Types (Internal)
 // ============================================================================
 
 // --- OpenAI Response Types ---
@@ -693,7 +731,7 @@ export interface IndexedDBCacheAdapterInterface {
 }
 
 // ============================================================================
-// 13. Factory Function Types
+// 12. Factory Function Types
 // ============================================================================
 
 // --- Streaming Adapter Factories ---
@@ -748,3 +786,9 @@ export type CreateFIFOTruncationAdapter = (options?: TruncationAdapterOptions) =
 export type CreateLIFOTruncationAdapter = (options?: TruncationAdapterOptions) => TruncationAdapterInterface
 export type CreateScoreTruncationAdapter = (options?: TruncationAdapterOptions) => TruncationAdapterInterface
 export type CreatePriorityAdapter = (options?: PriorityAdapterOptions) => PriorityAdapterInterface
+
+// --- WorkflowBuilder Persistence Adapter Factories ---
+export type CreateIndexedDBEventPersistenceAdapter = (options: IndexedDBEventPersistenceOptions) => EventStorePersistenceAdapterInterface
+export type CreateIndexedDBWeightPersistenceAdapter = (options: IndexedDBWeightPersistenceOptions) => WeightPersistenceAdapterInterface
+export type CreateInMemoryEventPersistenceAdapter = (options?: InMemoryEventPersistenceOptions) => EventStorePersistenceAdapterInterface
+export type CreateInMemoryWeightPersistenceAdapter = () => WeightPersistenceAdapterInterface
