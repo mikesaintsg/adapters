@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createOpenAIProviderAdapter, createTokenStreamer } from '@mikesaintsg/adapters'
+import { createOpenAIProviderAdapter } from '@mikesaintsg/adapters'
 import type { Message } from '@mikesaintsg/core'
 import { createSSEResponse, createErrorResponse } from '../../setup.js'
 
@@ -154,40 +154,6 @@ describe('OpenAIProvider', () => {
 
 			const result = await stream.result()
 			expect(result.aborted).toBe(true)
-		})
-
-		it('uses custom token streamer factory', async() => {
-			const mockResponse = createSSEResponse([
-				'data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
-				'data: [DONE]\n\n',
-			])
-
-			vi.mocked(fetch).mockResolvedValue(mockResponse)
-
-			const factoryCalls: string[] = []
-			const customFactory = (requestId: string, abortController: AbortController) => {
-				factoryCalls.push(requestId)
-				return createTokenStreamer(requestId, abortController)
-			}
-
-			const provider = createOpenAIProviderAdapter({
-				apiKey: 'test-key',
-				tokenStreamerFactory: customFactory,
-			})
-
-			const messages: Message[] = [
-				{
-					id: 'msg-1',
-					role: 'user',
-					content: 'Hello',
-					createdAt: Date.now(),
-				},
-			]
-
-			const stream = provider.generate(messages, {})
-			await stream.result()
-
-			expect(factoryCalls).toHaveLength(1)
 		})
 	})
 

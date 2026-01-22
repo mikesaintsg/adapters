@@ -56,17 +56,17 @@ import type {
 	TruncationAdapterOptions,
 	TTLCacheAdapterOptions,
 	VoyageEmbeddingAdapterOptions,
-	TokenStreamerInterface,
-	SSEStreamerInterface,
-	SSEStreamerOptions,
+	TokenStreamerAdapterInterface,
+	SSEParserAdapterInterface,
+	NDJSONParserAdapterInterface,
 } from './types.js'
 
 // ============================================================================
 // Implementation Imports (via barrel exports)
 // ============================================================================
 
-// Streamers
-import { TokenStreamer, SSEStreamer } from './core/streamers/index.js'
+// Streamers and Parsers
+import { TokenStreamer, SSEParser, NDJSONParser } from './core/streamers/index.js'
 
 // Providers
 import {
@@ -137,63 +137,61 @@ import { DEFAULT_CACHE_STORE_NAME, DEFAULT_INDEXEDDB_CACHE_TTL_MS } from './cons
 // ============================================================================
 
 /**
- * Create a token streamer for managing streaming generation.
+ * Create a token streamer adapter for managing streaming generation.
  *
- * TokenStreamer is the main streaming primitive that providers create and return.
- * It handles token accumulation, tool call building, and result collection.
- *
- * @param requestId - Unique request identifier
- * @param abortController - Abort controller for cancellation
- * @returns TokenStreamerInterface implementation
+ * @returns TokenStreamerAdapterInterface adapter
  *
  * @example
  * ```ts
- * const streamer = createTokenStreamer(
- *   crypto.randomUUID(),
- *   new AbortController(),
- * )
- * streamer.emit('Hello')
- * streamer.emit(' world')
- * streamer.complete()
- *
- * const result = await streamer.result()
- * console.log(result.text) // 'Hello world'
+ * const streamer = createTokenStreamer()
+ * const handle = streamer.create(crypto.randomUUID(), new AbortController())
+ * handle.emit('Hello')
+ * handle.complete()
+ * const result = await handle.result()
  * ```
  */
-export function createTokenStreamer(
-	requestId: string,
-	abortController: AbortController,
-): TokenStreamerInterface {
-	return new TokenStreamer(requestId, abortController)
+export function createTokenStreamer(): TokenStreamerAdapterInterface {
+	return new TokenStreamer()
 }
 
 /**
- * Create an SSE streamer for parsing Server-Sent Events.
+ * Create an SSE parser adapter for parsing Server-Sent Events.
  *
- * SSEStreamer is a stateful parser that processes chunked SSE data.
- * Providers use this internally to parse SSE streams from APIs.
- *
- * @param options - SSE streamer configuration with event callbacks
- * @returns SSEStreamerInterface implementation
+ * @returns SSEParserAdapterInterface adapter
  *
  * @example
  * ```ts
- * const sseStreamer = createSSEStreamer({
- *   onEvent: (event) => {
- *     if (event.data === '[DONE]') return
- *     const chunk = JSON.parse(event.data)
- *     tokenStreamer.emit(chunk.content)
- *   },
- *   onEnd: () => tokenStreamer.complete(),
+ * const parser = createSSEParser()
+ * const instance = parser.create({
+ *   onEvent: (event) => console.log(event.data),
+ *   onEnd: () => console.log('done'),
  * })
- *
- * // Feed SSE chunks from response body
- * sseStreamer.feed('data: {"content": "Hello"}\n\n')
- * sseStreamer.end()
+ * instance.feed('data: hello\n\n')
+ * instance.end()
  * ```
  */
-export function createSSEStreamer(options: SSEStreamerOptions): SSEStreamerInterface {
-	return new SSEStreamer(options)
+export function createSSEParser(): SSEParserAdapterInterface {
+	return new SSEParser()
+}
+
+/**
+ * Create an NDJSON parser adapter for parsing Newline-Delimited JSON streams.
+ *
+ * @returns NDJSONParserAdapterInterface adapter
+ *
+ * @example
+ * ```ts
+ * const parser = createNDJSONParser()
+ * const instance = parser.create({
+ *   onObject: (obj) => console.log(obj),
+ *   onEnd: () => console.log('done'),
+ * })
+ * instance.feed('{"key":"value"}\n')
+ * instance.end()
+ * ```
+ */
+export function createNDJSONParser(): NDJSONParserAdapterInterface {
+	return new NDJSONParser()
 }
 
 // ============================================================================

@@ -1,24 +1,23 @@
 /**
- * SSE Streamer
+ * SSE Parser
  *
  * Implementation for parsing Server-Sent Events.
  * Used by server-side providers (OpenAI, Anthropic) for streaming responses.
  */
 
 import type { SSEEvent } from '@mikesaintsg/core'
-import type { SSEStreamerInterface, SSEStreamerOptions, MutableSSEEvent } from '../../types.js'
+import type { SSEParserAdapterInterface, SSEParserOptions, MutableSSEEvent } from '../../types.js'
 import {
 	DEFAULT_SSE_LINE_DELIMITER,
 	DEFAULT_SSE_EVENT_DELIMITER,
 } from '../../constants.js'
 
 /**
- * SSE Streamer implementation.
+ * SSE parser adapter implementation.
  *
  * Handles stateful parsing of chunked SSE data.
- * Providers use this internally to parse SSE streams from APIs.
  */
-export class SSEStreamer implements SSEStreamerInterface {
+export class SSEParser implements SSEParserAdapterInterface {
 	#buffer = ''
 	#currentEvent: MutableSSEEvent = {}
 	readonly #onEvent: (event: SSEEvent) => void
@@ -27,12 +26,16 @@ export class SSEStreamer implements SSEStreamerInterface {
 	readonly #lineDelimiter: string
 	readonly #eventDelimiter: string
 
-	constructor(options: SSEStreamerOptions) {
-		this.#onEvent = options.onEvent
-		this.#onError = options.onError
-		this.#onEnd = options.onEnd
-		this.#lineDelimiter = options.lineDelimiter ?? DEFAULT_SSE_LINE_DELIMITER
-		this.#eventDelimiter = options.eventDelimiter ?? DEFAULT_SSE_EVENT_DELIMITER
+	constructor(options?: SSEParserOptions) {
+		this.#onEvent = options?.onEvent ?? (() => { /* empty */ })
+		this.#onError = options?.onError
+		this.#onEnd = options?.onEnd
+		this.#lineDelimiter = options?.lineDelimiter ?? DEFAULT_SSE_LINE_DELIMITER
+		this.#eventDelimiter = options?.eventDelimiter ?? DEFAULT_SSE_EVENT_DELIMITER
+	}
+
+	create(options: SSEParserOptions): SSEParserAdapterInterface {
+		return new SSEParser(options)
 	}
 
 	feed(chunk: string): void {
@@ -41,12 +44,10 @@ export class SSEStreamer implements SSEStreamerInterface {
 	}
 
 	end(): void {
-		// Process any remaining buffer with event delimiters first
 		if (this.#buffer.length > 0) {
 			this.#processBuffer()
 		}
 
-		// Parse any remaining incomplete buffer as final event
 		if (this.#buffer.trim().length > 0) {
 			this.#parseEventBlock(this.#buffer)
 			if (this.#hasEventData()) {
@@ -64,10 +65,8 @@ export class SSEStreamer implements SSEStreamerInterface {
 	}
 
 	#processBuffer(): void {
-		// Split by event delimiter (double newline)
 		const parts = this.#buffer.split(this.#eventDelimiter)
 
-		// Process all complete events (all but the last part)
 		for (let i = 0; i < parts.length - 1; i++) {
 			const eventBlock = parts[i]
 			if (eventBlock !== undefined) {
@@ -78,7 +77,6 @@ export class SSEStreamer implements SSEStreamerInterface {
 			}
 		}
 
-		// Keep the last part as buffer (may be incomplete)
 		this.#buffer = parts[parts.length - 1] ?? ''
 	}
 
@@ -88,7 +86,6 @@ export class SSEStreamer implements SSEStreamerInterface {
 
 		for (const line of lines) {
 			if (line.startsWith('data:')) {
-				// Handle data field - can have multiple lines
 				const value = line.slice(5).trimStart()
 				dataLines.push(value)
 			} else if (line.startsWith('event:')) {
@@ -102,10 +99,8 @@ export class SSEStreamer implements SSEStreamerInterface {
 					this.#currentEvent.retry = parsed
 				}
 			}
-			// Ignore comments (lines starting with :) and unknown fields
 		}
 
-		// Join multi-line data with newlines
 		if (dataLines.length > 0) {
 			this.#currentEvent.data = dataLines.join('\n')
 		}
@@ -117,7 +112,6 @@ export class SSEStreamer implements SSEStreamerInterface {
 
 	#emitEvent(): void {
 		try {
-			// Build the readonly SSEEvent from mutable internal state
 			const event: SSEEvent = {
 				data: this.#currentEvent.data ?? '',
 				...(this.#currentEvent.event !== undefined && { event: this.#currentEvent.event }),
@@ -130,7 +124,6 @@ export class SSEStreamer implements SSEStreamerInterface {
 				this.#onError(error)
 			}
 		} finally {
-			// Reset current event for next one
 			this.#currentEvent = {}
 		}
 	}

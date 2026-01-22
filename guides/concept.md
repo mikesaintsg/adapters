@@ -1475,9 +1475,9 @@ type AdapterErrorCode =
 
 ### Streaming Adapters
 
-- `createStreamerAdapter()` → `StreamerAdapterInterface`
-- `createSSEParserAdapter(options?)` → `SSEParserAdapterInterface`
-- `createProviderStreamHandle(options)` → `ProviderStreamHandleInterface`
+- `createTokenStreamer()` → `TokenStreamerAdapterInterface`
+- `createSSEParser()` → `SSEParserAdapterInterface`
+- `createNDJSONParser()` → `NDJSONParserAdapterInterface`
 ````
 
 ```typescript name=types/adapters/types.ts

@@ -172,10 +172,11 @@ const embeddings = await embedding.embed(['Hello, world!'])
 
 ### Streaming Adapters
 
-| Function                  | Description                           |
-|---------------------------|---------------------------------------|
-| `createStreamerAdapter`   | Universal token streaming adapter     |
-| `createSSEParserAdapter`  | Server-Sent Events parsing            |
+| Function                | Description                           |
+|-------------------------|---------------------------------------|
+| `createTokenStreamer`   | Token streaming with result handling  |
+| `createSSEParser`       | Server-Sent Events parsing            |
+| `createNDJSONParser`    | Newline-delimited JSON parsing        |
 
 ---
 
@@ -464,15 +465,51 @@ const priority = createPriorityAdapter({
 ### Streaming Adapters
 
 ```ts
-import { createStreamerAdapter } from '@mikesaintsg/adapters'
+import { createTokenStreamer, createSSEParser, createNDJSONParser } from '@mikesaintsg/adapters'
 
-// Basic streamer adapter for token emission
-const streamer = createStreamerAdapter()
-const unsub = streamer.onToken((token) => process.stdout.write(token))
-streamer.emit('Hello')
-streamer.emit(' world!')
-streamer.end()
-unsub()
+// Token streamer adapter - create instances per request
+const streamerAdapter = createTokenStreamer()
+const handle = streamerAdapter.create('request-id', new AbortController())
+
+// Subscribe to tokens
+handle.onToken((token) => process.stdout.write(token))
+
+// Emit tokens (producer side)
+handle.emit('Hello')
+handle.emit(' world!')
+handle.complete()
+
+// Get final result
+const result = await handle.result()
+console.log(result.text) // 'Hello world!'
+
+// SSE parser adapter - for OpenAI/Anthropic streams
+const sseAdapter = createSSEParser()
+const parser = sseAdapter.create({
+  onEvent: (event) => {
+    if (event.data !== '[DONE]') {
+      const chunk = JSON.parse(event.data)
+      handle.emit(chunk.choices[0]?.delta?.content ?? '')
+    }
+  },
+  onEnd: () => handle.complete(),
+})
+
+// Feed SSE chunks from response
+parser.feed('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n')
+parser.end()
+
+// NDJSON parser adapter - for Ollama streams
+const ndjsonAdapter = createNDJSONParser()
+const ndjsonParser = ndjsonAdapter.create({
+  onObject: (obj) => {
+    const chunk = obj as { message?: { content?: string } }
+    if (chunk.message?.content) {
+      handle.emit(chunk.message.content)
+    }
+  },
+  onEnd: () => handle.complete(),
+})
 ```
 
 ### Error Handling

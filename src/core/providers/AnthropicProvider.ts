@@ -18,9 +18,8 @@ import type {
 import type {
 	AnthropicProviderAdapterOptions,
 	AnthropicMessageStreamEvent,
-	TokenStreamerInterface,
-	CreateTokenStreamer,
-	CreateSSEStreamer,
+	TokenStreamerAdapterInterface,
+	SSEParserAdapterInterface,
 } from '../../types.js'
 
 import { createAdapterError } from '../../helpers.js'
@@ -31,7 +30,7 @@ import {
 	DEFAULT_ANTHROPIC_VERSION,
 	DEFAULT_ANTHROPIC_MAX_TOKENS,
 } from '../../constants.js'
-import { createTokenStreamer, createSSEStreamer } from '../../factories.js'
+import { createSSEParser, createTokenStreamer } from '../../factories.js'
 
 /**
  * Anthropic provider implementation.
@@ -42,16 +41,16 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 	readonly #apiKey: string
 	readonly #model: string
 	readonly #baseURL: string
-	readonly #tokenStreamerFactory: CreateTokenStreamer
-	readonly #sseStreamerFactory: CreateSSEStreamer
+	readonly #streamer: TokenStreamerAdapterInterface
+	readonly #parser: SSEParserAdapterInterface
 
 	constructor(options: AnthropicProviderAdapterOptions) {
 		this.#id = crypto.randomUUID()
 		this.#apiKey = options.apiKey
 		this.#model = options.model ?? DEFAULT_ANTHROPIC_MODEL
 		this.#baseURL = options.baseURL ?? DEFAULT_ANTHROPIC_BASE_URL
-		this.#tokenStreamerFactory = options.tokenStreamerFactory ?? createTokenStreamer
-		this.#sseStreamerFactory = options.sseStreamerFactory ?? createSSEStreamer
+		this.#streamer = options.streamer ?? createTokenStreamer()
+		this.#parser = options.parser ?? createSSEParser()
 	}
 
 	getId(): string {
@@ -65,13 +64,13 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 		const abortController = new AbortController()
 		const requestId = crypto.randomUUID()
 
-		// Create token streamer for this request using factory
-		const streamer = this.#tokenStreamerFactory(requestId, abortController)
+		// Create stream handle for this request using the adapter
+		const handle = this.#streamer.create(requestId, abortController)
 
 		// Start async streaming
-		void this.#executeGeneration(messages, options, streamer, abortController.signal)
+		void this.#executeGeneration(messages, options, handle, abortController.signal)
 
-		return streamer
+		return handle
 	}
 
 	supportsTools(): boolean {
@@ -95,7 +94,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		streamer: TokenStreamerInterface,
+		handle: TokenStreamerAdapterInterface,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -103,17 +102,17 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 
 			if (!response.ok) {
 				const error = await this.#handleErrorResponse(response)
-				streamer.setError(error)
+				handle.setError(error)
 				return
 			}
 
-			await this.#processStream(response, streamer)
+			await this.#processStream(response, handle)
 		} catch (error) {
 			if (signal.aborted) {
-				streamer.setAborted()
+				handle.setAborted()
 			} else {
 				const mappedError = this.#mapNetworkError(error instanceof Error ? error : new Error(String(error)))
-				streamer.setError(mappedError)
+				handle.setError(mappedError)
 			}
 		}
 	}
@@ -253,7 +252,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 
 	async #processStream(
 		response: Response,
-		streamer: TokenStreamerInterface,
+		streamer: TokenStreamerAdapterInterface,
 	): Promise<void> {
 		const reader = response.body?.getReader()
 		if (reader === undefined) {
@@ -262,7 +261,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 		}
 
 		const decoder = new TextDecoder()
-		const sseStreamer = this.#sseStreamerFactory({
+		const sseParser = this.#parser.create({
 			onEvent: (event) => this.#handleSSEEvent(event, streamer),
 			onError: (error) => streamer.setError(error),
 			onEnd: () => streamer.complete(),
@@ -274,9 +273,9 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 				if (done) break
 
 				const chunk = decoder.decode(value, { stream: true })
-				sseStreamer.feed(chunk)
+				sseParser.feed(chunk)
 			}
-			sseStreamer.end()
+			sseParser.end()
 		} catch (error) {
 			if (error instanceof Error && error.name === 'AbortError') {
 				streamer.setAborted()
@@ -288,7 +287,7 @@ export class AnthropicProvider implements ProviderAdapterInterface {
 		}
 	}
 
-	#handleSSEEvent(event: SSEEvent, streamer: TokenStreamerInterface): void {
+	#handleSSEEvent(event: SSEEvent, streamer: TokenStreamerAdapterInterface): void {
 		const data = event.data.trim()
 
 		// Skip empty events

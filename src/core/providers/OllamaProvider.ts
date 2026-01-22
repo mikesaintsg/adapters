@@ -17,11 +17,11 @@ import type {
 import type {
 	OllamaProviderAdapterOptions,
 	OllamaChatStreamChunk,
-	TokenStreamerInterface,
-	CreateTokenStreamer,
+	TokenStreamerAdapterInterface,
+	NDJSONParserAdapterInterface,
 } from '../../types.js'
 
-import { createTokenStreamer } from '../../factories.js'
+import { createTokenStreamer, createNDJSONParser } from '../../factories.js'
 import { createAdapterError, normalizeJsonSchemaTypes } from '../../helpers.js'
 import {
 	DEFAULT_OLLAMA_BASE_URL,
@@ -38,7 +38,8 @@ export class OllamaProvider implements ProviderAdapterInterface {
 	readonly #baseURL: string
 	readonly #keepAlive: boolean | string
 	readonly #timeout: number
-	readonly #tokenStreamerFactory: CreateTokenStreamer
+	readonly #streamer: TokenStreamerAdapterInterface
+	readonly #parser: NDJSONParserAdapterInterface
 
 	constructor(options: OllamaProviderAdapterOptions) {
 		this.#id = crypto.randomUUID()
@@ -46,7 +47,8 @@ export class OllamaProvider implements ProviderAdapterInterface {
 		this.#baseURL = options.baseURL ?? DEFAULT_OLLAMA_BASE_URL
 		this.#keepAlive = options.keepAlive ?? true
 		this.#timeout = options.timeout ?? DEFAULT_TIMEOUT_MS
-		this.#tokenStreamerFactory = options.tokenStreamerFactory ?? createTokenStreamer
+		this.#streamer = options.streamer ?? createTokenStreamer()
+		this.#parser = options.parser ?? createNDJSONParser()
 	}
 
 	getId(): string {
@@ -60,13 +62,13 @@ export class OllamaProvider implements ProviderAdapterInterface {
 		const abortController = new AbortController()
 		const requestId = crypto.randomUUID()
 
-		// Create token streamer for this request using factory
-		const streamer = this.#tokenStreamerFactory(requestId, abortController)
+		// Create token streamer for this request
+		const handle = this.#streamer.create(requestId, abortController)
 
 		// Start async streaming
-		void this.#executeGeneration(messages, options, streamer, abortController.signal)
+		void this.#executeGeneration(messages, options, handle, abortController.signal)
 
-		return streamer
+		return handle
 	}
 
 	supportsTools(): boolean {
@@ -90,7 +92,7 @@ export class OllamaProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		streamer: TokenStreamerInterface,
+		handle: TokenStreamerAdapterInterface,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -98,17 +100,17 @@ export class OllamaProvider implements ProviderAdapterInterface {
 
 			if (!response.ok) {
 				const error = await this.#handleErrorResponse(response)
-				streamer.setError(error)
+				handle.setError(error)
 				return
 			}
 
-			await this.#processStream(response, streamer)
+			await this.#processStream(response, handle)
 		} catch (error) {
 			if (signal.aborted) {
-				streamer.setAborted()
+				handle.setAborted()
 			} else {
 				const mappedError = this.#mapNetworkError(error instanceof Error ? error : new Error(String(error)))
-				streamer.setError(mappedError)
+				handle.setError(mappedError)
 			}
 		}
 	}
@@ -223,97 +225,88 @@ export class OllamaProvider implements ProviderAdapterInterface {
 
 	async #processStream(
 		response: Response,
-		streamer: TokenStreamerInterface,
+		handle: TokenStreamerAdapterInterface,
 	): Promise<void> {
 		const reader = response.body?.getReader()
 		if (reader === undefined) {
-			streamer.setError(createAdapterError('NETWORK_ERROR', 'No response body'))
+			handle.setError(createAdapterError('NETWORK_ERROR', 'No response body'))
 			return
 		}
 
 		const decoder = new TextDecoder()
-		let buffer = ''
+		const parser = this.#parser.create({
+			onObject: (obj: unknown) => {
+				this.#handleChunk(obj as OllamaChatStreamChunk, handle)
+			},
+			onError: (error: Error) => {
+				handle.setError(createAdapterError(
+					'SERVICE_ERROR',
+					`NDJSON parsing error: ${error.message}`,
+				))
+			},
+		})
 
 		try {
 			while (true) {
 				const { done, value } = await reader.read()
 				if (done) break
 
-				buffer += decoder.decode(value, { stream: true })
-
-				// Process complete lines (NDJSON format)
-				const lines = buffer.split('\n')
-				buffer = lines.pop() ?? ''
-
-				for (const line of lines) {
-					if (line.trim() === '') continue
-					this.#processLine(line, streamer)
-				}
+				const chunk = decoder.decode(value, { stream: true })
+				parser.feed(chunk)
 			}
-
-			// Process any remaining buffer
-			if (buffer.trim() !== '') {
-				this.#processLine(buffer, streamer)
-			}
-
-			streamer.complete()
+			parser.end()
+			handle.complete()
 		} catch (error) {
 			if (error instanceof Error && error.name === 'AbortError') {
-				streamer.setAborted()
+				handle.setAborted()
 			} else {
-				streamer.setError(error instanceof Error ? error : new Error(String(error)))
+				handle.setError(error instanceof Error ? error : new Error(String(error)))
 			}
 		} finally {
 			reader.releaseLock()
 		}
 	}
 
-	#processLine(line: string, streamer: TokenStreamerInterface): void {
-		try {
-			const chunk = JSON.parse(line) as OllamaChatStreamChunk
+	#handleChunk(chunk: OllamaChatStreamChunk, handle: TokenStreamerAdapterInterface): void {
+		// Handle text content
+		if (chunk.message?.content !== undefined && chunk.message.content !== '') {
+			handle.emit(chunk.message.content)
+		}
 
-			// Handle text content
-			if (chunk.message?.content !== undefined && chunk.message.content !== '') {
-				streamer.emit(chunk.message.content)
-			}
-
-			// Handle tool calls
-			if (chunk.message?.tool_calls !== undefined) {
-				let index = 0
-				for (const toolCall of chunk.message.tool_calls) {
-					if (toolCall !== undefined) {
-						// Ollama sends complete tool calls, not incremental
-						streamer.startToolCall(
-							index,
-							toolCall.id ?? crypto.randomUUID(),
-							toolCall.function.name,
-						)
-						streamer.appendToolCallArguments(
-							index,
-							JSON.stringify(toolCall.function.arguments),
-						)
-						index++
-					}
+		// Handle tool calls
+		if (chunk.message?.tool_calls !== undefined) {
+			let index = 0
+			for (const toolCall of chunk.message.tool_calls) {
+				if (toolCall !== undefined) {
+					// Ollama sends complete tool calls, not incremental
+					handle.startToolCall(
+						index,
+						toolCall.id ?? crypto.randomUUID(),
+						toolCall.function.name,
+					)
+					handle.appendToolCallArguments(
+						index,
+						JSON.stringify(toolCall.function.arguments),
+					)
+					index++
 				}
 			}
+		}
 
-			// Handle completion
-			if (chunk.done) {
-				if (chunk.done_reason !== undefined) {
-					streamer.setFinishReason(this.#mapFinishReason(chunk.done_reason))
-				}
-
-				// Extract usage stats
-				if (chunk.prompt_eval_count !== undefined || chunk.eval_count !== undefined) {
-					streamer.setUsage({
-						promptTokens: chunk.prompt_eval_count ?? 0,
-						completionTokens: chunk.eval_count ?? 0,
-						totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
-					})
-				}
+		// Handle completion
+		if (chunk.done) {
+			if (chunk.done_reason !== undefined) {
+				handle.setFinishReason(this.#mapFinishReason(chunk.done_reason))
 			}
-		} catch {
-			// Skip malformed JSON lines
+
+			// Extract usage stats
+			if (chunk.prompt_eval_count !== undefined || chunk.eval_count !== undefined) {
+				handle.setUsage({
+					promptTokens: chunk.prompt_eval_count ?? 0,
+					completionTokens: chunk.eval_count ?? 0,
+					totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
+				})
+			}
 		}
 	}
 

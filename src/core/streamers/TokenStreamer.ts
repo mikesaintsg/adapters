@@ -1,9 +1,7 @@
 /**
  * Token Streamer
  *
- * A complete stream handle implementation for provider adapters.
- * Handles token streaming, result collection, and subscription management.
- * This is the unified streamer that combines token emission with stream handle functionality.
+ * Adapter for streaming generation with token emission and result collection.
  */
 
 import type {
@@ -13,21 +11,18 @@ import type {
 	UsageStats,
 	Unsubscribe,
 } from '@mikesaintsg/core'
-import type { TokenStreamerInterface, ToolCallAccumulator, ToolCallDelta } from '../../types.js'
+import type {
+	TokenStreamerAdapterInterface,
+	ToolCallAccumulator,
+	ToolCallDelta,
+} from '../../types.js'
 
 /**
- * Token streamer implementation.
+ * Token streamer adapter implementation.
  *
- * This class provides a complete stream handle that manages:
- * - Token emission and subscription
- * - Text accumulation
- * - Tool call accumulation (for providers that support tool calling)
- * - Finish reason and usage stats tracking
- * - Subscription management for onToken, onComplete, onError
- * - AsyncIterator implementation for for-await-of loops
- * - Result promise for await handle.result()
+ * Manages token emission, result collection, and subscriptions.
  */
-export class TokenStreamer implements TokenStreamerInterface {
+export class TokenStreamer implements TokenStreamerAdapterInterface {
 	readonly requestId: string
 	readonly #abortController: AbortController
 
@@ -47,12 +42,9 @@ export class TokenStreamer implements TokenStreamerInterface {
 	#resultReject: ((error: Error) => void) | undefined
 	#resultPromise: Promise<GenerationResult>
 
-	constructor(
-		requestId: string,
-		abortController: AbortController,
-	) {
-		this.requestId = requestId
-		this.#abortController = abortController
+	constructor(requestId?: string, abortController?: AbortController) {
+		this.requestId = requestId ?? ''
+		this.#abortController = abortController ?? new AbortController()
 
 		this.#resultPromise = new Promise<GenerationResult>((resolve, reject) => {
 			this.#resultResolve = resolve
@@ -60,10 +52,11 @@ export class TokenStreamer implements TokenStreamerInterface {
 		})
 	}
 
-	// ========================================================================
-	// StreamHandleInterface Implementation
-	// ========================================================================
+	create(requestId: string, abortController: AbortController): TokenStreamerAdapterInterface {
+		return new TokenStreamer(requestId, abortController)
+	}
 
+	// StreamHandleInterface
 	[Symbol.asyncIterator](): AsyncIterator<string> {
 		const tokens: string[] = []
 		let resolveNext: ((value: IteratorResult<string>) => void) | undefined
@@ -132,13 +125,7 @@ export class TokenStreamer implements TokenStreamerInterface {
 		return () => { this.#errorCallbacks.delete(callback) }
 	}
 
-	// ========================================================================
-	// Token Emission Methods
-	// ========================================================================
-
-	/**
-	 * Emit a token to all subscribers and accumulate in result text.
-	 */
+	// Producer methods
 	emit(token: string): void {
 		if (this.#ended) return
 		this.#text += token
@@ -147,34 +134,18 @@ export class TokenStreamer implements TokenStreamerInterface {
 		}
 	}
 
-	/**
-	 * Append text without emitting (for non-streaming accumulation).
-	 */
 	appendText(text: string): void {
 		this.#text += text
 	}
 
-	/**
-	 * Get the accumulated text.
-	 */
 	getText(): string {
 		return this.#text
 	}
 
-	// ========================================================================
-	// Tool Call Methods
-	// ========================================================================
-
-	/**
-	 * Start a new tool call at the given index.
-	 */
 	startToolCall(index: number, id: string, name: string): void {
 		this.#toolCalls.set(index, { id, name, arguments: '' })
 	}
 
-	/**
-	 * Append arguments to a tool call at the given index.
-	 */
 	appendToolCallArguments(index: number, json: string): void {
 		const existing = this.#toolCalls.get(index)
 		if (existing !== undefined) {
@@ -182,9 +153,6 @@ export class TokenStreamer implements TokenStreamerInterface {
 		}
 	}
 
-	/**
-	 * Update tool call with incremental delta (OpenAI-style).
-	 */
 	updateToolCall(index: number, delta: ToolCallDelta): void {
 		const existing = this.#toolCalls.get(index)
 		if (existing === undefined) {
@@ -200,9 +168,6 @@ export class TokenStreamer implements TokenStreamerInterface {
 		}
 	}
 
-	/**
-	 * Set tool calls directly (for providers that parse tool calls at once).
-	 */
 	setToolCalls(toolCalls: readonly ToolCall[]): void {
 		this.#toolCalls.clear()
 		for (let i = 0; i < toolCalls.length; i++) {
@@ -217,27 +182,14 @@ export class TokenStreamer implements TokenStreamerInterface {
 		}
 	}
 
-	// ========================================================================
-	// State Setters
-	// ========================================================================
-
-	/**
-	 * Set the finish reason.
-	 */
 	setFinishReason(reason: FinishReason): void {
 		this.#finishReason = reason
 	}
 
-	/**
-	 * Set usage statistics.
-	 */
 	setUsage(usage: UsageStats): void {
 		this.#usage = usage
 	}
 
-	/**
-	 * Signal an error occurred.
-	 */
 	setError(error: Error): void {
 		this.#completed = true
 		this.#end()
@@ -247,9 +199,6 @@ export class TokenStreamer implements TokenStreamerInterface {
 		}
 	}
 
-	/**
-	 * Signal the request was aborted.
-	 */
 	setAborted(): void {
 		this.#aborted = true
 		this.#completed = true
@@ -258,9 +207,6 @@ export class TokenStreamer implements TokenStreamerInterface {
 		this.#resultResolve?.(result)
 	}
 
-	/**
-	 * Signal generation is complete.
-	 */
 	complete(): void {
 		if (this.#completed) return
 		this.#completed = true
@@ -272,27 +218,13 @@ export class TokenStreamer implements TokenStreamerInterface {
 		}
 	}
 
-	// ========================================================================
-	// State Checkers
-	// ========================================================================
-
-	/**
-	 * Check if generation is completed.
-	 */
 	isCompleted(): boolean {
 		return this.#completed
 	}
 
-	/**
-	 * Check if generation was aborted.
-	 */
 	isAborted(): boolean {
 		return this.#aborted
 	}
-
-	// ========================================================================
-	// Private Methods
-	// ========================================================================
 
 	#end(): void {
 		this.#ended = true

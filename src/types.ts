@@ -104,8 +104,10 @@ export interface OpenAIProviderAdapterOptions {
 	readonly baseURL?: string
 	readonly organization?: string
 	readonly defaultOptions?: GenerationDefaults
-	readonly tokenStreamerFactory?: CreateTokenStreamer
-	readonly sseStreamerFactory?: CreateSSEStreamer
+	/** Custom token streamer adapter */
+	readonly streamer?: TokenStreamerAdapterInterface
+	/** Custom SSE parser adapter */
+	readonly parser?: SSEParserAdapterInterface
 }
 
 /** Anthropic provider adapter options */
@@ -114,8 +116,10 @@ export interface AnthropicProviderAdapterOptions {
 	readonly model?: string
 	readonly baseURL?: string
 	readonly defaultOptions?: GenerationDefaults
-	readonly tokenStreamerFactory?: CreateTokenStreamer
-	readonly sseStreamerFactory?: CreateSSEStreamer
+	/** Custom token streamer adapter */
+	readonly streamer?: TokenStreamerAdapterInterface
+	/** Custom SSE parser adapter */
+	readonly parser?: SSEParserAdapterInterface
 }
 
 /** Ollama provider adapter options */
@@ -125,7 +129,10 @@ export interface OllamaProviderAdapterOptions {
 	readonly keepAlive?: boolean | string
 	readonly timeout?: number
 	readonly defaultOptions?: GenerationDefaults
-	readonly tokenStreamerFactory?: CreateTokenStreamer
+	/** Custom token streamer adapter */
+	readonly streamer?: TokenStreamerAdapterInterface
+	/** Custom NDJSON parser adapter */
+	readonly parser?: NDJSONParserAdapterInterface
 }
 
 /** Common Ollama chat models */
@@ -390,93 +397,57 @@ export interface PriorityAdapterOptions {
 // 10. Streaming Types
 // ============================================================================
 
-/**
- * Tool call accumulator for building tool calls incrementally.
- * Used internally by TokenStreamer to accumulate streaming tool call deltas.
- */
+/** Tool call accumulator for building tool calls incrementally */
 export interface ToolCallAccumulator {
 	id: string
 	name: string
 	arguments: string
 }
 
-/**
- * Tool call delta for incremental updates.
- * Providers emit these during streaming to build tool calls piece by piece.
- */
+/** Tool call delta for incremental updates during streaming */
 export interface ToolCallDelta {
-	readonly id?: string | undefined
-	readonly name?: string | undefined
-	readonly arguments?: string | undefined
+	readonly id?: string
+	readonly name?: string
+	readonly arguments?: string
 }
 
-/**
- * TokenStreamer interface.
- *
- * Extends StreamHandleInterface (consumer-facing) with producer methods
- * that providers use to emit tokens, accumulate state, and complete the stream.
- *
- * This is the main streaming primitive that providers create and return.
- */
-export interface TokenStreamerInterface extends StreamHandleInterface {
-	/** Unique request identifier */
-	readonly requestId: string
-
-	// --- Producer Methods (for providers to call) ---
-
-	/** Emit a token to subscribers and accumulate in result text */
-	emit(token: string): void
-
-	/** Append text without emitting (for non-streaming accumulation) */
-	appendText(text: string): void
-
-	/** Get the accumulated text so far */
-	getText(): string
-
-	/** Start a new tool call at the given index */
-	startToolCall(index: number, id: string, name: string): void
-
-	/** Append arguments JSON to a tool call at the given index */
-	appendToolCallArguments(index: number, json: string): void
-
-	/** Update tool call with incremental delta */
-	updateToolCall(index: number, delta: ToolCallDelta): void
-
-	/** Set tool calls directly (for non-streaming tool call responses) */
-	setToolCalls(toolCalls: readonly ToolCall[]): void
-
-	/** Set the finish reason */
-	setFinishReason(reason: FinishReason): void
-
-	/** Set usage statistics */
-	setUsage(usage: UsageStats): void
-
-	/** Signal an error occurred */
-	setError(error: Error): void
-
-	/** Signal the request was aborted */
-	setAborted(): void
-
-	/** Signal generation is complete */
-	complete(): void
-
-	// --- State Checkers ---
-
-	/** Check if generation is completed */
-	isCompleted(): boolean
-
-	/** Check if generation was aborted */
-	isAborted(): boolean
+/** Mutable SSE event for internal parsing */
+export interface MutableSSEEvent {
+	event?: string
+	data?: string
+	id?: string
+	retry?: number
 }
 
+// --- Stream Parser Options ---
+
+/** Base options for stream parsers */
+export interface StreamParserOptions {
+	readonly onError?: (error: Error) => void
+	readonly onEnd?: () => void
+}
+
+/** SSE parser options */
+export interface SSEParserOptions extends StreamParserOptions {
+	readonly lineDelimiter?: string
+	readonly eventDelimiter?: string
+	readonly onEvent: (event: SSEEvent) => void
+}
+
+/** NDJSON parser options */
+export interface NDJSONParserOptions extends StreamParserOptions {
+	readonly onObject: (obj: unknown) => void
+}
+
+// --- Stream Parser Adapter ---
+
 /**
- * SSE Streamer interface.
+ * Stream parser adapter interface.
  *
- * A stateful SSE parser that processes chunked SSE data and emits events.
- * Providers use this internally to parse SSE streams from APIs.
+ * Stateful parser for chunked streaming data (SSE or NDJSON).
  */
-export interface SSEStreamerInterface {
-	/** Feed a chunk of SSE data to parse */
+export interface StreamParserAdapterInterface {
+	/** Feed a chunk of data to parse */
 	feed(chunk: string): void
 
 	/** Signal end of stream, flush any remaining buffer */
@@ -484,39 +455,58 @@ export interface SSEStreamerInterface {
 
 	/** Reset parser state */
 	reset(): void
+	/** Create a new SSE parser with the given options */
+	create(options: StreamParserOptions): StreamParserAdapterInterface
 }
 
 /**
- * SSE Streamer options.
+ * SSE parser adapter interface.
  *
- * Configuration and callbacks for SSE parsing.
+ * Creates parser instances for SSE streaming.
  */
-export interface SSEStreamerOptions {
-	/** Custom line delimiter (default: '\n') */
-	readonly lineDelimiter?: string
-
-	/** Custom event delimiter (default: '\n\n') */
-	readonly eventDelimiter?: string
-
-	/** Called for each parsed SSE event */
-	readonly onEvent: (event: SSEEvent) => void
-
-	/** Called when parsing errors occur */
-	readonly onError?: (error: Error) => void
-
-	/** Called when stream ends */
-	readonly onEnd?: () => void
+export interface SSEParserAdapterInterface extends StreamParserAdapterInterface {
+	/** Create a new SSE parser with the given options */
+	create(options: SSEParserOptions): SSEParserAdapterInterface
 }
 
 /**
- * Mutable SSE event for internal parsing.
- * Used internally by SSEStreamer to build events incrementally.
+ * NDJSON parser adapter interface.
+ *
+ * Creates parser instances for NDJSON streaming.
  */
-export interface MutableSSEEvent {
-	event?: string
-	data?: string
-	id?: string
-	retry?: number
+export interface NDJSONParserAdapterInterface extends StreamParserAdapterInterface {
+	/** Create a new NDJSON parser with the given options */
+	create(options: NDJSONParserOptions): NDJSONParserAdapterInterface
+}
+
+// --- Token Streamer Adapter ---
+
+/**
+ * Token streamer instance interface.
+ *
+ * Combines consumer-side (StreamHandleInterface) and producer-side APIs.
+ * Returned by TokenStreamerAdapterInterface.create().
+ */
+export interface TokenStreamerAdapterInterface extends StreamHandleInterface {
+	readonly requestId: string
+
+	// Producer methods
+	emit(token: string): void
+	appendText(text: string): void
+	getText(): string
+	startToolCall(index: number, id: string, name: string): void
+	appendToolCallArguments(index: number, json: string): void
+	updateToolCall(index: number, delta: ToolCallDelta): void
+	setToolCalls(toolCalls: readonly ToolCall[]): void
+	setFinishReason(reason: FinishReason): void
+	setUsage(usage: UsageStats): void
+	setError(error: Error): void
+	setAborted(): void
+	complete(): void
+	isCompleted(): boolean
+	isAborted(): boolean
+	/** Create a new token streamer for a request */
+	create(requestId: string, abortController: AbortController): TokenStreamerAdapterInterface
 }
 
 // ============================================================================
@@ -844,13 +834,16 @@ export interface IndexedDBCacheAdapterInterface {
 // 12. Factory Function Types
 // ============================================================================
 
-// --- Streaming Adapter Factories ---
-export type CreateTokenStreamer = (
-	requestId: string,
-	abortController: AbortController,
-) => TokenStreamerInterface
+// --- Streaming and Parser Factories ---
 
-export type CreateSSEStreamer = (options: SSEStreamerOptions) => SSEStreamerInterface
+/** Factory for creating token streamer adapters */
+export type CreateTokenStreamerAdapter = () => TokenStreamerAdapterInterface
+
+/** Factory for creating SSE parser adapters */
+export type CreateSSEParserAdapter = () => SSEParserAdapterInterface
+
+/** Factory for creating NDJSON parser adapters */
+export type CreateNDJSONParserAdapter = () => NDJSONParserAdapterInterface
 
 // --- Provider Adapter Factories ---
 export type CreateOpenAIProviderAdapter = (options: OpenAIProviderAdapterOptions) => ProviderAdapterInterface

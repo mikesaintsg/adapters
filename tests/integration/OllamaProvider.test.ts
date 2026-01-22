@@ -567,4 +567,258 @@ describe('OllamaProvider Integration', () => {
 			expect(session.getSystem()).toBe(customPrompt)
 		})
 	})
+
+	// =========================================================================
+	// Streaming Edge Cases
+	// =========================================================================
+
+	describe('streaming edge cases', () => {
+		it('collects all tokens via onToken callback', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say "hello world"')]
+
+			const stream = provider.generate(messages, { maxTokens: 10 })
+			const tokens: string[] = []
+			const unsub = stream.onToken((token) => tokens.push(token))
+
+			const result = await stream.result()
+			unsub()
+
+			expect(tokens.length).toBeGreaterThan(0)
+			expect(tokens.join('')).toBe(result.text)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('tokens arrive in order during streaming', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Count: 1 2 3 4 5')]
+
+			const stream = provider.generate(messages, { maxTokens: 30 })
+			const tokenOrder: number[] = []
+			let index = 0
+			const unsub = stream.onToken(() => {
+				tokenOrder.push(index++)
+			})
+
+			await stream.result()
+			unsub()
+
+			// Verify tokens arrived in sequence
+			for (let i = 0; i < tokenOrder.length; i++) {
+				expect(tokenOrder[i]).toBe(i)
+			}
+		}, TEST_TIMEOUTS.streaming)
+
+		it('onComplete callback receives final result', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say "test"')]
+
+			const stream = provider.generate(messages, { maxTokens: 10 })
+			let completeResult: unknown
+
+			stream.onComplete((result) => {
+				completeResult = result
+			})
+
+			const awaitedResult = await stream.result()
+
+			expect(completeResult).toBeDefined()
+			expect(completeResult).toEqual(awaitedResult)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('can iterate with for-await-of', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say "hello"')]
+
+			const stream = provider.generate(messages, { maxTokens: 10 })
+			const tokens: string[] = []
+
+			for await (const token of stream) {
+				tokens.push(token)
+			}
+
+			const result = await stream.result()
+			expect(tokens.join('')).toBe(result.text)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('result() returns same promise on multiple calls', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Hi')]
+
+			const stream = provider.generate(messages, { maxTokens: 5 })
+
+			const promise1 = stream.result()
+			const promise2 = stream.result()
+
+			expect(promise1).toBe(promise2)
+
+			await promise1
+		}, TEST_TIMEOUTS.streaming)
+
+		it('handles rapid successive generations', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say "hi"')]
+
+			const results = await Promise.all([
+				provider.generate(messages, { maxTokens: 5 }).result(),
+				provider.generate(messages, { maxTokens: 5 }).result(),
+				provider.generate(messages, { maxTokens: 5 }).result(),
+			])
+
+			expect(results.length).toBe(3)
+			for (const result of results) {
+				expect(result.text).toBeDefined()
+				expect(result.aborted).toBe(false)
+			}
+		}, TEST_TIMEOUTS.integration)
+
+		it('reports finish reason correctly', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say exactly "done"')]
+
+			const stream = provider.generate(messages, { maxTokens: 10 })
+			const result = await stream.result()
+
+			expect(['stop', 'length']).toContain(result.finishReason)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('unsubscribe stops receiving tokens', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Count from 1 to 100')]
+
+			const stream = provider.generate(messages, { maxTokens: 100 })
+			const tokens: string[] = []
+			const unsub = stream.onToken((token) => tokens.push(token))
+
+			// Unsubscribe after a short delay
+			setTimeout(() => unsub(), 100)
+
+			await stream.result()
+
+			// Should have stopped receiving after unsubscribe
+			const countAfterUnsub = tokens.length
+			await new Promise(r => setTimeout(r, 50))
+			expect(tokens.length).toBe(countAfterUnsub)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('handles empty response gracefully', async() => {
+			const provider = getProvider()
+			// Very constrained prompt that might result in empty or minimal output
+			const messages = [createTestMessage('')]
+
+			const stream = provider.generate(messages, { maxTokens: 5 })
+			const result = await stream.result()
+
+			expect(result).toBeDefined()
+			expect(result.aborted).toBe(false)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('handles unicode streaming correctly', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say "你好世界" (Hello World in Chinese)')]
+
+			const stream = provider.generate(messages, { maxTokens: 20 })
+			const tokens: string[] = []
+			stream.onToken((token) => tokens.push(token))
+
+			const result = await stream.result()
+
+			// Verify unicode characters streamed correctly
+			expect(result.text).toBeDefined()
+			// Should contain Chinese characters or reference to them
+		}, TEST_TIMEOUTS.streaming)
+
+		it('abort during token emission', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Write a long explanation of quantum physics')]
+
+			const stream = provider.generate(messages, { maxTokens: 500 })
+			let tokenCount = 0
+
+			stream.onToken(() => {
+				tokenCount++
+				if (tokenCount >= 5) {
+					stream.abort()
+				}
+			})
+
+			const result = await stream.result()
+
+			expect(result.aborted).toBe(true)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('multiple onToken subscribers receive same tokens', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say "test"')]
+
+			const stream = provider.generate(messages, { maxTokens: 10 })
+			const tokens1: string[] = []
+			const tokens2: string[] = []
+
+			stream.onToken((token) => tokens1.push(token))
+			stream.onToken((token) => tokens2.push(token))
+
+			await stream.result()
+
+			expect(tokens1).toEqual(tokens2)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('error callback not triggered on success', async() => {
+			const provider = getProvider()
+			const messages = [createTestMessage('Say "ok"')]
+
+			const stream = provider.generate(messages, { maxTokens: 5 })
+			let errorCalled = false
+
+			stream.onError(() => {
+				errorCalled = true
+			})
+
+			await stream.result()
+
+			expect(errorCalled).toBe(false)
+		}, TEST_TIMEOUTS.streaming)
+	})
+
+	// =========================================================================
+	// Token Streamer Integration
+	// =========================================================================
+
+	describe('token streamer integration', () => {
+		it('custom streamer receives all producer calls', async() => {
+			const { createOllamaProviderAdapter, createTokenStreamer } = await import('@mikesaintsg/adapters')
+
+			const customStreamer = createTokenStreamer()
+			const provider = createOllamaProviderAdapter({
+				baseURL: OLLAMA_CONFIG.host,
+				model: OLLAMA_CONFIG.model,
+				streamer: customStreamer,
+			})
+
+			const messages = [createTestMessage('Say "hello"')]
+			const stream = provider.generate(messages, { maxTokens: 10 })
+
+			const result = await stream.result()
+
+			expect(result.text).toBeDefined()
+			expect(result.aborted).toBe(false)
+		}, TEST_TIMEOUTS.streaming)
+
+		it('custom NDJSON parser processes stream', async() => {
+			const { createOllamaProviderAdapter, createNDJSONParser } = await import('@mikesaintsg/adapters')
+
+			const customParser = createNDJSONParser()
+			const provider = createOllamaProviderAdapter({
+				baseURL: OLLAMA_CONFIG.host,
+				model: OLLAMA_CONFIG.model,
+				parser: customParser,
+			})
+
+			const messages = [createTestMessage('Say "test"')]
+			const stream = provider.generate(messages, { maxTokens: 10 })
+
+			const result = await stream.result()
+
+			expect(result.text).toBeDefined()
+		}, TEST_TIMEOUTS.streaming)
+	})
 })

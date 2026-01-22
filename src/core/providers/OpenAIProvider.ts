@@ -18,12 +18,11 @@ import type {
 import type {
 	OpenAIProviderAdapterOptions,
 	OpenAIChatCompletionChunk,
-	TokenStreamerInterface,
-	CreateTokenStreamer,
-	CreateSSEStreamer,
+	TokenStreamerAdapterInterface,
+	SSEParserAdapterInterface,
 } from '../../types.js'
 
-import { createTokenStreamer, createSSEStreamer } from '../../factories.js'
+import { createTokenStreamer, createSSEParser } from '../../factories.js'
 import { createAdapterError } from '../../helpers.js'
 import {
 	DEFAULT_OPENAI_MODEL,
@@ -40,9 +39,9 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 	readonly #model: string
 	readonly #baseURL: string
 	readonly #organization: string | undefined
-	readonly #tokenStreamerFactory: CreateTokenStreamer
-	readonly #sseStreamerFactory: CreateSSEStreamer
 	readonly #defaultOptions: GenerationOptions | undefined
+	readonly #streamer: TokenStreamerAdapterInterface
+	readonly #parser: SSEParserAdapterInterface
 
 	constructor(options: OpenAIProviderAdapterOptions) {
 		this.#id = crypto.randomUUID()
@@ -50,9 +49,9 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 		this.#model = options.model ?? DEFAULT_OPENAI_MODEL
 		this.#baseURL = options.baseURL ?? DEFAULT_OPENAI_BASE_URL
 		this.#organization = options.organization
-		this.#tokenStreamerFactory = options.tokenStreamerFactory ?? createTokenStreamer
-		this.#sseStreamerFactory = options.sseStreamerFactory ?? createSSEStreamer
 		this.#defaultOptions = options.defaultOptions
+		this.#streamer = options.streamer ?? createTokenStreamer()
+		this.#parser = options.parser ?? createSSEParser()
 	}
 
 	getId(): string {
@@ -69,13 +68,13 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 		// Merge default options with provided options
 		const mergedOptions = { ...this.#defaultOptions, ...options }
 
-		// Create token streamer for this request using factory
-		const streamer = this.#tokenStreamerFactory(requestId, abortController)
+		// Create stream handle for this request using the adapter
+		const handle = this.#streamer.create(requestId, abortController)
 
 		// Start async generation
-		void this.#executeGeneration(messages, mergedOptions, streamer, abortController.signal)
+		void this.#executeGeneration(messages, mergedOptions, handle, abortController.signal)
 
-		return streamer
+		return handle
 	}
 
 	supportsTools(): boolean {
@@ -99,7 +98,7 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 	async #executeGeneration(
 		messages: readonly Message[],
 		options: GenerationOptions,
-		streamer: TokenStreamerInterface,
+		handle: TokenStreamerAdapterInterface,
 		signal: AbortSignal,
 	): Promise<void> {
 		try {
@@ -107,17 +106,17 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 
 			if (!response.ok) {
 				const error = await this.#handleErrorResponse(response)
-				streamer.setError(error)
+				handle.setError(error)
 				return
 			}
 
-			await this.#processStream(response, streamer)
+			await this.#processStream(response, handle)
 		} catch (error) {
 			if (error instanceof Error) {
 				if (error.name === 'AbortError') {
-					streamer.setAborted()
+					handle.setAborted()
 				} else {
-					streamer.setError(this.#mapNetworkError(error))
+					handle.setError(this.#mapNetworkError(error))
 				}
 			}
 		}
@@ -254,11 +253,11 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 
 	async #processStream(
 		response: Response,
-		streamer: TokenStreamerInterface,
+		handle: TokenStreamerAdapterInterface,
 	): Promise<void> {
 		const reader = response.body?.getReader()
 		if (reader === undefined) {
-			streamer.setError(createAdapterError(
+			handle.setError(createAdapterError(
 				'NETWORK_ERROR',
 				'Response body is not readable',
 			))
@@ -266,12 +265,12 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 		}
 
 		const decoder = new TextDecoder()
-		const sseStreamer = this.#sseStreamerFactory({
+		const parser = this.#parser.create({
 			onEvent: (event: SSEEvent) => {
-				this.#handleSSEEvent(event, streamer)
+				this.#handleSSEEvent(event, handle)
 			},
 			onError: (error: Error) => {
-				streamer.setError(createAdapterError(
+				handle.setError(createAdapterError(
 					'SERVICE_ERROR',
 					`SSE parsing error: ${error.message}`,
 				))
@@ -284,62 +283,68 @@ export class OpenAIProvider implements ProviderAdapterInterface {
 				if (done) break
 
 				const chunk = decoder.decode(value, { stream: true })
-				sseStreamer.feed(chunk)
+				parser.feed(chunk)
 			}
-			sseStreamer.end()
+			parser.end()
 		} catch (error) {
 			if (error instanceof Error && error.name !== 'AbortError') {
-				streamer.setError(this.#mapNetworkError(error))
+				handle.setError(this.#mapNetworkError(error))
 			}
 		} finally {
 			reader.releaseLock()
 		}
 	}
 
-	#handleSSEEvent(event: SSEEvent, streamer: TokenStreamerInterface): void {
+	#handleSSEEvent(event: SSEEvent, handle: TokenStreamerAdapterInterface): void {
 		const data = event.data.trim()
 
 		// Handle stream end
 		if (data === '[DONE]') {
-			streamer.complete()
+			handle.complete()
 			return
 		}
 
 		try {
 			const chunk = JSON.parse(data) as OpenAIChatCompletionChunk
-			this.#processChunk(chunk, streamer)
+			this.#processChunk(chunk, handle)
 		} catch {
 			// Ignore malformed JSON
 		}
 	}
 
-	#processChunk(chunk: OpenAIChatCompletionChunk, streamer: TokenStreamerInterface): void {
+	#processChunk(chunk: OpenAIChatCompletionChunk, handle: TokenStreamerAdapterInterface): void {
 		for (const choice of chunk.choices) {
 			// Handle text content
 			if (choice.delta.content !== undefined && choice.delta.content !== null) {
-				streamer.emit(choice.delta.content)
+				handle.emit(choice.delta.content)
 			}
 
 			// Handle tool calls
 			if (choice.delta.tool_calls !== undefined) {
 				for (const toolCallDelta of choice.delta.tool_calls) {
-					streamer.updateToolCall(toolCallDelta.index, {
-						id: toolCallDelta.id,
-						name: toolCallDelta.function?.name,
-						arguments: toolCallDelta.function?.arguments,
-					})
+					const delta: import('../../types.js').ToolCallDelta = {}
+					if (toolCallDelta.id !== undefined) {
+						(delta as { id: string }).id = toolCallDelta.id
+					}
+					if (toolCallDelta.function?.name !== undefined) {
+						(delta as { name: string }).name = toolCallDelta.function.name
+					}
+					if (toolCallDelta.function?.arguments !== undefined) {
+						(delta as { arguments: string }).arguments = toolCallDelta.function.arguments
+					}
+					handle.updateToolCall(toolCallDelta.index, delta)
 				}
 			}
 
 			// Handle finish reason
 			if (choice.finish_reason !== null) {
-				streamer.setFinishReason(this.#mapFinishReason(choice.finish_reason))
+				handle.setFinishReason(this.#mapFinishReason(choice.finish_reason))
 			}
 		}
 
 		// Handle usage stats (usually in final chunk)
 		if (chunk.usage !== undefined) {
-			streamer.setUsage({
+			handle.setUsage({
 				promptTokens: chunk.usage.prompt_tokens,
 				completionTokens: chunk.usage.completion_tokens,
 				totalTokens: chunk.usage.total_tokens,

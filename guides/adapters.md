@@ -55,11 +55,11 @@ This package is the **implementation home** for all adapter interfaces defined i
 │                     @mikesaintsg/core                           │
 │  Defines:  ProviderAdapterInterface, EmbeddingAdapterInterface,  │
 │           RetryAdapterInterface, RateLimitAdapterInterface,     │
-│           StreamerAdapterInterface, etc.                        │
+│           TokenStreamerAdapterInterface, etc.                   │
 ├─────────────────────────────────────────────────────────────────┤
 │                    @mikesaintsg/adapters                        │
 │  Implements: createOpenAIProviderAdapter, createLRUCacheAdapter,│
-│              createStreamerAdapter, etc.                        │
+│              createTokenStreamer, createSSEParser, etc.         │
 ├─────────────────────────────────────────────────────────────────┤
 │  @mikesaintsg/inference  │  @mikesaintsg/vectorstore  │  ...     │
 │  Consumes adapters via   │  Consumes adapters via     │         │
@@ -171,7 +171,7 @@ const engine = createEngine(provider) // provider:  ProviderAdapterInterface
 |-----------------|---------------------------------|---------------------------------------------------------------------------------------|---------------------------------|
 | **Provider**    | LLM text generation (streaming) | `ProviderAdapterInterface`                                                            | OpenAI, Anthropic, Ollama       |
 | **Embedding**   | Vector generation               | `EmbeddingAdapterInterface`                                                           | OpenAI, Voyage, HuggingFace     |
-| **Streaming**   | Token emission and SSE parsing  | `StreamerAdapterInterface`, `SSEParserAdapterInterface`                               | Default streamer, SSE parser    |
+| **Streaming**   | Token emission and stream parsing | `TokenStreamerAdapterInterface`, `SSEParserAdapterInterface`, `NDJSONParserAdapterInterface` | TokenStreamer, SSE parser, NDJSON parser |
 | **Policy**      | Request behavior                | `RetryAdapterInterface`, `RateLimitAdapterInterface`                                  | Exponential retry, Token bucket |
 | **Enhancement** | Added capabilities              | `EmbeddingCacheAdapterInterface`, `BatchAdapterInterface`, `RerankerAdapterInterface` | LRU cache, Cohere reranker      |
 | **Transform**   | Format conversion               | `ToolFormatAdapterInterface`, `SimilarityAdapterInterface`                            | OpenAI tools, Cosine similarity |
@@ -239,30 +239,31 @@ All provider adapters stream by default. Streaming adapters handle the token emi
 |----------------|---------------------------------|---------------------------|
 | OpenAI         | SSE (Server-Sent Events)        | SSE Parser → Streamer     |
 | Anthropic      | SSE (Server-Sent Events)        | SSE Parser → Streamer     |
-| Ollama         | NDJSON (Newline Delimited JSON) | NDJSON parsing → Streamer |
+| Ollama         | NDJSON (Newline Delimited JSON) | NDJSON Parser → Streamer  |
 | node-llama-cpp | AsyncGenerator (local)          | Direct → Streamer         |
 | HuggingFace    | TextStreamer callback (local)   | Callback → Streamer       |
 
 **Key principles:**
 
 1. **TokenStreamer is the main primitive** — Providers create TokenStreamers per-request
-2. **SSEStreamer is for server-side APIs** — Used by OpenAI, Anthropic (not Ollama, local providers)
-3. **Factories for customization** — Pass `tokenStreamerFactory` or `sseStreamerFactory` to use custom implementations
+2. **SSE/NDJSON parsers are format transformers** — Used to parse raw stream data into structured events
+3. **Factories for customization** — Pass `tokenStreamerFactory` or `sseParserFactory` to use custom implementations
 4. **No streaming flags** — No `stream: true`, no `supportsStreaming()` checks
 
 ### Streaming Adapters
 
-Streaming adapters are composable primitives for token emission and SSE parsing.
+Streaming adapters are composable primitives for token emission and stream parsing. Each adapter has a `create()` method that returns a new instance per request.
 
-| Adapter       | Interface                | Factory                 | Purpose                       |
-|---------------|--------------------------|-------------------------|-------------------------------|
-| TokenStreamer | `TokenStreamerInterface` | `createTokenStreamer()` | Token accumulation & emission |
-| SSEStreamer   | `SSEStreamerInterface`   | `createSSEStreamer()`   | Parse SSE streams             |
+| Adapter       | Interface                        | Factory                 | Purpose                       |
+|---------------|----------------------------------|-------------------------|-------------------------------|
+| TokenStreamer | `TokenStreamerAdapterInterface`  | `createTokenStreamer()` | Token accumulation & emission |
+| SSEParser     | `SSEParserAdapterInterface`      | `createSSEParser()`     | Parse SSE streams             |
+| NDJSONParser  | `NDJSONParserAdapterInterface`   | `createNDJSONParser()`  | Parse NDJSON streams          |
 
-Both follow the factory pattern:
-- Default factories provided internally by providers
-- Optional custom factories via options (`tokenStreamerFactory`, `sseStreamerFactory`)
-- Interfaces in adapters, implementations composable
+**Adapter pattern:**
+- Factory functions return adapter instances with a `create()` method
+- Call `create()` with request-specific options to get a per-request instance
+- Providers store the adapter and call `create()` internally for each generation
 
 ### Opt-In Design
 
@@ -317,7 +318,9 @@ const store = await createVectorStore(embeddingAdapter, {
 |------------------------------------------|------------|----------------|
 | `ProviderAdapterInterface`               | `core`     | `adapters`     |
 | `EmbeddingAdapterInterface`              | `core`     | `adapters`     |
-| `StreamerAdapterInterface`               | `core`     | `adapters`     |
+| `TokenStreamerAdapterInterface`          | `adapters` | `adapters`     |
+| `SSEParserAdapterInterface`              | `adapters` | `adapters`     |
+| `NDJSONParserAdapterInterface`           | `adapters` | `adapters`     |
 | `RetryAdapterInterface`                  | `core`     | `adapters`     |
 | `RateLimitAdapterInterface`              | `core`     | `adapters`     |
 | `EmbeddingCacheAdapterInterface`         | `core`     | `adapters`     |
@@ -375,46 +378,86 @@ console.log('\nFinish reason:', result.finishReason)
 
 ### Custom Streamer Adapter
 
-Provide a custom streamer to control token emission. Streamers implement `StreamerAdapterInterface` from `@mikesaintsg/core`.
+Provide a custom streamer to control token emission. Streamers implement `TokenStreamerAdapterInterface` from `@mikesaintsg/adapters`.
 
 ```ts
-import { createStreamerAdapter } from '@mikesaintsg/adapters'
+import { createTokenStreamer } from '@mikesaintsg/adapters'
 
-// Create custom streamer with logging
-const customStreamer = createStreamerAdapter()
-
-customStreamer.onToken((token) => {
-	console. log(`[TOKEN] ${JSON.stringify(token)}`)
-})
+// Create custom streamer adapter
+const customStreamer = createTokenStreamer()
 
 const provider = createOpenAIProviderAdapter({
 	apiKey: process.env.OPENAI_API_KEY!,
 	model: 'gpt-4o',
 	streamer: customStreamer, // Use custom streamer
 })
+
+// The provider calls streamer.create() internally for each request
+// You can also create instances manually:
+const handle = customStreamer.create('request-id', new AbortController())
+handle.onToken((token) => {
+	console.log(`[TOKEN] ${JSON.stringify(token)}`)
+})
 ```
 
 ### Custom SSE Parser Adapter
 
-For server-side providers (OpenAI, Anthropic), you can provide a custom SSE parser. SSE parsers implement `SSEParserAdapterInterface` from `@mikesaintsg/core`.
+For server-side providers (OpenAI, Anthropic), you can provide a custom SSE parser. SSE parsers implement `SSEParserAdapterInterface` from `@mikesaintsg/adapters`.
 
 ```ts
-import { createSSEParserAdapter } from '@mikesaintsg/adapters'
+import { createSSEParser } from '@mikesaintsg/adapters'
 
-// Create custom SSE parser with different delimiters
-const customSSEParser = createSSEParserAdapter({
-	lineDelimiter: '\n',
-	eventDelimiter: '\n\n',
-})
+// Create custom SSE parser adapter
+const customSSEParser = createSSEParser()
 
 const provider = createOpenAIProviderAdapter({
 	apiKey: process.env.OPENAI_API_KEY!,
 	model: 'gpt-4o',
-	sseParser: customSSEParser, // Use custom SSE parser
+	parser: customSSEParser, // Use custom SSE parser
 })
+
+// The provider calls parser.create() internally with callbacks:
+const parserInstance = customSSEParser.create({
+	lineDelimiter: '\n',      // Optional custom delimiter
+	eventDelimiter: '\n\n',   // Optional custom delimiter
+	onEvent: (event) => console.log('SSE event:', event),
+	onError: (error) => console.error('Parse error:', error),
+	onEnd: () => console.log('Stream ended'),
+})
+
+// Feed chunks from response body
+parserInstance.feed('data: {"content": "Hello"}\n\n')
+parserInstance.end()
 ```
 
-**Note:** SSE parsers are only used by server-side providers (OpenAI, Anthropic). Local providers (Ollama, node-llama-cpp, HuggingFace) do not use SSE.
+### Custom NDJSON Parser Adapter
+
+For Ollama, you can provide a custom NDJSON parser. NDJSON parsers implement `NDJSONParserAdapterInterface` from `@mikesaintsg/adapters`.
+
+```ts
+import { createNDJSONParser } from '@mikesaintsg/adapters'
+
+// Create custom NDJSON parser adapter
+const customNDJSONParser = createNDJSONParser()
+
+const provider = createOllamaProviderAdapter({
+	model: 'llama3',
+	parser: customNDJSONParser, // Use custom NDJSON parser
+})
+
+// The provider calls parser.create() internally with callbacks:
+const parserInstance = customNDJSONParser.create({
+	onObject: (obj) => console.log('JSON object:', obj),
+	onError: (error) => console.error('Parse error:', error),
+	onEnd: () => console.log('Stream ended'),
+})
+
+// Feed chunks from response body
+parserInstance.feed('{"message":{"content":"Hi"}}\n')
+parserInstance.end()
+```
+
+**Note:** SSE parsers are used by OpenAI and Anthropic. NDJSON parsers are used by Ollama. Local providers (node-llama-cpp, HuggingFace) handle streaming internally.
 
 ### OpenAI
 
@@ -566,21 +609,37 @@ const provider = createHuggingFaceProviderAdapter({
 
 ## Streaming Adapters
 
-Streaming adapters handle token emission and SSE parsing during LLM generation. The streaming architecture uses two composable primitives:
+Streaming adapters handle token emission and stream parsing during LLM generation. The streaming architecture uses composable primitives with a factory pattern:
 
 - **TokenStreamer** — Accumulates tokens, manages subscriptions, builds final results
-- **SSEStreamer** — Parses Server-Sent Events chunks into events
+- **SSEParser** — Parses Server-Sent Events chunks into events (OpenAI, Anthropic)
+- **NDJSONParser** — Parses Newline-Delimited JSON chunks into objects (Ollama)
+
+### Adapter Pattern
+
+Each streaming adapter follows a consistent pattern:
+
+1. **Factory function** returns an adapter with a `create()` method
+2. **`create()`** returns a new instance configured for a specific request
+3. **Providers store adapters** and call `create()` internally per request
+
+```ts
+// Adapter pattern example
+const adapter = createTokenStreamer()           // Returns adapter with create()
+const handle = adapter.create('req-id', ctrl)   // Returns instance for this request
+```
 
 ### Adapter Overview
 
-| Adapter       | Interface                 | Factory                  | Purpose                       |
-|---------------|---------------------------|--------------------------|-------------------------------|
-| TokenStreamer | `TokenStreamerInterface`  | `createTokenStreamer()`  | Token accumulation & emission |
-| SSEStreamer   | `SSEStreamerInterface`    | `createSSEStreamer()`    | Parse SSE streams             |
+| Adapter       | Interface                       | Factory                  | Purpose                       |
+|---------------|---------------------------------|--------------------------|-------------------------------|
+| TokenStreamer | `TokenStreamerAdapterInterface` | `createTokenStreamer()`  | Token accumulation & emission |
+| SSEParser     | `SSEParserAdapterInterface`     | `createSSEParser()`      | Parse SSE streams             |
+| NDJSONParser  | `NDJSONParserAdapterInterface`  | `createNDJSONParser()`   | Parse NDJSON streams          |
 
 ### TokenStreamer
 
-The TokenStreamer is the main streaming primitive. It implements `StreamHandleInterface` (consumer-facing) with additional producer methods for providers.
+The TokenStreamer manages token streaming for a generation request. The adapter's `create()` method returns instances that implement `StreamHandleInterface` with additional producer methods.
 
 **Consumer API:** (from `StreamHandleInterface`)
 - `result()` — Get final generation result
@@ -600,31 +659,43 @@ The TokenStreamer is the main streaming primitive. It implements `StreamHandleIn
 ```ts
 import { createTokenStreamer } from '@mikesaintsg/adapters'
 
-// Providers create TokenStreamers internally
+// Create adapter (done once, stored by provider)
+const streamerAdapter = createTokenStreamer()
+
+// Create instance per request (done internally by providers)
 const abortController = new AbortController()
-const streamer = createTokenStreamer('request-123', abortController)
+const handle = streamerAdapter.create('request-123', abortController)
 
 // Consumer usage (what users see)
-streamer.onToken((token: string) => process.stdout.write(token))
+handle.onToken((token: string) => process.stdout.write(token))
+
+// Async iteration
+for await (const token of handle) {
+	process.stdout.write(token)
+}
 
 // Producer usage (internal to providers)
-streamer.emit('Hello')
-streamer.emit(' world')
-streamer.complete()
+handle.emit('Hello')
+handle.emit(' world')
+handle.complete()
 
-const result = await streamer.result()
+const result = await handle.result()
 console.log(result.text) // 'Hello world'
 ```
 
-### SSEStreamer
+### SSEParser
 
-The SSEStreamer parses Server-Sent Events format used by OpenAI and Anthropic APIs.
+The SSEParser parses Server-Sent Events format used by OpenAI and Anthropic APIs. The adapter's `create()` method returns parser instances configured with callbacks.
 
 ```ts
-import { createSSEStreamer } from '@mikesaintsg/adapters'
+import { createSSEParser } from '@mikesaintsg/adapters'
 import type { SSEEvent } from '@mikesaintsg/core'
 
-const sseStreamer = createSSEStreamer({
+// Create adapter (done once, stored by provider)
+const sseAdapter = createSSEParser()
+
+// Create parser instance per request with callbacks
+const parser = sseAdapter.create({
 	onEvent: (event: SSEEvent) => {
 		if (event.data === '[DONE]') return
 		const chunk = JSON.parse(event.data)
@@ -645,43 +716,70 @@ const decoder = new TextDecoder()
 while (true) {
 	const { done, value } = await reader.read()
 	if (done) break
-	sseStreamer.feed(decoder.decode(value, { stream: true }))
+	parser.feed(decoder.decode(value, { stream: true }))
 }
 
-sseStreamer.end()
+parser.end()
 ```
 
-### Custom Streamer Factories
+### NDJSONParser
 
-Providers accept factory functions so you can plug in custom implementations:
+The NDJSONParser parses Newline-Delimited JSON format used by Ollama. The adapter's `create()` method returns parser instances configured with callbacks.
+
+```ts
+import { createNDJSONParser } from '@mikesaintsg/adapters'
+
+// Create adapter (done once, stored by provider)
+const ndjsonAdapter = createNDJSONParser()
+
+// Create parser instance per request with callbacks
+const parser = ndjsonAdapter.create({
+	onObject: (obj: unknown) => {
+		const chunk = obj as { message?: { content?: string } }
+		if (chunk.message?.content) {
+			console.log('Content:', chunk.message.content)
+		}
+	},
+	onError: (error: Error) => console.error('Parse error:', error),
+	onEnd: () => console.log('Stream complete'),
+})
+
+// Feed chunks from fetch response
+parser.feed('{"message":{"content":"Hello"}}\n')
+parser.end()
+```
+
+### Custom Streaming Adapters
+
+Providers accept custom streaming adapters via options. Pass your adapter instance and the provider calls `create()` internally:
 
 ```ts
 import {
 	createOpenAIProviderAdapter,
+	createOllamaProviderAdapter,
 	createTokenStreamer,
-	createSSEStreamer,
+	createSSEParser,
+	createNDJSONParser,
 } from '@mikesaintsg/adapters'
-import type { CreateTokenStreamer, CreateSSEStreamer } from '@mikesaintsg/adapters'
 
-// Custom token streamer factory with logging
-const customTokenFactory: CreateTokenStreamer = (requestId, abortController) => {
-	console.log(`Creating streamer for request: ${requestId}`)
-	return createTokenStreamer(requestId, abortController)
-}
+// Custom adapters (could be custom implementations)
+const customStreamer = createTokenStreamer()
+const customSSEParser = createSSEParser()
+const customNDJSONParser = createNDJSONParser()
 
-// Custom SSE streamer factory with custom delimiters
-const customSSEFactory: CreateSSEStreamer = (options) => {
-	return createSSEStreamer({
-		...options,
-		lineDelimiter: '\r\n',
-		eventDelimiter: '\r\n\r\n',
-	})
-}
-
-const provider = createOpenAIProviderAdapter({
+// OpenAI/Anthropic: pass streamer and SSE parser
+const openaiProvider = createOpenAIProviderAdapter({
 	apiKey: process.env.OPENAI_API_KEY!,
-	tokenStreamerFactory: customTokenFactory,
-	sseStreamerFactory: customSSEFactory,
+	model: 'gpt-4o',
+	streamer: customStreamer,      // TokenStreamerAdapterInterface
+	parser: customSSEParser,       // SSEParserAdapterInterface
+})
+
+// Ollama: pass streamer and NDJSON parser
+const ollamaProvider = createOllamaProviderAdapter({
+	model: 'llama3',
+	streamer: customStreamer,      // TokenStreamerAdapterInterface
+	parser: customNDJSONParser,    // NDJSONParserAdapterInterface
 })
 ```
 
@@ -694,8 +792,9 @@ Streaming implementations are in `src/core/streamers/`:
   src/
     core/
       streamers/
-        TokenStreamer.ts   # createTokenStreamer()
-        SSEStreamer.ts     # createSSEStreamer()
+        TokenStreamer.ts   # TokenStreamer class
+        SSEParser.ts       # SSEParser class
+        NDJSONParser.ts    # NDJSONParser class
         index.ts           # Barrel exports
 ```
 
@@ -1524,14 +1623,13 @@ const store = await createVectorStore(embedding, { retry })
 
 ### Type Imports
 
-All interface types come from `@mikesaintsg/core`:
+All interface types come from `@mikesaintsg/core` and `@mikesaintsg/adapters`:
 
 ```ts
 import type {
-	// Adapter interfaces
+	// Adapter interfaces (from @mikesaintsg/core)
 	ProviderAdapterInterface,
 	EmbeddingAdapterInterface,
-	StreamerAdapterInterface,
 	ToolFormatAdapterInterface,
 	RetryAdapterInterface,
 	RateLimitAdapterInterface,
@@ -1544,6 +1642,13 @@ import type {
 	DeduplicationAdapterInterface,
 	TruncationAdapterInterface,
 	PriorityAdapterInterface,
+} from '@mikesaintsg/core'
+
+import type {
+	// Streaming interfaces (from @mikesaintsg/adapters)
+	TokenStreamerAdapterInterface,
+	SSEParserAdapterInterface,
+	NDJSONParserAdapterInterface,
 	// Data types
 	Embedding,
 	ToolCall,
@@ -1615,8 +1720,10 @@ import type {
 	CreateOllamaEmbeddingAdapter,
 	CreateNodeLlamaCppEmbeddingAdapter,
 	CreateHuggingFaceEmbeddingAdapter,
-	// Streamer factory
-	CreateStreamerAdapter,
+	// Streaming factories
+	CreateTokenStreamerAdapter,
+	CreateSSEParserAdapter,
+	CreateNDJSONParserAdapter,
 	// Policy factories
 	CreateExponentialRetryAdapter,
 	CreateLinearRetryAdapter,
@@ -1651,14 +1758,31 @@ import type {
 ### Streamer Interface
 
 ```ts
-// Defined in @mikesaintsg/core
-interface StreamerAdapterInterface {
-	/** Subscribe to token events */
-	onToken(callback: (token: string) => void): Unsubscribe
-	/** Emit a token to all subscribers */
+// Defined in @mikesaintsg/adapters
+interface TokenStreamerAdapterInterface extends StreamHandleInterface {
+	readonly requestId: string
+	/** Emit a token */
 	emit(token: string): void
-	/** Signal end of streamers */
-	end(): void
+	/** Append text without emitting */
+	appendText(text: string): void
+	/** Start a tool call */
+	startToolCall(index: number, id: string, name: string): void
+	/** Append arguments to a tool call */
+	appendToolCallArguments(index: number, args: string): void
+	/** Update tool call incrementally */
+	updateToolCall(index: number, delta: ToolCallDelta): void
+	/** Set the finish reason */
+	setFinishReason(reason: FinishReason): void
+	/** Set usage statistics */
+	setUsage(usage: UsageStats): void
+	/** Set error and reject */
+	setError(error: Error): void
+	/** Set aborted state */
+	setAborted(): void
+	/** Signal completion */
+	complete(): void
+	/** Create a new instance for a request */
+	create(requestId: string, abortController: AbortController): TokenStreamerAdapterInterface
 }
 ```
 
@@ -1758,20 +1882,27 @@ const results = await store.search(query, { limit: 10, rerankTopK: 50 })
 8. **Custom streamer for UI batching** — Batch tokens before rendering:
 
 ```ts
-const customStreamer = createStreamerAdapter()
+const streamerAdapter = createTokenStreamer()
 
+const provider = createOpenAIProviderAdapter({
+	apiKey,
+	model: 'gpt-4o',
+	streamer: streamerAdapter,
+})
+
+// Provider calls streamerAdapter.create() internally for each request
+// The returned handle receives tokens and you can subscribe to them
+
+const stream = provider.generate(messages, { maxTokens: 100 })
 let buffer = ''
-customStreamer.onToken((token) => {
+stream.onToken((token) => {
 	buffer += token
 	if (buffer.length >= 10 || token.includes(' ')) {
 		updateUI(buffer)
 		buffer = ''
 	}
 })
-
-const provider = createOpenAIProviderAdapter({
-	apiKey,
-	model: 'gpt-4o',
+```
 	streamer: customStreamer,
 })
 ```
@@ -1923,11 +2054,13 @@ const result = await engine.generateFromContext(context)
 
 ## API Reference
 
-### Streamer Adapter Factory
+### Streaming Adapter Factories
 
-| Factory                 | Options | Returns                    |
-|-------------------------|---------|----------------------------|
-| `createStreamerAdapter` | —       | `StreamerAdapterInterface` |
+| Factory               | Options | Returns                          |
+|-----------------------|---------|----------------------------------|
+| `createTokenStreamer` | —       | `TokenStreamerAdapterInterface`  |
+| `createSSEParser`     | —       | `SSEParserAdapterInterface`      |
+| `createNDJSONParser`  | —       | `NDJSONParserAdapterInterface`   |
 
 ### Provider Adapter Factories
 
@@ -1939,12 +2072,6 @@ const result = await engine.generateFromContext(context)
 | `createNodeLlamaCppProviderAdapter` | `NodeLlamaCppProviderAdapterOptions` | `ProviderAdapterInterface` |
 | `createHuggingFaceProviderAdapter`  | `HuggingFaceProviderAdapterOptions`  | `ProviderAdapterInterface` |
 
-### Streaming Adapter Factories
-
-| Factory                  | Options                   | Returns                     |
-|--------------------------|---------------------------|-----------------------------|
-| `createStreamerAdapter`  | —                         | `StreamerAdapterInterface`  |
-| `createSSEParserAdapter` | `SSEParserAdapterOptions` | `SSEParserAdapterInterface` |
 
 ### Embedding Adapter Factories
 
@@ -2027,16 +2154,65 @@ const result = await engine.generateFromContext(context)
 
 ### Core Interfaces
 
-#### StreamerAdapterInterface
+#### TokenStreamerAdapterInterface
 
 ```ts
-interface StreamerAdapterInterface {
-	/** Subscribe to token events */
-	onToken(callback: (token: string) => void): Unsubscribe
-	/** Emit a token to all subscribers */
+interface TokenStreamerAdapterInterface extends StreamHandleInterface {
+	readonly requestId: string
+	/** Emit a token */
 	emit(token: string): void
-	/** Signal end of streamers */
-	end(): void
+	/** Append text without emitting */
+	appendText(text: string): void
+	/** Start a tool call */
+	startToolCall(index: number, id: string, name: string): void
+	/** Append arguments to a tool call */
+	appendToolCallArguments(index: number, args: string): void
+	/** Update tool call incrementally */
+	updateToolCall(index: number, delta: ToolCallDelta): void
+	/** Set the finish reason */
+	setFinishReason(reason: FinishReason): void
+	/** Set usage statistics */
+	setUsage(usage: UsageStats): void
+	/** Set error and reject */
+	setError(error: Error): void
+	/** Set aborted state */
+	setAborted(): void
+	/** Signal completion */
+	complete(): void
+	/** Create a new instance for a request */
+	create(requestId: string, abortController: AbortController): TokenStreamerAdapterInterface
+}
+```
+
+#### SSEParserAdapterInterface
+
+```ts
+interface SSEParserAdapterInterface extends StreamParserAdapterInterface {
+	/** Create an SSE parser instance with options */
+	create(options: SSEParserOptions): StreamParserAdapterInterface
+}
+
+interface SSEParserOptions {
+	readonly lineDelimiter?: string
+	readonly eventDelimiter?: string
+	readonly onEvent: (event: SSEEvent) => void
+	readonly onError?: (error: Error) => void
+	readonly onEnd?: () => void
+}
+```
+
+#### NDJSONParserAdapterInterface
+
+```ts
+interface NDJSONParserAdapterInterface extends StreamParserAdapterInterface {
+	/** Create an NDJSON parser instance with options */
+	create(options: NDJSONParserOptions): StreamParserAdapterInterface
+}
+
+interface NDJSONParserOptions {
+	readonly onObject: (obj: unknown) => void
+	readonly onError?: (error: Error) => void
+	readonly onEnd?: () => void
 }
 ```
 
@@ -2074,21 +2250,21 @@ interface EmbeddingAdapterInterface {
 ```ts
 interface OpenAIProviderAdapterOptions {
 	readonly apiKey: string
-	readonly model?:  string
+	readonly model?: string
 	readonly baseURL?: string
 	readonly organization?: string
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
-	readonly sseParser?: SSEParserAdapterInterface
+	readonly streamer?: TokenStreamerAdapterInterface
+	readonly parser?: SSEParserAdapterInterface
 }
 
 interface AnthropicProviderAdapterOptions {
 	readonly apiKey: string
 	readonly model?: string
-	readonly baseURL?:  string
+	readonly baseURL?: string
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
-	readonly sseParser?: SSEParserAdapterInterface
+	readonly streamer?: TokenStreamerAdapterInterface
+	readonly parser?: SSEParserAdapterInterface
 }
 
 interface OllamaProviderAdapterOptions {
@@ -2097,24 +2273,24 @@ interface OllamaProviderAdapterOptions {
 	readonly keepAlive?: boolean | string
 	readonly timeout?: number
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
-	readonly sseParser?: SSEParserAdapterInterface
+	readonly streamer?: TokenStreamerAdapterInterface
+	readonly parser?: NDJSONParserAdapterInterface
 }
 
 interface NodeLlamaCppProviderAdapterOptions {
 	readonly context: NodeLlamaCppContext
-	readonly chatWrapper?:  NodeLlamaCppChatWrapper
-	readonly modelName?:  string
+	readonly chatWrapper?: NodeLlamaCppChatWrapper
+	readonly modelName?: string
 	readonly timeout?: number
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
+	readonly streamer?: TokenStreamerAdapterInterface
 }
 
 interface HuggingFaceProviderAdapterOptions {
 	readonly pipeline: HuggingFaceTextGenerationPipeline
 	readonly modelName: string
 	readonly defaultOptions?: GenerationDefaults
-	readonly streamer?: StreamerAdapterInterface
+	readonly streamer?: TokenStreamerAdapterInterface
 	/** Enable tool calling support (requires model with chat template) */
 	readonly enableTools?: boolean
 }
